@@ -184,7 +184,7 @@ defmodule LotusTest do
         })
 
       assert {:error, error} = Lotus.run_query(query)
-      assert error == :rollback
+      assert error =~ "relation \"nonexistent_table\" does not exist"
     end
   end
 
@@ -254,7 +254,7 @@ defmodule LotusTest do
       sql = "SELECT * FROM nonexistent_table"
 
       assert {:error, error} = Lotus.run_sql(sql)
-      assert error == :rollback
+      assert error =~ "relation \"nonexistent_table\" does not exist"
     end
   end
 
