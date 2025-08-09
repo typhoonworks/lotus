@@ -1,0 +1,22 @@
+services:
+  adminer:
+    image: adminer
+    restart: always
+    container_name: lotus_adminer
+    ports:
+      - 8086:8080
+
+  db:
+    image: postgres:15.8
+    restart: always
+    container_name: lotus_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "2346:5432"
+    volumes:
+      - db:/var/lib/postgresql/data
+
+volumes:
+  db:

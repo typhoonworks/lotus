@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CACHE_VERSION: v1
+  PERSISTENT_CACHE_DIR: cached
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tuple:
+              elixir: "1.16"
+              erlang: "26.2"
+              postgres: "15.8-alpine"
+          - tuple:
+              elixir: "1.18"
+              erlang: "27.3.2"
+              postgres: "15.8-alpine"
+
+    env:
+      MIX_ENV: test
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.tuple.postgres }}
+        ports:
+          - 2345:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          options: >-
+            --health-cmd pg_isready
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.tuple.elixir }}
+          otp-version: ${{ matrix.tuple.erlang }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ matrix.tuple.elixir }}-${{ matrix.tuple.erlang }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ matrix.tuple.elixir }}-${{ matrix.tuple.erlang }}-
+
+      - run: mix deps.get --only $MIX_ENV
+
+      - run: mix format --check-formatted
+
+      - run: mix deps.compile
+
+      - run: mix compile --warnings-as-errors
+
+      - run: mix test.setup
+
+      - run: mix test
+
+      - run: mix dialyzer
