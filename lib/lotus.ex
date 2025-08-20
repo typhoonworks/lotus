@@ -104,16 +104,6 @@ defmodule Lotus do
   end
 
   @doc """
-  Returns the configured primary key type (:id or :binary_id).
-  """
-  defdelegate primary_key_type(), to: Config
-
-  @doc """
-  Returns the configured foreign key type (:id or :binary_id).
-  """
-  defdelegate foreign_key_type(), to: Config
-
-  @doc """
   Returns whether unique query names are enforced.
   """
   defdelegate unique_names?(), to: Config

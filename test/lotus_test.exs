@@ -259,14 +259,6 @@ defmodule LotusTest do
   end
 
   describe "configuration delegates" do
-    test "primary_key_type/0 delegates to Config.primary_key_type/0" do
-      assert Lotus.primary_key_type() == Config.primary_key_type()
-    end
-
-    test "foreign_key_type/0 delegates to Config.foreign_key_type/0" do
-      assert Lotus.foreign_key_type() == Config.foreign_key_type()
-    end
-
     test "unique_names?/0 delegates to Config.unique_names?/0" do
       assert Lotus.unique_names?() == Config.unique_names?()
     end

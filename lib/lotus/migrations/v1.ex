@@ -3,7 +3,7 @@ defmodule Lotus.Migrations.V1 do
   Initial table structure for Lotus queries.
 
   This migration creates the base `lotus_queries` table with:
-  - Configurable primary key type (integer or binary_id)
+  - Integer primary key
   - Name, description, query, and tags
   - Timestamps
   - Optional schema prefix
@@ -23,13 +23,7 @@ defmodule Lotus.Migrations.V1 do
              @table_name,
              [primary_key: false] ++ table_opts
            ) do
-      case Lotus.Config.primary_key_type() do
-        :id ->
-          add(:id, :serial, primary_key: true)
-
-        :binary_id ->
-          add(:id, :binary_id, primary_key: true, default: fragment("gen_random_uuid()"))
-      end
+      add(:id, :serial, primary_key: true)
 
       add(:name, :string, null: false)
       add(:description, :text)
