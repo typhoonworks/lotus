@@ -13,16 +13,12 @@ defmodule Lotus.Config do
   ## Optional Configuration
 
       config :lotus,
-        primary_key_type: :binary_id,  # Defaults to :id
-        foreign_key_type: :binary_id,  # Defaults to :id
-        unique_names: false,           # Defaults to true
+        unique_names: false            # Defaults to true
 
   """
 
   @type t :: %{
           ecto_repo: module(),
-          primary_key_type: :id | :binary_id,
-          foreign_key_type: :id | :binary_id,
           unique_names: boolean()
         }
 
@@ -31,16 +27,6 @@ defmodule Lotus.Config do
       type: :atom,
       required: true,
       doc: "The Ecto repository Lotus will use for all DB interactions."
-    ],
-    primary_key_type: [
-      type: {:in, [:id, :binary_id]},
-      default: :id,
-      doc: "The type for primary keys in Lotus tables."
-    ],
-    foreign_key_type: [
-      type: {:in, [:id, :binary_id]},
-      default: :id,
-      doc: "The type for foreign keys referencing Lotus tables."
     ],
     unique_names: [
       type: :boolean,
@@ -64,7 +50,7 @@ defmodule Lotus.Config do
 
   defp get_lotus_config do
     Application.get_all_env(:lotus)
-    |> Keyword.take([:ecto_repo, :primary_key_type, :foreign_key_type, :unique_names])
+    |> Keyword.take([:ecto_repo, :unique_names])
   end
 
   @doc """
@@ -72,18 +58,6 @@ defmodule Lotus.Config do
   """
   @spec repo!() :: module()
   def repo!, do: load!()[:ecto_repo]
-
-  @doc """
-  Returns the configured primary key type (`:id` or `:binary_id`).
-  """
-  @spec primary_key_type() :: :id | :binary_id
-  def primary_key_type, do: load!()[:primary_key_type]
-
-  @doc """
-  Returns the configured foreign key type (`:id` or `:binary_id`).
-  """
-  @spec foreign_key_type() :: :id | :binary_id
-  def foreign_key_type, do: load!()[:foreign_key_type]
 
   @doc """
   Returns whether unique query names are enforced.

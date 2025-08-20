@@ -10,8 +10,8 @@ defmodule Lotus.Storage.Query do
 
   alias Lotus.Config
 
-  @primary_key {:id, Config.primary_key_type(), autogenerate: true}
-  @foreign_key_type Config.foreign_key_type()
+  @primary_key {:id, :id, autogenerate: true}
+  @foreign_key_type :id
 
   json_encoder = Lotus.JSON.encoder()
 
