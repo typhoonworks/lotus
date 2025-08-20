@@ -6,7 +6,7 @@ This guide walks you through setting up Lotus in your Elixir application.
 
 - Elixir 1.16 or later
 - OTP 25 or later
-- An Ecto-based application with PostgreSQL (MySQL and SQLite support coming soon)
+- An Ecto-based application with PostgreSQL or SQLite
 
 ## Step 1: Add Dependency
 
@@ -28,14 +28,17 @@ Add Lotus configuration to your `config/config.exs`:
 
 ```elixir
 config :lotus,
-  ecto_repo: MyApp.Repo,
-  primary_key_type: :id,    # or :binary_id
-  foreign_key_type: :id     # or :binary_id
+  ecto_repo: MyApp.Repo,        # Where Lotus stores queries
+  data_repos: %{                 # Where queries execute
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
 ```
 
 ### Configuration Options
 
-- `ecto_repo` (required): Your Ecto repository module
+- `ecto_repo` (required): Repository where Lotus stores saved queries
+- `data_repos` (required): Map of repositories where queries can be executed
 - `primary_key_type`: Primary key type for Lotus tables (`:id` or `:binary_id`)
 - `foreign_key_type`: Foreign key type for Lotus tables (`:id` or `:binary_id`)
 - `unique_names`: Whether to enforce unique query names (default: `true`)
@@ -53,14 +56,13 @@ Add the Lotus migration to your generated migration file:
 ```elixir
 defmodule MyApp.Repo.Migrations.CreateLotusTables do
   use Ecto.Migration
-  use Lotus.Migrations
 
   def up do
-    create_lotus_tables()
+    Lotus.Migrations.up()
   end
 
   def down do
-    drop_lotus_tables()
+    Lotus.Migrations.down()
   end
 end
 ```
@@ -85,15 +87,49 @@ iex> Lotus.run_sql("SELECT 1 as test")
 
 ### PostgreSQL
 
-Lotus works out of the box with PostgreSQL. Ensure your repository is configured with the `:postgrex` adapter.
+Lotus works out of the box with PostgreSQL. Ensure your repository is configured with the `:postgrex` adapter:
+
+```elixir
+config :my_app, MyApp.Repo,
+  adapter: Ecto.Adapters.Postgres,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "my_app_dev"
+```
+
+### SQLite
+
+Lotus supports SQLite through the `ecto_sqlite3` adapter. Add the dependency to your `mix.exs`:
+
+```elixir
+{:ecto_sqlite3, "~> 0.11"}
+```
+
+Configure your SQLite repository:
+
+```elixir
+config :my_app, MyApp.SqliteRepo,
+  adapter: Ecto.Adapters.SQLite3,
+  database: Path.expand("../my_app.db", Path.dirname(__ENV__.file))
+```
+
+### Mixed Database Environments
+
+You can use different database types for storage and data:
+
+```elixir
+config :lotus,
+  ecto_repo: MyApp.Repo,          # PostgreSQL for Lotus storage
+  data_repos: %{
+    "postgres" => MyApp.Repo,     # PostgreSQL data
+    "sqlite" => MyApp.SqliteRepo  # SQLite data
+  }
+```
 
 ### MySQL (Coming Soon)
 
 MySQL support is planned for a future release.
-
-### SQLite (Coming Soon)
-
-SQLite support is planned for a future release.
 
 ## Troubleshooting
 

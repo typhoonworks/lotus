@@ -8,10 +8,11 @@ Lotus configuration is typically placed in your `config/config.exs` file:
 
 ```elixir
 config :lotus,
-  ecto_repo: MyApp.Repo,
-  primary_key_type: :id,
-  foreign_key_type: :id,
-  unique_names: true
+  ecto_repo: MyApp.Repo,        # Repository for Lotus query storage
+  data_repos: %{                 # Repositories for executing queries
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
 ```
 
 ## Configuration Options
@@ -20,7 +21,7 @@ config :lotus,
 
 #### `ecto_repo` (required)
 
-Specifies the Ecto repository that Lotus will use for database operations.
+Specifies the Ecto repository where Lotus stores saved queries. This is where the `lotus_queries` table lives.
 
 ```elixir
 config :lotus,
@@ -28,6 +29,23 @@ config :lotus,
 ```
 
 **Type**: `module()`
+
+#### `data_repos` (required)
+
+A map of repositories where queries can be executed against actual data. Keys are friendly names that appear in the UI, values are Ecto repository modules.
+
+```elixir
+config :lotus,
+  data_repos: %{
+    "main" => MyApp.Repo,           # Can be the same as ecto_repo
+    "analytics" => MyApp.AnalyticsRepo,
+    "reporting" => MyApp.ReportingRepo
+  }
+```
+
+**Type**: `%{String.t() => module()}`
+
+> **Note**: The `ecto_repo` can also be included in `data_repos` if you want to run queries against the same database where Lotus stores its data.
 
 ### Schema Options
 
@@ -168,6 +186,43 @@ Lotus.foreign_key_type()
 # Check if unique names are enforced
 Lotus.unique_names?()
 # true
+```
+
+## Multi-Database Support
+
+Lotus supports both PostgreSQL and SQLite databases. The migration system automatically detects the adapter and runs the appropriate migrations.
+
+### PostgreSQL Configuration
+
+```elixir
+config :my_app, MyApp.Repo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "my_app_dev",
+  pool_size: 10
+```
+
+### SQLite Configuration
+
+```elixir
+config :my_app, MyApp.SqliteRepo,
+  database: Path.expand("../my_app.db", Path.dirname(__ENV__.file)),
+  pool_size: 10
+```
+
+### Mixed Database Environments
+
+You can mix PostgreSQL and SQLite repositories:
+
+```elixir
+config :lotus,
+  ecto_repo: MyApp.Repo,          # PostgreSQL for storage
+  data_repos: %{
+    "postgres" => MyApp.Repo,     # PostgreSQL data
+    "sqlite" => MyApp.SqliteRepo, # SQLite data
+    "analytics" => MyApp.AnalyticsRepo  # Another PostgreSQL
+  }
 ```
 
 ## Migration Configuration

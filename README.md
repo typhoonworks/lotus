@@ -27,7 +27,7 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 - [ ] Query result caching mechanisms
 - [ ] Query templates with parameter substitution
 - [ ] Export functionality for query results (CSV, JSON)
-- [ ] Multi-database support (MySQL, SQLite)
+- [x] Multi-database support (PostgreSQL, SQLite)
 
 ## Installation
 Add `lotus` to your list of dependencies in `mix.exs`:
@@ -57,9 +57,11 @@ Add to your config:
 
 ```elixir
 config :lotus,
-  repo: MyApp.Repo,
-  primary_key_type: :id,    # or :binary_id
-  foreign_key_type: :id     # or :binary_id
+  ecto_repo: MyApp.Repo,  # Repo where Lotus stores saved queries
+  data_repos: %{           # Repos where queries run against actual data
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
 ```
 
 ### Creating and Running Queries
@@ -77,6 +79,50 @@ config :lotus,
 # Execute SQL directly (read-only)
 {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
 ```
+
+## Development Setup
+
+### Prerequisites
+- PostgreSQL (tested with version 14+)
+- SQLite 3
+- Elixir 1.16+
+- OTP 25+
+
+### Setting up the development environment
+
+1. Clone the repository and install dependencies:
+```bash
+git clone https://github.com/typhoonworks/lotus.git
+cd lotus
+mix deps.get
+```
+
+2. Set up the development databases:
+```bash
+mix ecto.create
+mix ecto.migrate
+```
+
+This creates:
+- PostgreSQL database (`lotus_dev`) with both Lotus tables and test data tables
+- SQLite database (`lotus_dev.db`) with e-commerce sample data
+
+### Running tests
+
+```bash
+# Run all tests
+mix test
+
+# Run specific test files
+mix test test/lotus_test.exs
+
+# Run with coverage
+mix test --cover
+```
+
+The test suite uses separate databases:
+- PostgreSQL: `lotus_test` (with partitioning for parallel tests)
+- SQLite: `lotus_sqlite_test.db`
 
 ## Contributing
 See the [contribution guide](guides/contributing.md) for details on how to contribute to Lotus.

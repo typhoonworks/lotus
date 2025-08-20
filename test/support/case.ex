@@ -27,17 +27,18 @@ defmodule Lotus.Case do
     end
   end
 
-  setup tags do
-    Lotus.Case.setup_sandbox(tags)
-    :ok
-  end
+  setup context do
+    # Always setup PostgreSQL sandbox (for Lotus storage)
+    pid1 = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.Repo, shared: not context[:async])
+    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid1) end)
+    
+    # If test needs SQLite, set up SQLite sandbox too
+    if context[:sqlite] do
+      pid2 = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.SqliteRepo, shared: not context[:async])
+      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid2) end)
+    end
 
-  @doc """
-  Sets up the sandbox based on the test tags.
-  """
-  def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.Repo, shared: not tags[:async])
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    :ok
   end
 
   @doc """

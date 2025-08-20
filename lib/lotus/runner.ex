@@ -3,7 +3,7 @@ defmodule Lotus.Runner do
   Read-only SQL execution with safety checks, param binding, and result shaping.
   """
 
-  alias Lotus.QueryResult
+  alias Lotus.{Adapter, QueryResult}
 
   @type repo :: module()
   @type sql :: String.t()
@@ -35,15 +35,15 @@ defmodule Lotus.Runner do
 
     repo.transaction(
       fn ->
-        if read_only?, do: repo.query!("SET LOCAL transaction_read_only = on")
-        repo.query!("SET LOCAL statement_timeout = #{stmt_ms}")
+        if read_only?, do: Adapter.set_read_only(repo)
+        Adapter.set_statement_timeout(repo, stmt_ms)
 
         case repo.query(sql, params, timeout: db_timeout) do
           {:ok, %{columns: cols, rows: rows}} ->
             {:ok, QueryResult.new(cols, rows)}
 
-          {:error, %Postgrex.Error{} = err} ->
-            repo.rollback(format_error(err))
+          {:error, err} ->
+            repo.rollback(Adapter.format_error(err))
 
           other ->
             other
@@ -56,9 +56,7 @@ defmodule Lotus.Runner do
       {:error, reason} -> {:error, reason}
     end
   rescue
-    e in Postgrex.Error -> {:error, format_error(e)}
-    e in ArgumentError -> {:error, e.message}
-    e in DBConnection.EncodeError -> {:error, e.message}
+    e -> {:error, Adapter.format_error(e)}
   end
 
   defp assert_single_statement(sql) do
@@ -68,29 +66,5 @@ defmodule Lotus.Runner do
 
   defp assert_not_denied(sql) do
     if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok
-  end
-
-  defp format_error(%Postgrex.Error{postgres: %{code: :syntax_error, message: msg}}) do
-    "SQL syntax error: #{msg}"
-  end
-
-  defp format_error(%Postgrex.Error{postgres: %{code: :undefined_table, message: msg}}) do
-    "SQL error: #{msg}"
-  end
-
-  defp format_error(%Postgrex.Error{postgres: %{code: :undefined_column, message: msg}}) do
-    "SQL error: #{msg}"
-  end
-
-  defp format_error(%Postgrex.Error{postgres: %{message: msg}}) when is_binary(msg) do
-    "SQL error: #{msg}"
-  end
-
-  defp format_error(%Postgrex.Error{message: msg}) when is_binary(msg) do
-    "SQL error: #{msg}"
-  end
-
-  defp format_error(error) do
-    error
   end
 end
