@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+
+## [0.2.0] - 2025-01-21
+
 - **BREAKING:** Removed support for fk and pk configuration options
 - **BREAKING:** Changed configuration structure - `repo` config replaced with `ecto_repo` and `data_repos`
 - **BREAKING:** Removed unused `prefix` option from query execution opts (was never implemented)
