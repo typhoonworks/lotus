@@ -121,6 +121,68 @@ IO.inspect(repo_names)
 # ["main", "analytics", "sqlite_data"]
 ```
 
+### Storing Queries with Specific Data Repositories
+
+You can store queries with a specific data repository, so they automatically execute against the correct database:
+
+```elixir
+# Create a query that will run against the analytics database
+{:ok, analytics_query} = Lotus.create_query(%{
+  name: "Daily Page Views",
+  query: %{
+    sql: "SELECT COUNT(*) FROM page_views WHERE date = $1",
+    params: [Date.utc_today()]
+  },
+  data_repo: "analytics"
+})
+
+# Create a query for the main database
+{:ok, user_query} = Lotus.create_query(%{
+  name: "Active Users",
+  query: %{sql: "SELECT COUNT(*) FROM users WHERE active = true"},
+  data_repo: "main"
+})
+
+# Execute queries - they automatically use their stored data_repo
+{:ok, analytics_result} = Lotus.run_query(analytics_query)
+{:ok, user_result} = Lotus.run_query(user_query)
+```
+
+### Runtime Repository Override
+
+You can override the stored data repository at execution time:
+
+```elixir
+# Query was saved with data_repo: "analytics"
+{:ok, query} = Lotus.create_query(%{
+  name: "User Count",
+  query: %{sql: "SELECT COUNT(*) FROM users"},
+  data_repo: "analytics"
+})
+
+# Execute against the stored repository
+{:ok, result} = Lotus.run_query(query)
+
+# Override at runtime to use a different repository
+{:ok, result} = Lotus.run_query(query, repo: "main")
+```
+
+### Fallback Behavior
+
+If you don't specify a `data_repo` when creating a query, it will use the default repository when executed:
+
+```elixir
+# Query without specific data_repo
+{:ok, query} = Lotus.create_query(%{
+  name: "Generic Query",
+  query: %{sql: "SELECT 1"}
+  # No data_repo specified
+})
+
+# Will use the default configured repository
+{:ok, result} = Lotus.run_query(query)
+```
+
 ## Managing Saved Queries
 
 ### Listing All Queries
@@ -174,6 +236,185 @@ rescue
   Ecto.NoResultsError -> IO.puts("Query deleted successfully")
 end
 ```
+
+## PostgreSQL Schema Resolution with search_path
+
+When working with PostgreSQL databases that use multiple schemas, you can use `search_path` to resolve unqualified table names. This is especially useful for multi-tenant applications or when you have separate schemas for reporting, analytics, or different environments.
+
+### Understanding search_path
+
+PostgreSQL's `search_path` determines which schemas are searched when you reference an unqualified table name like `users` instead of `reporting.users`. For example:
+
+```elixir
+# Without search_path - must fully qualify table names
+{:error, reason} = Lotus.run_sql("SELECT * FROM customers")
+# "SQL error: relation \"customers\" does not exist"
+
+# With search_path - finds reporting.customers automatically
+{:ok, result} = Lotus.run_sql(
+  "SELECT * FROM customers", 
+  [], 
+  search_path: "reporting, public"
+)
+```
+
+### Stored Queries with search_path
+
+You can save a `search_path` with your queries to make them automatically resolve against the correct schemas:
+
+```elixir
+# Create a query that looks in reporting schema first, then public
+{:ok, query} = Lotus.create_query(%{
+  name: "Customer Report",
+  query: %{
+    sql: "SELECT COUNT(*) FROM customers WHERE active = true",
+    params: []
+  },
+  search_path: "reporting, public",
+  data_repo: "postgres"
+})
+
+# Execute - automatically uses the stored search_path
+{:ok, result} = Lotus.run_query(query)
+# Finds reporting.customers without needing to qualify the table name
+```
+
+### Runtime search_path Override
+
+You can override or provide a `search_path` at runtime:
+
+```elixir
+# Override stored search_path
+{:ok, result} = Lotus.run_query(query, search_path: "analytics, public")
+
+# Provide search_path for ad-hoc queries
+{:ok, result} = Lotus.run_sql(
+  "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id",
+  [],
+  repo: "postgres",
+  search_path: "reporting, public"
+)
+```
+
+### Multi-Schema Scenarios
+
+Here are common patterns for using `search_path`:
+
+#### Multi-Tenant with Schema-per-Tenant
+
+```elixir
+# Query template that works across tenant schemas
+{:ok, tenant_query} = Lotus.create_query(%{
+  name: "Tenant User Count",
+  query: %{sql: "SELECT COUNT(*) FROM users WHERE active = $1"},
+  data_repo: "postgres"
+})
+
+# Execute for different tenants by overriding search_path
+{:ok, tenant_a_result} = Lotus.run_query(tenant_query, [true], search_path: "tenant_123, public")
+{:ok, tenant_b_result} = Lotus.run_query(tenant_query, [true], search_path: "tenant_456, public") 
+```
+
+#### Reporting and Analytics Schemas
+
+```elixir
+# Create queries that work across different schema contexts
+{:ok, report_query} = Lotus.create_query(%{
+  name: "Monthly Revenue",
+  query: %{
+    sql: """
+    SELECT 
+      DATE_TRUNC('month', created_at) as month,
+      SUM(amount) as revenue
+    FROM orders 
+    WHERE created_at >= $1 
+    GROUP BY 1 
+    ORDER BY 1
+    """
+  },
+  search_path: "reporting, public",
+  data_repo: "postgres"
+})
+
+# Use the same query structure for different contexts
+{:ok, prod_data} = Lotus.run_query(report_query, [~D[2024-01-01]])
+{:ok, staging_data} = Lotus.run_query(report_query, [~D[2024-01-01]], search_path: "staging, public")
+```
+
+#### Mixed Schema Access
+
+```elixir
+# Query that needs tables from multiple schemas in search order
+{:ok, complex_query} = Lotus.create_query(%{
+  name: "User Activity Summary", 
+  query: %{
+    sql: """
+    SELECT 
+      u.name,
+      COUNT(e.id) as event_count,
+      MAX(s.last_login) as last_seen
+    FROM users u
+    LEFT JOIN events e ON u.id = e.user_id  -- from analytics schema
+    LEFT JOIN sessions s ON u.id = s.user_id  -- from public schema
+    GROUP BY u.id, u.name
+    """
+  },
+  search_path: "public, analytics",  # users in public, events in analytics
+  data_repo: "postgres"
+})
+```
+
+### search_path Validation
+
+Lotus validates `search_path` values to prevent injection attacks:
+
+```elixir
+# Valid search_path values
+{:ok, query} = Lotus.create_query(%{
+  name: "Valid Query",
+  query: %{sql: "SELECT 1"},
+  search_path: "reporting"  # single schema
+})
+
+{:ok, query} = Lotus.create_query(%{
+  name: "Valid Query",  
+  query: %{sql: "SELECT 1"},
+  search_path: "schema1, schema_2, public"  # multiple schemas
+})
+
+# Invalid search_path - validation error
+{:error, changeset} = Lotus.create_query(%{
+  name: "Invalid Query",
+  query: %{sql: "SELECT 1"}, 
+  search_path: "invalid-name, 123schema"  # hyphens and leading numbers not allowed
+})
+
+errors_on(changeset)
+# %{search_path: ["must be a comma-separated list of valid schema identifiers (letters, numbers, underscores only)"]}
+```
+
+### search_path with Other Databases
+
+For non-PostgreSQL databases, `search_path` is safely ignored:
+
+```elixir
+# SQLite ignores search_path without error
+{:ok, result} = Lotus.run_sql(
+  "SELECT COUNT(*) FROM products",
+  [],
+  repo: "sqlite",
+  search_path: "ignored_value"  # Has no effect but doesn't cause errors
+)
+```
+
+### Safety and Scoping
+
+Lotus implements `search_path` safely:
+
+- Uses `SET LOCAL search_path` to scope changes to the current transaction only
+- Changes don't leak to other queries or database sessions  
+- The same `search_path` is used for both preflight authorization and query execution
+- Schema identifiers are validated to prevent injection attacks
 
 ## Working with Parameters
 
@@ -231,13 +472,13 @@ You can customize query execution with options:
 # Set a custom timeout
 {:ok, result} = Lotus.run_query(query, timeout: 30_000)
 
-# Use a specific schema prefix
-{:ok, result} = Lotus.run_query(query, prefix: "analytics")
+# Use a search_path for schema resolution
+{:ok, result} = Lotus.run_query(query, search_path: "reporting, public")
 
 # Combine multiple options
 {:ok, result} = Lotus.run_query(query, [
   timeout: 30_000,
-  prefix: "reporting",
+  search_path: "reporting, public",
   statement_timeout_ms: 25_000
 ])
 ```

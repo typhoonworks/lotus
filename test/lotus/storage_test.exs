@@ -157,6 +157,42 @@ defmodule Lotus.StorageTest do
       assert query.description == nil
       assert query.query == %{sql: "SELECT 1"}
       assert query.tags == []
+      assert query.data_repo == nil
+    end
+
+    test "creates query with valid data_repo" do
+      attrs = %{
+        name: "Analytics Query",
+        query: %{sql: "SELECT COUNT(*) FROM page_views"},
+        data_repo: "postgres"
+      }
+
+      assert {:ok, query} = Storage.create_query(attrs)
+      assert query.data_repo == "postgres"
+    end
+
+    test "normalizes empty string data_repo to nil" do
+      attrs = %{
+        name: "Test Query",
+        query: %{sql: "SELECT 1"},
+        data_repo: ""
+      }
+
+      assert {:ok, query} = Storage.create_query(attrs)
+      assert query.data_repo == nil
+    end
+
+    test "returns error with invalid data_repo" do
+      attrs = %{
+        name: "Invalid Repo Query",
+        query: %{sql: "SELECT 1"},
+        data_repo: "nonexistent_repo"
+      }
+
+      assert {:error, changeset} = Storage.create_query(attrs)
+      refute changeset.valid?
+      assert %{data_repo: [error_msg]} = errors_on(changeset)
+      assert error_msg =~ "must be one of the configured data repositories"
     end
 
     test "returns error with invalid attributes" do

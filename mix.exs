@@ -42,7 +42,7 @@ defmodule Lotus.MixProject do
       {:ecto, "~> 3.10"},
       {:ecto_sql, "~> 3.10"},
       {:postgrex, "~> 0.20", optional: true},
-      # {:myxql, "~> 0.7", optional: true},
+      # {:myxql, "~> 0.7", optional: true},ie
       {:ecto_sqlite3, "~> 0.21", optional: true},
       {:nimble_options, "~> 1.0"},
       {:jason, "~> 1.4"},

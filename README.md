@@ -1,4 +1,7 @@
 # Lotus
+
+![Lotus](https://raw.githubusercontent.com/typhoonworks/lotus/main/media/banner.png)
+
 <p>
   <a href="https://hex.pm/packages/lotus">
     <img alt="Hex Version" src="https://img.shields.io/hexpm/v/lotus.svg">
@@ -79,7 +82,7 @@ config :lotus,
 # Execute a saved query
 {:ok, results} = Lotus.run_query(query)
 
-# Execute SQL directly (read-only)  
+# Execute SQL directly (read-only)
 {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
 
 # Execute against a specific data repository

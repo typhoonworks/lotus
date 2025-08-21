@@ -107,6 +107,73 @@ defmodule Lotus.Storage.QueryTest do
       assert changeset.valid?
       assert get_field(changeset, :tags) == ["analytics", "reporting"]
     end
+
+    test "accepts valid search_path" do
+      attrs = %{
+        name: "Schema Query",
+        query: %{sql: "SELECT * FROM users"},
+        search_path: "reporting, public"
+      }
+
+      changeset = Query.new(attrs)
+
+      assert changeset.valid?
+      assert get_field(changeset, :search_path) == "reporting, public"
+    end
+
+    test "accepts single schema in search_path" do
+      changeset =
+        Query.new(%{
+          name: "Test",
+          query: %{sql: "SELECT 1"},
+          search_path: "analytics"
+        })
+
+      assert changeset.valid?
+      assert get_field(changeset, :search_path) == "analytics"
+    end
+
+    test "converts empty search_path to nil" do
+      changeset =
+        Query.new(%{
+          name: "Test",
+          query: %{sql: "SELECT 1"},
+          search_path: ""
+        })
+
+      assert changeset.valid?
+      assert get_field(changeset, :search_path) == nil
+    end
+
+    test "is invalid with malformed search_path" do
+      changeset =
+        Query.new(%{
+          name: "Test",
+          query: %{sql: "SELECT 1"},
+          search_path: "invalid-schema, 123schema"
+        })
+
+      refute changeset.valid?
+
+      assert %{
+               search_path: [
+                 "must be a comma-separated list of valid schema identifiers (letters, numbers, underscores only)"
+               ]
+             } =
+               errors_on(changeset)
+    end
+
+    test "is invalid when search_path is not a string" do
+      changeset =
+        Query.new(%{
+          name: "Test",
+          query: %{sql: "SELECT 1"},
+          search_path: 123
+        })
+
+      refute changeset.valid?
+      assert %{search_path: ["is invalid"]} = errors_on(changeset)
+    end
   end
 
   describe "update/2" do

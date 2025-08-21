@@ -21,7 +21,8 @@ defmodule Lotus do
       # Create and save a query
       {:ok, query} = Lotus.create_query(%{
         name: "Active Users",
-        query: %{sql: "SELECT * FROM users WHERE active = true"}
+        query: %{sql: "SELECT * FROM users WHERE active = true"},
+        search_path: "reporting, public"
       })
 
       # Execute a saved query
@@ -38,7 +39,7 @@ defmodule Lotus do
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
           read_only: boolean(),
-          prefix: binary()
+          search_path: binary() | nil
         ]
 
   @doc """
@@ -106,8 +107,23 @@ defmodule Lotus do
 
   def run_query(%Query{} = q, opts) do
     {sql, params} = Query.to_sql_params(q)
-    execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
-    Runner.run_sql(execution_repo, sql, params, opts)
+
+    repo_from_opts = Keyword.get(opts, :repo)
+    repo_from_query = q.data_repo
+
+    # Use search_path from query unless overridden in opts
+    search_path_from_opts = Keyword.get(opts, :search_path)
+    search_path = search_path_from_opts || q.search_path
+
+    final_opts =
+      if search_path do
+        Keyword.put(opts, :search_path, search_path)
+      else
+        opts
+      end
+
+    execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
+    Runner.run_sql(execution_repo, sql, params, final_opts)
   end
 
   def run_query(id, opts) do
@@ -122,17 +138,21 @@ defmodule Lotus do
 
       # Run against default configured repo
       {:ok, result} = Lotus.run_sql("SELECT * FROM users")
-      
+
       # Run against specific repo
       {:ok, result} = Lotus.run_sql("SELECT * FROM products", [], repo: MyApp.DataRepo)
-      
+
       # With parameters
       {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
+      
+      # With search_path for schema resolution
+      {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
   """
   @spec run_sql(binary(), list(any()), [
           {:read_only, boolean()}
           | {:statement_timeout_ms, non_neg_integer()}
           | {:timeout, non_neg_integer()}
+          | {:search_path, binary() | nil}
         ]) ::
           {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
@@ -148,12 +168,21 @@ defmodule Lotus do
   @doc """
   Lists all tables in a data repository.
 
+  For databases with schemas (PostgreSQL), returns {schema, table} tuples.
+  For databases without schemas (SQLite), returns just table names as strings.
+
   ## Examples
 
-      {:ok, tables} = Lotus.list_tables("primary")
-      {:ok, tables} = Lotus.list_tables(MyApp.DataRepo)
+      {:ok, tables} = Lotus.list_tables("postgres")
+      # Returns [{"public", "users"}, {"public", "posts"}, ...]
+      
+      {:ok, tables} = Lotus.list_tables("postgres", search_path: "reporting, public")
+      # Returns [{"reporting", "customers"}, {"public", "users"}, ...]
+      
+      {:ok, tables} = Lotus.list_tables("sqlite")  
+      # Returns ["products", "orders", "order_items"]
   """
-  defdelegate list_tables(repo_or_name), to: Schema
+  def list_tables(repo_or_name, opts \\ []), do: Schema.list_tables(repo_or_name, opts)
 
   @doc """
   Gets the schema for a specific table.
@@ -161,9 +190,11 @@ defmodule Lotus do
   ## Examples
 
       {:ok, schema} = Lotus.get_table_schema("primary", "users")
-      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products")
+      {:ok, schema} = Lotus.get_table_schema("postgres", "customers", schema: "reporting")
+      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products", search_path: "analytics, public")
   """
-  defdelegate get_table_schema(repo_or_name, table_name), to: Schema
+  def get_table_schema(repo_or_name, table_name, opts \\ []),
+    do: Schema.get_table_schema(repo_or_name, table_name, opts)
 
   @doc """
   Gets statistics for a specific table.
@@ -171,9 +202,21 @@ defmodule Lotus do
   ## Examples
 
       {:ok, stats} = Lotus.get_table_stats("primary", "users")
+      {:ok, stats} = Lotus.get_table_stats("postgres", "customers", schema: "reporting")
       # Returns %{row_count: 1234}
   """
-  defdelegate get_table_stats(repo_or_name, table_name), to: Schema
+  def get_table_stats(repo_or_name, table_name, opts \\ []),
+    do: Schema.get_table_stats(repo_or_name, table_name, opts)
+
+  @doc """
+  Lists all relations (tables with schema information) in a data repository.
+
+  ## Examples
+
+      {:ok, relations} = Lotus.list_relations("postgres", search_path: "reporting, public")
+      # Returns [{"reporting", "customers"}, {"public", "users"}, ...]
+  """
+  def list_relations(repo_or_name, opts \\ []), do: Schema.list_relations(repo_or_name, opts)
 
   # Private helper to resolve execution repo from various inputs
   defp resolve_execution_repo(nil) do

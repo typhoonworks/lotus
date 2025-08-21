@@ -37,6 +37,7 @@ Lotus addresses these challenges by providing:
 - **Simple API**: Intuitive functions for creating and running queries
 - **Type safety**: Structured results with proper error handling
 - **Configuration**: Flexible setup to match your application's needs
+- **Schema introspection**: Discover tables, inspect schemas, and gather statistics
 
 ## Core Concepts
 
@@ -49,6 +50,9 @@ All SQL execution happens through Lotus's runner, which enforces read-only restr
 ### Results
 Query results are returned in a structured format (`QueryResult`) that includes the data and column information.
 
+### Schema Introspection
+Lotus provides comprehensive schema discovery tools to explore database structure, list tables across schemas, inspect column definitions, and gather table statistics.
+
 ## Use Cases
 
 Lotus is perfect for:
@@ -58,6 +62,8 @@ Lotus is perfect for:
 - **Business intelligence**: Organize and execute analytical queries
 - **Metrics collection**: Store and run queries for application metrics
 - **Data exports**: Generate data extracts with saved, tested queries
+- **Database administration**: Explore table structures and gather statistics
+- **Multi-tenant applications**: Manage schema-per-tenant architectures
 
 ## What's Next?
 

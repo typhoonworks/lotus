@@ -12,7 +12,8 @@ defmodule Lotus.Runner do
   @type opts :: [
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
-          read_only: boolean()
+          read_only: boolean(),
+          search_path: String.t() | nil
         ]
 
   # Deny list for dangerous operations (defense-in-depth)
@@ -33,11 +34,13 @@ defmodule Lotus.Runner do
     read_only? = Keyword.get(opts, :read_only, true)
     stmt_ms = Keyword.get(opts, :statement_timeout_ms, 5_000)
     db_timeout = Keyword.get(opts, :timeout, 15_000)
+    search_path = Keyword.get(opts, :search_path)
 
     repo.transaction(
       fn ->
         if read_only?, do: Adapter.set_read_only(repo)
         Adapter.set_statement_timeout(repo, stmt_ms)
+        if search_path, do: Adapter.set_search_path(repo, search_path)
 
         case repo.query(sql, params, timeout: db_timeout) do
           {:ok, %{columns: cols, rows: rows}} ->
@@ -155,13 +158,15 @@ defmodule Lotus.Runner do
     if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok
   end
 
-  defp preflight_visibility(repo, sql, params, _opts) do
+  defp preflight_visibility(repo, sql, params, opts) do
     if needs_preflight?(sql) do
       repo_name =
         Lotus.Config.data_repos()
         |> Enum.find_value(fn {name, mod} -> if mod == repo, do: name end) || "default"
 
-      case Preflight.authorize(repo, repo_name, sql, params) do
+      search_path = Keyword.get(opts, :search_path)
+
+      case Preflight.authorize(repo, repo_name, sql, params, search_path) do
         :ok -> :ok
         {:error, msg} -> {:error, msg}
       end

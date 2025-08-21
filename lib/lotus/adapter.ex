@@ -40,6 +40,24 @@ defmodule Lotus.Adapter do
   end
 
   @doc """
+  Sets search_path for the given repository's adapter.
+
+  Only affects PostgreSQL; other adapters ignore this setting.
+  Uses SET LOCAL to scope the change to the current transaction.
+  """
+  def set_search_path(repo, search_path) when is_binary(search_path) do
+    case repo.__adapter__() do
+      Ecto.Adapters.Postgres ->
+        repo.query!("SET LOCAL search_path = #{search_path}")
+
+      _ ->
+        :ok
+    end
+  end
+
+  def set_search_path(_repo, _search_path), do: :ok
+
+  @doc """
   Formats database errors into a consistent format.
   """
   def format_error(%Postgrex.Error{postgres: %{code: :syntax_error, message: msg}}) do
