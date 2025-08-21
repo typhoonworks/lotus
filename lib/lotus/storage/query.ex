@@ -16,9 +16,9 @@ defmodule Lotus.Storage.Query do
   json_encoder = Lotus.JSON.encoder()
 
   @derive {json_encoder,
-           only: [:id, :name, :description, :query, :tags, :inserted_at, :updated_at]}
+           only: [:id, :name, :description, :query, :tags, :data_repo, :inserted_at, :updated_at]}
 
-  @permitted ~w(name description query tags)a
+  @permitted ~w(name description query tags data_repo)a
   @required ~w(name query)a
 
   @type t :: %__MODULE__{
@@ -27,6 +27,7 @@ defmodule Lotus.Storage.Query do
           description: String.t() | nil,
           query: map(),
           tags: [String.t()],
+          data_repo: String.t() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
@@ -36,6 +37,7 @@ defmodule Lotus.Storage.Query do
     field(:description, :string)
     field(:query, :map)
     field(:tags, {:array, :string}, default: [])
+    field(:data_repo, :string)
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -84,6 +86,7 @@ defmodule Lotus.Storage.Query do
     |> validate_required(@required)
     |> validate_length(:name, min: 1, max: 255)
     |> validate_change(:query, &validate_query_payload/2)
+    |> validate_data_repo()
     |> maybe_add_unique_constraint()
     |> put_normalized_tags()
   end
@@ -124,6 +127,32 @@ defmodule Lotus.Storage.Query do
 
   defp validate_query_payload(:query, _),
     do: [query: "must include sql (string) and optionally params (list)"]
+
+  defp validate_data_repo(changeset) do
+    case get_change(changeset, :data_repo) do
+      nil ->
+        changeset
+
+      "" ->
+        put_change(changeset, :data_repo, nil)
+
+      repo_name when is_binary(repo_name) ->
+        if repo_name in Map.keys(Config.data_repos()) do
+          changeset
+        else
+          available_repos = Map.keys(Config.data_repos()) |> Enum.join(", ")
+
+          add_error(
+            changeset,
+            :data_repo,
+            "must be one of the configured data repositories: #{available_repos}"
+          )
+        end
+
+      _ ->
+        add_error(changeset, :data_repo, "must be a string")
+    end
+  end
 
   defp put_normalized_tags(changeset) do
     tags = get_change(changeset, :tags)

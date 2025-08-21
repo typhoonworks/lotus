@@ -106,7 +106,11 @@ defmodule Lotus do
 
   def run_query(%Query{} = q, opts) do
     {sql, params} = Query.to_sql_params(q)
-    execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
+
+    repo_from_opts = Keyword.get(opts, :repo)
+    repo_from_query = q.data_repo
+
+    execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
     Runner.run_sql(execution_repo, sql, params, opts)
   end
 
@@ -122,10 +126,10 @@ defmodule Lotus do
 
       # Run against default configured repo
       {:ok, result} = Lotus.run_sql("SELECT * FROM users")
-      
+
       # Run against specific repo
       {:ok, result} = Lotus.run_sql("SELECT * FROM products", [], repo: MyApp.DataRepo)
-      
+
       # With parameters
       {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
   """

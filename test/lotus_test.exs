@@ -64,6 +64,18 @@ defmodule LotusTest do
       assert query.description == "A test query"
       assert query.query == %{sql: "SELECT * FROM test_users", params: []}
       assert query.tags == ["test", "users"]
+      assert query.data_repo == nil
+    end
+
+    test "creates query with data_repo" do
+      attrs = %{
+        name: "Analytics Query",
+        query: %{sql: "SELECT COUNT(*) FROM page_views"},
+        data_repo: "sqlite"
+      }
+
+      assert {:ok, query} = Lotus.create_query(attrs)
+      assert query.data_repo == "sqlite"
     end
 
     test "returns error with invalid attributes" do
@@ -185,6 +197,44 @@ defmodule LotusTest do
 
       assert {:error, error} = Lotus.run_query(query)
       assert error =~ "relation \"nonexistent_table\" does not exist"
+    end
+
+    test "uses stored data_repo when specified" do
+      query =
+        query_fixture(%{
+          name: "Test Data Query",
+          query: %{sql: "SELECT 1 as result"},
+          data_repo: "postgres"
+        })
+
+      assert {:ok, result} = Lotus.run_query(query)
+      assert result.num_rows == 1
+      assert result.rows == [[1]]
+    end
+
+    test "runtime repo option overrides stored data_repo" do
+      query =
+        query_fixture(%{
+          name: "Override Test Query",
+          query: %{sql: "SELECT 1 as result"},
+          data_repo: "sqlite"
+        })
+
+      assert {:ok, result} = Lotus.run_query(query, repo: "postgres")
+      assert result.num_rows == 1
+      assert result.rows == [[1]]
+    end
+
+    test "falls back to default repo when no data_repo specified" do
+      query =
+        query_fixture(%{
+          name: "Default Repo Query",
+          query: %{sql: "SELECT 1 as result"}
+        })
+
+      assert {:ok, result} = Lotus.run_query(query)
+      assert result.num_rows == 1
+      assert result.rows == [[1]]
     end
   end
 

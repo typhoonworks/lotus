@@ -121,6 +121,68 @@ IO.inspect(repo_names)
 # ["main", "analytics", "sqlite_data"]
 ```
 
+### Storing Queries with Specific Data Repositories
+
+You can store queries with a specific data repository, so they automatically execute against the correct database:
+
+```elixir
+# Create a query that will run against the analytics database
+{:ok, analytics_query} = Lotus.create_query(%{
+  name: "Daily Page Views",
+  query: %{
+    sql: "SELECT COUNT(*) FROM page_views WHERE date = $1",
+    params: [Date.utc_today()]
+  },
+  data_repo: "analytics"
+})
+
+# Create a query for the main database
+{:ok, user_query} = Lotus.create_query(%{
+  name: "Active Users",
+  query: %{sql: "SELECT COUNT(*) FROM users WHERE active = true"},
+  data_repo: "main"
+})
+
+# Execute queries - they automatically use their stored data_repo
+{:ok, analytics_result} = Lotus.run_query(analytics_query)
+{:ok, user_result} = Lotus.run_query(user_query)
+```
+
+### Runtime Repository Override
+
+You can override the stored data repository at execution time:
+
+```elixir
+# Query was saved with data_repo: "analytics"
+{:ok, query} = Lotus.create_query(%{
+  name: "User Count",
+  query: %{sql: "SELECT COUNT(*) FROM users"},
+  data_repo: "analytics"
+})
+
+# Execute against the stored repository
+{:ok, result} = Lotus.run_query(query)
+
+# Override at runtime to use a different repository
+{:ok, result} = Lotus.run_query(query, repo: "main")
+```
+
+### Fallback Behavior
+
+If you don't specify a `data_repo` when creating a query, it will use the default repository when executed:
+
+```elixir
+# Query without specific data_repo
+{:ok, query} = Lotus.create_query(%{
+  name: "Generic Query",
+  query: %{sql: "SELECT 1"}
+  # No data_repo specified
+})
+
+# Will use the default configured repository
+{:ok, result} = Lotus.run_query(query)
+```
+
 ## Managing Saved Queries
 
 ### Listing All Queries

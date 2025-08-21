@@ -6,6 +6,7 @@
 - Add multi-database support with PostgreSQL and SQLite
 - Add table visibility controls for enhanced security
 - Add support for multiple data repositories with flexible routing
+- Add `data_repo` field to stored queries for automatic repository selection
 - Add comprehensive development environment setup with sample data
 - Add read-only repository configuration guidance
 
