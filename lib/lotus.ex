@@ -21,7 +21,8 @@ defmodule Lotus do
       # Create and save a query
       {:ok, query} = Lotus.create_query(%{
         name: "Active Users",
-        query: %{sql: "SELECT * FROM users WHERE active = true"}
+        query: %{sql: "SELECT * FROM users WHERE active = true"},
+        search_path: "reporting, public"
       })
 
       # Execute a saved query
@@ -38,7 +39,7 @@ defmodule Lotus do
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
           read_only: boolean(),
-          prefix: binary()
+          search_path: binary() | nil
         ]
 
   @doc """
@@ -110,8 +111,19 @@ defmodule Lotus do
     repo_from_opts = Keyword.get(opts, :repo)
     repo_from_query = q.data_repo
 
+    # Use search_path from query unless overridden in opts
+    search_path_from_opts = Keyword.get(opts, :search_path)
+    search_path = search_path_from_opts || q.search_path
+
+    final_opts =
+      if search_path do
+        Keyword.put(opts, :search_path, search_path)
+      else
+        opts
+      end
+
     execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
-    Runner.run_sql(execution_repo, sql, params, opts)
+    Runner.run_sql(execution_repo, sql, params, final_opts)
   end
 
   def run_query(id, opts) do
@@ -132,11 +144,15 @@ defmodule Lotus do
 
       # With parameters
       {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
+      
+      # With search_path for schema resolution
+      {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
   """
   @spec run_sql(binary(), list(any()), [
           {:read_only, boolean()}
           | {:statement_timeout_ms, non_neg_integer()}
           | {:timeout, non_neg_integer()}
+          | {:search_path, binary() | nil}
         ]) ::
           {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do

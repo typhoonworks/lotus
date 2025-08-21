@@ -306,8 +306,8 @@ Lotus.run_query(query, statement_timeout_ms: 15_000)  # 15 seconds
 ### Connection Options
 
 ```elixir
-# Use specific schema prefix
-Lotus.run_query(query, prefix: "analytics")
+# Use search_path for schema resolution
+Lotus.run_query(query, search_path: "analytics, public")
 ```
 
 ## Validation

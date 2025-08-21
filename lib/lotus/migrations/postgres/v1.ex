@@ -22,6 +22,7 @@ defmodule Lotus.Migrations.Postgres.V1 do
       add(:query, :map, null: false)
       add(:tags, {:array, :string}, default: [])
       add(:data_repo, :string)
+      add(:search_path, :string)
 
       timestamps(type: :utc_datetime_usec)
     end

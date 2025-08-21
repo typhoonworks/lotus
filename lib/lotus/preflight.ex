@@ -19,20 +19,21 @@ defmodule Lotus.Preflight do
 
   ## Examples
 
-      authorize(MyRepo, "postgres", "SELECT * FROM users", [])
+      authorize(MyRepo, "postgres", "SELECT * FROM users", [], nil)
       #=> :ok
 
-      authorize(MyRepo, "postgres", "SELECT * FROM schema_migrations", [])
+      authorize(MyRepo, "postgres", "SELECT * FROM schema_migrations", [], "reporting, public")
       #=> {:error, "Query touches a blocked table"}
   """
-  @spec authorize(module(), String.t(), String.t(), list()) :: :ok | {:error, String.t()}
-  def authorize(repo, repo_name, sql, params) do
+  @spec authorize(module(), String.t(), String.t(), list(), String.t() | nil) ::
+          :ok | {:error, String.t()}
+  def authorize(repo, repo_name, sql, params, search_path \\ nil) do
     unless Map.has_key?(Lotus.Config.data_repos(), repo_name) do
       {:error, "Unknown data repo '#{repo_name}'"}
     else
       case adapter(repo) do
-        :postgres -> authorize_pg(repo, repo_name, sql, params)
-        :sqlite -> authorize_sqlite(repo, repo_name, sql, params)
+        :postgres -> authorize_pg(repo, repo_name, sql, params, search_path)
+        :sqlite -> authorize_sqlite(repo, repo_name, sql, params, search_path)
         # fallback: allow if unknown adapter
         _ -> :ok
       end
@@ -47,10 +48,23 @@ defmodule Lotus.Preflight do
     end
   end
 
-  defp authorize_pg(repo, repo_name, sql, params) do
+  defp authorize_pg(repo, repo_name, sql, params, search_path) do
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
 
-    case repo.query(explain, params) do
+    result =
+      if search_path do
+        case repo.transaction(fn ->
+               repo.query!("SET LOCAL search_path = #{search_path}")
+               repo.query(explain, params)
+             end) do
+          {:ok, query_result} -> query_result
+          {:error, err} -> {:error, err}
+        end
+      else
+        repo.query(explain, params)
+      end
+
+    case result do
       {:ok, %{rows: [[json]]}} ->
         plan_data =
           case json do
@@ -94,7 +108,7 @@ defmodule Lotus.Preflight do
     end
   end
 
-  defp authorize_sqlite(repo, repo_name, sql, params) do
+  defp authorize_sqlite(repo, repo_name, sql, params, _search_path) do
     alias_map = parse_alias_map(sql)
 
     explain = "EXPLAIN QUERY PLAN " <> sql

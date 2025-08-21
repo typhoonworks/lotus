@@ -14,6 +14,7 @@ defmodule Lotus.Migrations.SQLite do
       add(:query, :map, null: false)
       add(:tags, :text, default: "[]")
       add(:data_repo, :string)
+      add(:search_path, :string)
       timestamps(type: :utc_datetime_usec)
     end
 
