@@ -168,12 +168,21 @@ defmodule Lotus do
   @doc """
   Lists all tables in a data repository.
 
+  For databases with schemas (PostgreSQL), returns {schema, table} tuples.
+  For databases without schemas (SQLite), returns just table names as strings.
+
   ## Examples
 
-      {:ok, tables} = Lotus.list_tables("primary")
-      {:ok, tables} = Lotus.list_tables(MyApp.DataRepo)
+      {:ok, tables} = Lotus.list_tables("postgres")
+      # Returns [{"public", "users"}, {"public", "posts"}, ...]
+      
+      {:ok, tables} = Lotus.list_tables("postgres", search_path: "reporting, public")
+      # Returns [{"reporting", "customers"}, {"public", "users"}, ...]
+      
+      {:ok, tables} = Lotus.list_tables("sqlite")  
+      # Returns ["products", "orders", "order_items"]
   """
-  defdelegate list_tables(repo_or_name), to: Schema
+  def list_tables(repo_or_name, opts \\ []), do: Schema.list_tables(repo_or_name, opts)
 
   @doc """
   Gets the schema for a specific table.
@@ -181,9 +190,11 @@ defmodule Lotus do
   ## Examples
 
       {:ok, schema} = Lotus.get_table_schema("primary", "users")
-      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products")
+      {:ok, schema} = Lotus.get_table_schema("postgres", "customers", schema: "reporting")
+      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products", search_path: "analytics, public")
   """
-  defdelegate get_table_schema(repo_or_name, table_name), to: Schema
+  def get_table_schema(repo_or_name, table_name, opts \\ []),
+    do: Schema.get_table_schema(repo_or_name, table_name, opts)
 
   @doc """
   Gets statistics for a specific table.
@@ -191,9 +202,21 @@ defmodule Lotus do
   ## Examples
 
       {:ok, stats} = Lotus.get_table_stats("primary", "users")
+      {:ok, stats} = Lotus.get_table_stats("postgres", "customers", schema: "reporting")
       # Returns %{row_count: 1234}
   """
-  defdelegate get_table_stats(repo_or_name, table_name), to: Schema
+  def get_table_stats(repo_or_name, table_name, opts \\ []),
+    do: Schema.get_table_stats(repo_or_name, table_name, opts)
+
+  @doc """
+  Lists all relations (tables with schema information) in a data repository.
+
+  ## Examples
+
+      {:ok, relations} = Lotus.list_relations("postgres", search_path: "reporting, public")
+      # Returns [{"reporting", "customers"}, {"public", "users"}, ...]
+  """
+  def list_relations(repo_or_name, opts \\ []), do: Schema.list_relations(repo_or_name, opts)
 
   # Private helper to resolve execution repo from various inputs
   defp resolve_execution_repo(nil) do

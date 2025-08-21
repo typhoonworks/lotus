@@ -125,8 +125,8 @@ defmodule Lotus.SchemaTest do
       {:ok, tables} = Schema.list_tables(Lotus.Test.Repo)
 
       assert is_list(tables)
-      assert "test_users" in tables
-      assert "test_posts" in tables
+      assert {"public", "test_users"} in tables
+      assert {"public", "test_posts"} in tables
     end
 
     @tag :postgres
