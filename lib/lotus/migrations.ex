@@ -4,11 +4,11 @@ defmodule Lotus.Migrations do
 
   Handles versioned schema migrations for the Lotus query storage system.
   Dispatches to database-specific migration modules based on the configured adapter.
-  
+
   ## Usage
-  
+
   In your application migration:
-  
+
       defmodule MyApp.Repo.Migrations.CreateLotusQueries do
         use Ecto.Migration
 

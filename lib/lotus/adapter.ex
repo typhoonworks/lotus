@@ -1,7 +1,7 @@
 defmodule Lotus.Adapter do
   @moduledoc """
   Database adapter-specific functionality for Lotus.
-  
+
   Handles differences between database adapters like PostgreSQL, SQLite, etc.
   """
 
@@ -10,12 +10,14 @@ defmodule Lotus.Adapter do
   """
   def set_read_only(repo) do
     case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> 
+      Ecto.Adapters.Postgres ->
         repo.query!("SET LOCAL transaction_read_only = on")
-      Ecto.Adapters.SQLite3 -> 
+
+      Ecto.Adapters.SQLite3 ->
         # SQLite doesn't support read-only transactions, but SELECT queries are inherently safe
         :ok
-      _ -> 
+
+      _ ->
         :ok
     end
   end
@@ -25,12 +27,14 @@ defmodule Lotus.Adapter do
   """
   def set_statement_timeout(repo, timeout_ms) do
     case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> 
+      Ecto.Adapters.Postgres ->
         repo.query!("SET LOCAL statement_timeout = #{timeout_ms}")
-      Ecto.Adapters.SQLite3 -> 
+
+      Ecto.Adapters.SQLite3 ->
         # SQLite doesn't support statement_timeout
         :ok
-      _ -> 
+
+      _ ->
         :ok
     end
   end
@@ -57,23 +61,23 @@ defmodule Lotus.Adapter do
   def format_error(%Postgrex.Error{message: msg}) when is_binary(msg) do
     "SQL error: #{msg}"
   end
-  
+
   def format_error(%Exqlite.Error{} = err) do
     "SQLite Error: #{err.message}"
   end
-  
+
   def format_error(%ArgumentError{message: msg}) do
     msg
   end
-  
+
   def format_error(%DBConnection.EncodeError{message: msg}) do
     msg
   end
-  
+
   def format_error(err) when is_binary(err) do
     err
   end
-  
+
   def format_error(err) do
     "Database Error: #{inspect(err)}"
   end

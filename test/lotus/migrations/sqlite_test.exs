@@ -8,11 +8,13 @@ defmodule Lotus.Migrations.SQLiteTest do
 
     def init(_, _) do
       test_id = :erlang.unique_integer([:positive])
-      {:ok, [
-        database: "priv/lotus_migration_test_#{test_id}.db",
-        pool_size: 1,
-        telemetry_prefix: [:lotus, :test, :sqlite_repo]
-      ]}
+
+      {:ok,
+       [
+         database: "priv/lotus_migration_test_#{test_id}.db",
+         pool_size: 1,
+         telemetry_prefix: [:lotus, :test, :sqlite_repo]
+       ]}
     end
   end
 
@@ -27,12 +29,12 @@ defmodule Lotus.Migrations.SQLiteTest do
 
   test "migrating a sqlite database" do
     {:ok, _} = start_supervised(MigrationRepo)
-    
+
     config = MigrationRepo.config()
-    
+
     # Clean up any existing database file
     _ = MigrationRepo.__adapter__().storage_down(config)
-    
+
     # Create the database
     :ok = MigrationRepo.__adapter__().storage_up(config)
 

@@ -32,7 +32,8 @@ defmodule Lotus.Config do
   @type t :: %{
           ecto_repo: module(),
           unique_names: boolean(),
-          data_repos: %{String.t() => module()}
+          data_repos: %{String.t() => module()},
+          table_visibility: map()
         }
 
   @schema [
@@ -51,6 +52,12 @@ defmodule Lotus.Config do
       type: :boolean,
       default: true,
       doc: "Whether to enforce unique query names. Defaults to true."
+    ],
+    table_visibility: [
+      type: :map,
+      default: %{},
+      doc:
+        "Configuration for table visibility rules. Controls which tables are accessible through Lotus queries and discovery."
     ]
   ]
 
@@ -69,7 +76,7 @@ defmodule Lotus.Config do
 
   defp get_lotus_config do
     Application.get_all_env(:lotus)
-    |> Keyword.take([:ecto_repo, :unique_names, :data_repos])
+    |> Keyword.take([:ecto_repo, :unique_names, :data_repos, :table_visibility])
   end
 
   @doc """
@@ -112,6 +119,28 @@ defmodule Lotus.Config do
   """
   @spec list_data_repo_names() :: [String.t()]
   def list_data_repo_names, do: Map.keys(data_repos())
+
+  @doc """
+  Returns table visibility rules for a specific repository.
+
+  Falls back to default rules if repo-specific rules are not configured.
+  """
+  @spec rules_for_repo_name(String.t()) :: keyword()
+  def rules_for_repo_name(repo_name) do
+    config = load!()
+    visibility_config = config[:table_visibility] || %{}
+
+    repo_key = String.to_existing_atom(repo_name)
+
+    # Try repo-specific rules first, then default
+    visibility_config[repo_key] || visibility_config[:default] || []
+  rescue
+    ArgumentError ->
+      # If repo_name can't be converted to existing atom, use default
+      config = load!()
+      visibility_config = config[:table_visibility] || %{}
+      visibility_config[:default] || []
+  end
 
   @doc """
   Returns the entire validated configuration as a map.

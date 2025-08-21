@@ -5,6 +5,16 @@ config :lotus,
   data_repos: %{
     "postgres" => Lotus.Test.Repo,
     "sqlite" => Lotus.Test.SqliteRepo
+  },
+  table_visibility: %{
+    default: [
+      allow: [],
+      deny: [
+        {"pg_catalog", ~r/.*/},
+        {"information_schema", ~r/.*/},
+        {"public", "schema_migrations"}
+      ]
+    ]
   }
 
 config :lotus, Lotus.Test.Repo,

@@ -38,9 +38,9 @@ defmodule Lotus.Migrations.Postgres do
   @impl Lotus.Migration
   def migrated_version(opts \\ []) do
     opts = with_defaults(opts, @latest_version)
-    
+
     repo_module = Map.get_lazy(opts, :repo, fn -> repo() end)
-    
+
     escaped_prefix = Map.fetch!(opts, :escaped_prefix)
 
     query = """
@@ -79,9 +79,10 @@ defmodule Lotus.Migrations.Postgres do
   end
 
   defp record_version(_opts, 0), do: :ok
+
   defp record_version(opts, version) do
     opts = with_defaults(opts, version)
     quoted_prefix = Map.fetch!(opts, :quoted_prefix)
-    execute "COMMENT ON TABLE #{quoted_prefix}.lotus_queries IS '#{version}'"
+    execute("COMMENT ON TABLE #{quoted_prefix}.lotus_queries IS '#{version}'")
   end
 end

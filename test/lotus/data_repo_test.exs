@@ -33,7 +33,7 @@ defmodule Lotus.DataRepoTest do
       assert result.rows == [[1]]
     end
 
-    @tag :sqlite  
+    @tag :sqlite
     test "executes SQL against sqlite repo by name" do
       {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "sqlite")
       assert result.columns == ["test_value"]

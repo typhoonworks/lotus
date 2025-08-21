@@ -1,7 +1,7 @@
 defmodule Lotus.Migration do
   @moduledoc """
   Migration behavior for database-specific migrations.
-  
+
   Defines the interface that each database adapter's migration module must implement.
   """
 
