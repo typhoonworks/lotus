@@ -246,7 +246,6 @@ defmodule Lotus.RunnerTest do
 
   describe "deny list validation" do
     test "detects dangerous keywords in string literals" do
-      # Even in string literals, we're defensive
       result = Runner.run_sql(Repo, "SELECT 'DROP TABLE users' as msg")
       assert {:error, "Only read-only queries are allowed"} = result
     end
@@ -268,21 +267,67 @@ defmodule Lotus.RunnerTest do
       assert {:error, "Only a single statement is allowed"} = result
     end
 
-    test "rejects statement with trailing semicolon" do
+    test "allows statement with trailing semicolon" do
       result = Runner.run_sql(Repo, "SELECT * FROM test_users;")
+      assert {:ok, %{columns: columns, rows: rows}} = result
+      assert length(columns) > 0
+      assert length(rows) > 0
+    end
+
+    test "allows semicolon in string literals" do
+      result = Runner.run_sql(Repo, "SELECT 'test;value' as text")
+      assert {:ok, %{columns: ["text"], rows: [["test;value"]]}} = result
+    end
+
+    test "allows semicolon in double-quoted identifiers" do
+      result = Runner.run_sql(Repo, ~s[SELECT 'test' as "col;name"])
+      assert {:ok, %{columns: ["col;name"], rows: [["test"]]}} = result
+    end
+
+    test "allows semicolon in line comments" do
+      result = Runner.run_sql(Repo, "SELECT 1 as num -- comment with ; semicolon")
+      assert {:ok, %{columns: ["num"], rows: [[1]]}} = result
+    end
+
+    test "allows semicolon in block comments" do
+      result = Runner.run_sql(Repo, "SELECT /* comment ; with semicolon */ 1 as num")
+      assert {:ok, %{columns: ["num"], rows: [[1]]}} = result
+    end
+
+    test "allows semicolon in PostgreSQL dollar-quoted strings" do
+      result = Runner.run_sql(Repo, "SELECT $$test;value$$ as text")
+      assert {:ok, %{columns: ["text"], rows: [["test;value"]]}} = result
+    end
+
+    test "allows semicolon in tagged dollar-quoted strings" do
+      result = Runner.run_sql(Repo, "SELECT $tag$test;value$tag$ as text")
+      assert {:ok, %{columns: ["text"], rows: [["test;value"]]}} = result
+    end
+
+    test "still rejects actual multiple statements" do
+      result = Runner.run_sql(Repo, "SELECT 'test;ok' as text; SELECT 2")
       assert {:error, "Only a single statement is allowed"} = result
     end
 
-    test "rejects semicolon even in valid contexts" do
-      # We're strict about semicolons to prevent SQL injection
-      result = Runner.run_sql(Repo, "SELECT 'test;value' as text")
-      assert {:error, "Only a single statement is allowed"} = result
+    test "allows complex mixed content with semicolons" do
+      query = """
+      SELECT
+        'value;with;semicolons' as "col;name", -- comment ; here
+        /* block ; comment */ 1 as num,
+        $$dollar;quoted$$ as dq
+      FROM test_users
+      WHERE name = 'Jack Kerouac';
+      """
+
+      result = Runner.run_sql(Repo, query)
+      assert {:ok, %{columns: columns, rows: rows}} = result
+      assert "col;name" in columns
+      assert length(rows) > 0
     end
   end
 
   describe "transaction and timeout behavior" do
     test "enforces read-only transaction by default" do
-      # Try to execute a write operation - should fail due to read-only transaction
       sql = """
       WITH test AS (SELECT 1 as id)
       SELECT * FROM test
@@ -293,13 +338,11 @@ defmodule Lotus.RunnerTest do
     end
 
     test "respects read_only: false option" do
-      # Even with read_only: false, write operations are blocked by whitelist
       result = Runner.run_sql(Repo, "SELECT COUNT(*) FROM test_users", [], read_only: false)
       assert {:ok, %{columns: ["count"], rows: [[3]]}} = result
     end
 
     test "respects custom statement timeout" do
-      # Quick query should complete within timeout
       result = Runner.run_sql(Repo, "SELECT 1", [], statement_timeout_ms: 100)
       assert {:ok, %{columns: ["?column?"], rows: [[1]]}} = result
     end
@@ -350,7 +393,6 @@ defmodule Lotus.RunnerTest do
     end
 
     test "handles NULL values" do
-      # Insert a user with NULL age
       user = Fixtures.insert_user(%{name: "Null Test", email: "null@test.com", age: nil})
 
       result = Runner.run_sql(Repo, "SELECT name, age FROM test_users WHERE id = $1", [user.id])

@@ -16,18 +16,21 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 >🚧 This library is in its infancy so you should treat all versions as early pre-release versions. We'll make the best effort to give heads up about breaking changes; however we can't guarantee backwards compatibility for every change.
 
 ## Current Features
-- 🔐 **Read-only SQL execution** with built-in safety checks to prevent destructive operations
+- 🔐 **Enhanced security** with read-only execution and table visibility controls
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
-- 🏗️ **Framework agnostic** - works with any Ecto-based application
+- 🏗️ **Multi-database support** - PostgreSQL and SQLite with flexible repository architecture
 - ⚡ **Configurable execution** with timeout controls and connection management
 - 🎯 **Type-safe results** with structured query result handling
+- 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
 
 ## What's planned?
 - [ ] Query versioning and change tracking
 - [ ] Query result caching mechanisms
 - [ ] Query templates with parameter substitution
 - [ ] Export functionality for query results (CSV, JSON)
-- [ ] Multi-database support (MySQL, SQLite)
+- [ ] MySQL support
+- [x] Multi-database support (PostgreSQL, SQLite)
+- [x] Table visibility and access controls
 
 ## Installation
 Add `lotus` to your list of dependencies in `mix.exs`:
@@ -35,7 +38,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.1.0"}
+    {:lotus, "~> 0.2.0"}
   ]
 end
 ```
@@ -57,9 +60,11 @@ Add to your config:
 
 ```elixir
 config :lotus,
-  repo: MyApp.Repo,
-  primary_key_type: :id,    # or :binary_id
-  foreign_key_type: :id     # or :binary_id
+  ecto_repo: MyApp.Repo,  # Repo where Lotus stores saved queries
+  data_repos: %{           # Repos where queries run against actual data
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
 ```
 
 ### Creating and Running Queries
@@ -74,9 +79,56 @@ config :lotus,
 # Execute a saved query
 {:ok, results} = Lotus.run_query(query)
 
-# Execute SQL directly (read-only)
+# Execute SQL directly (read-only)  
 {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
+
+# Execute against a specific data repository
+{:ok, results} = Lotus.run_sql("SELECT COUNT(*) FROM events", [], repo: "analytics")
 ```
+
+## Development Setup
+
+### Prerequisites
+- PostgreSQL (tested with version 14+)
+- SQLite 3
+- Elixir 1.16+
+- OTP 25+
+
+### Setting up the development environment
+
+1. Clone the repository and install dependencies:
+```bash
+git clone https://github.com/typhoonworks/lotus.git
+cd lotus
+mix deps.get
+```
+
+2. Set up the development databases:
+```bash
+mix ecto.create
+mix ecto.migrate
+```
+
+This creates:
+- PostgreSQL database (`lotus_dev`) with both Lotus tables and test data tables
+- SQLite database (`lotus_dev.db`) with e-commerce sample data
+
+### Running tests
+
+```bash
+# Run all tests
+mix test
+
+# Run specific test files
+mix test test/lotus_test.exs
+
+# Run with coverage
+mix test --cover
+```
+
+The test suite uses separate databases:
+- PostgreSQL: `lotus_test` (with partitioning for parallel tests)
+- SQLite: `lotus_sqlite_test.db`
 
 ## Contributing
 See the [contribution guide](guides/contributing.md) for details on how to contribute to Lotus.

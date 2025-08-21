@@ -34,6 +34,7 @@ defmodule Lotus.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:dev), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
@@ -42,8 +43,7 @@ defmodule Lotus.MixProject do
       {:ecto_sql, "~> 3.10"},
       {:postgrex, "~> 0.20", optional: true},
       # {:myxql, "~> 0.7", optional: true},
-      # {:ecto_sqlite3, "~> 0.9", optional: true},
-
+      {:ecto_sqlite3, "~> 0.21", optional: true},
       {:nimble_options, "~> 1.0"},
       {:jason, "~> 1.4"},
 

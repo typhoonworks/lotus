@@ -31,7 +31,7 @@ defmodule Lotus do
       {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
   """
 
-  alias Lotus.{Config, Storage, Runner, QueryResult}
+  alias Lotus.{Config, Storage, Runner, QueryResult, Schema}
   alias Lotus.Storage.Query
 
   @type opts :: [
@@ -42,9 +42,28 @@ defmodule Lotus do
         ]
 
   @doc """
-  Returns the configured Ecto repository.
+  Returns the configured Ecto repository where Lotus stores query definitions.
   """
   def repo, do: Config.repo!()
+
+  @doc """
+  Returns all configured data repositories.
+  """
+  def data_repos, do: Config.data_repos()
+
+  @doc """
+  Gets a data repository by name.
+
+  Raises if the repository is not configured.
+  """
+  def get_data_repo!(name), do: Config.get_data_repo!(name)
+
+  @doc """
+  Lists the names of all configured data repositories.
+
+  Useful for building UI dropdowns.
+  """
+  def list_data_repo_names, do: Config.list_data_repo_names()
 
   @doc """
   Lists all saved queries.
@@ -79,7 +98,7 @@ defmodule Lotus do
       Lotus.run_query(query)
       Lotus.run_query(query, timeout: 10_000)
       Lotus.run_query(query_id)
-      Lotus.run_query(query_id, prefix: "analytics")
+      Lotus.run_query(query_id, repo: MyApp.DataRepo)
 
   """
   @spec run_query(Query.t() | term(), opts()) :: {:ok, QueryResult.t()} | {:error, term()}
@@ -87,7 +106,8 @@ defmodule Lotus do
 
   def run_query(%Query{} = q, opts) do
     {sql, params} = Query.to_sql_params(q)
-    Runner.run_sql(repo(), sql, params, opts)
+    execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
+    Runner.run_sql(execution_repo, sql, params, opts)
   end
 
   def run_query(id, opts) do
@@ -97,14 +117,78 @@ defmodule Lotus do
 
   @doc """
   Run ad-hoc SQL (bypassing storage), still read-only and sandboxed.
+
+  ## Examples
+
+      # Run against default configured repo
+      {:ok, result} = Lotus.run_sql("SELECT * FROM users")
+      
+      # Run against specific repo
+      {:ok, result} = Lotus.run_sql("SELECT * FROM products", [], repo: MyApp.DataRepo)
+      
+      # With parameters
+      {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
   """
-  @spec run_sql(binary(), list(any()), opts()) :: {:ok, QueryResult.t()} | {:error, term()}
+  @spec run_sql(binary(), list(any()), [
+          {:read_only, boolean()}
+          | {:statement_timeout_ms, non_neg_integer()}
+          | {:timeout, non_neg_integer()}
+        ]) ::
+          {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
-    Runner.run_sql(repo(), sql, params, opts)
+    execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
+    Runner.run_sql(execution_repo, sql, params, opts)
   end
 
   @doc """
   Returns whether unique query names are enforced.
   """
   defdelegate unique_names?(), to: Config
+
+  @doc """
+  Lists all tables in a data repository.
+
+  ## Examples
+
+      {:ok, tables} = Lotus.list_tables("primary")
+      {:ok, tables} = Lotus.list_tables(MyApp.DataRepo)
+  """
+  defdelegate list_tables(repo_or_name), to: Schema
+
+  @doc """
+  Gets the schema for a specific table.
+
+  ## Examples
+
+      {:ok, schema} = Lotus.get_table_schema("primary", "users")
+      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products")
+  """
+  defdelegate get_table_schema(repo_or_name, table_name), to: Schema
+
+  @doc """
+  Gets statistics for a specific table.
+
+  ## Examples
+
+      {:ok, stats} = Lotus.get_table_stats("primary", "users")
+      # Returns %{row_count: 1234}
+  """
+  defdelegate get_table_stats(repo_or_name, table_name), to: Schema
+
+  # Private helper to resolve execution repo from various inputs
+  defp resolve_execution_repo(nil) do
+    # Default behavior: use first configured data repo, or storage repo if none
+    case list_data_repo_names() do
+      [] -> repo()
+      [first_name | _] -> get_data_repo!(first_name)
+    end
+  end
+
+  defp resolve_execution_repo(repo_name) when is_binary(repo_name) do
+    get_data_repo!(repo_name)
+  end
+
+  defp resolve_execution_repo(repo_module) when is_atom(repo_module) do
+    repo_module
+  end
 end

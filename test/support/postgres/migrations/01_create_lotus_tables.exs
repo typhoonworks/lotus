@@ -1,9 +1,11 @@
 defmodule Lotus.Test.Repo.Migrations.CreateLotusTables do
   use Ecto.Migration
 
-  import Lotus.Migrations
+  def up do
+    Lotus.Migrations.up()
+  end
 
-  def change do
-    migrate_to_version(1)
+  def down do
+    Lotus.Migrations.down()
   end
 end

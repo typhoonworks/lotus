@@ -70,6 +70,7 @@ Thumbs.db
 
 # Test artifacts
 /test/tmp/
+/priv/*.db*
 
 # Tools
 .accomplish.toml
