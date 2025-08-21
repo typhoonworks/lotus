@@ -15,7 +15,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.1.0"}
+    {:lotus, "~> 0.2.0"}
   ]
 end
 ```
@@ -39,9 +39,8 @@ config :lotus,
 
 - `ecto_repo` (required): Repository where Lotus stores saved queries
 - `data_repos` (required): Map of repositories where queries can be executed
-- `primary_key_type`: Primary key type for Lotus tables (`:id` or `:binary_id`)
-- `foreign_key_type`: Foreign key type for Lotus tables (`:id` or `:binary_id`)
 - `unique_names`: Whether to enforce unique query names (default: `true`)
+- `table_visibility`: Rules controlling which tables can be accessed (optional)
 
 ## Step 3: Run Migrations
 

@@ -8,7 +8,8 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
 
 - Elixir 1.16 or later
 - OTP 25 or later
-- PostgreSQL 13 or later
+- PostgreSQL 13 or later (for main development database)
+- SQLite 3 (for multi-database testing)
 - Git
 
 ### Development Setup
@@ -24,44 +25,50 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
    mix deps.get
    ```
 
-3. **Set up the development database**
+3. **Set up the development databases**
    ```bash
    # Start PostgreSQL (if not running)
-   # Then create and migrate the database
+   # Then create and migrate the databases
    mix ecto.setup
    ```
+   
+   This creates:
+   - PostgreSQL database (`lotus_dev`) with both Lotus tables and test data tables
+   - SQLite database (`lotus_dev.db`) with e-commerce sample data
 
 4. **Run the tests**
    ```bash
+   # Run all tests
    mix test
+   
+   # Run PostgreSQL-specific tests
+   mix test --exclude sqlite
+   
+   # Run SQLite-specific tests  
+   mix test --only sqlite
    ```
 
-5. **Start exploring**
+5. **Start exploring with interactive development**
    ```bash
    iex -S mix
    ```
-
-### Project Structure
-
-```
-lib/
-├── lotus.ex                 # Main API module
-├── lotus/
-│   ├── config.ex           # Configuration management
-│   ├── json.ex             # JSON utilities
-│   ├── migrations.ex       # Migration helpers
-│   ├── migrations/
-│   │   └── v1.ex           # Database migrations
-│   ├── query_result.ex     # Query result struct
-│   ├── runner.ex           # SQL execution engine
-│   ├── storage.ex          # Query storage management
-│   └── storage/
-│       └── query.ex        # Query schema
-test/
-├── lotus/                  # Unit tests
-├── support/                # Test helpers
-└── test_helper.exs
-```
+   
+   The development environment automatically starts both PostgreSQL and SQLite repos for testing. You can immediately start experimenting:
+   
+   ```elixir
+   # Test PostgreSQL functionality
+   Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "postgres")
+   
+   # Test SQLite functionality
+   Lotus.run_sql("SELECT COUNT(*) FROM products", [], repo: "sqlite")
+   
+   # Create and run queries
+   {:ok, query} = Lotus.create_query(%{
+     name: "Test Query",
+     query: %{sql: "SELECT 1 as test"}
+   })
+   Lotus.run_query(query)
+   ```
 
 ## Development Workflow
 
@@ -218,10 +225,11 @@ We welcome contributions of all sizes! Here are some areas where help is especia
 
 #### Advanced Features
 
-- New database adapter support (MySQL, SQLite)
+- New database adapter support (MySQL)
 - Query result caching
 - Query performance monitoring
 - Advanced security features
+- Table visibility rule enhancements
 
 ## Pull Request Process
 
@@ -274,8 +282,27 @@ Brief description of the changes
 When making changes that affect the database:
 
 1. **Create migrations**: Use `Lotus.Migrations` for schema changes
-2. **Test migrations**: Ensure migrations work both up and down
+2. **Test migrations**: Ensure migrations work both up and down on PostgreSQL and SQLite
 3. **Update version**: Bump the migration version appropriately
+4. **Test multi-database**: Verify changes work with both PostgreSQL and SQLite adapters
+
+### Testing Multi-Database Features
+
+When working on features that affect multiple database types:
+
+```bash
+# Test against PostgreSQL
+mix test --exclude sqlite
+
+# Test against SQLite  
+mix test --only sqlite
+
+# Test table visibility across adapters
+mix test test/lotus/visibility_test.exs
+
+# Test data repo functionality
+mix test test/lotus/data_repo_test.exs
+```
 
 ### API Changes
 
@@ -299,7 +326,7 @@ For changes to the public API:
 Lotus follows [Semantic Versioning](https://semver.org/):
 
 - **Major (1.0.0)**: Breaking changes
-- **Minor (0.1.0)**: New features, backward compatible
+- **Minor (0.2.0)**: New features, backward compatible
 - **Patch (0.0.1)**: Bug fixes, backward compatible
 
 ### Changelog

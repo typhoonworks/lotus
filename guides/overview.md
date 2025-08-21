@@ -18,6 +18,8 @@ Lotus addresses these challenges by providing:
 ### 🔐 Safety First
 - **Read-only execution**: Built-in protections prevent destructive operations
 - **Statement validation**: Queries are checked before execution
+- **Table visibility controls**: Configurable rules block access to sensitive tables
+- **Multi-layered security**: Defense-in-depth with preflight authorization
 - **Timeout controls**: Configurable timeouts prevent runaway queries
 
 ### 📦 Organized Storage
@@ -27,7 +29,8 @@ Lotus addresses these challenges by providing:
 
 ### 🏗️ Framework Agnostic
 - **Ecto integration**: Works with any Ecto-based application
-- **Database agnostic**: Supports PostgreSQL (with MySQL and SQLite planned)
+- **Multi-database support**: Supports PostgreSQL and SQLite simultaneously
+- **Flexible architecture**: Separate storage and execution repositories
 - **Minimal dependencies**: Lightweight with few external requirements
 
 ### ⚡ Developer Friendly

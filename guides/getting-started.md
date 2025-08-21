@@ -96,6 +96,31 @@ IO.inspect(result.rows)
 # ]
 ```
 
+## Working with Multiple Data Repositories
+
+If you have configured multiple data repositories, you can execute queries against specific databases:
+
+```elixir
+# Execute against a specific repository by name
+{:ok, result} = Lotus.run_sql(
+  "SELECT COUNT(*) FROM page_views WHERE date = $1",
+  [Date.utc_today()],
+  repo: "analytics"
+)
+
+# Execute against a repository module directly
+{:ok, result} = Lotus.run_sql(
+  "SELECT SUM(amount) FROM transactions",
+  [],
+  repo: MyApp.SqliteRepo
+)
+
+# List all available data repositories
+repo_names = Lotus.list_data_repo_names()
+IO.inspect(repo_names)
+# ["main", "analytics", "sqlite_data"]
+```
+
 ## Managing Saved Queries
 
 ### Listing All Queries
@@ -191,6 +216,11 @@ IO.inspect(reason)
 )
 IO.inspect(reason)
 # "SQL error: canceling statement due to user request"
+
+# Table visibility restriction
+{:error, reason} = Lotus.run_sql("SELECT * FROM schema_migrations")
+IO.inspect(reason)
+# "Query touches blocked table(s): schema_migrations"
 ```
 
 ## Configuration Options
