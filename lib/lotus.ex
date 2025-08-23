@@ -18,10 +18,11 @@ defmodule Lotus do
 
   ## Usage
 
-      # Create and save a query
+      # Create and save a query with smart variables
       {:ok, query} = Lotus.create_query(%{
         name: "Active Users",
-        query: %{sql: "SELECT * FROM users WHERE active = true"},
+        statement: "SELECT * FROM users WHERE active = {is_active}",
+        var_defaults: %{"is_active" => true},
         search_path: "reporting, public"
       })
 
@@ -106,24 +107,37 @@ defmodule Lotus do
   def run_query(query_or_id, opts \\ [])
 
   def run_query(%Query{} = q, opts) do
-    {sql, params} = Query.to_sql_params(q)
+    vars = Keyword.get(opts, :vars, %{})
 
-    repo_from_opts = Keyword.get(opts, :repo)
-    repo_from_query = q.data_repo
-
-    # Use search_path from query unless overridden in opts
-    search_path_from_opts = Keyword.get(opts, :search_path)
-    search_path = search_path_from_opts || q.search_path
-
-    final_opts =
-      if search_path do
-        Keyword.put(opts, :search_path, search_path)
-      else
-        opts
+    {sql, params} =
+      try do
+        Query.to_sql_params(q, vars)
+      rescue
+        ArgumentError ->
+          {:error, "Missing required variable"}
       end
 
-    execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
-    Runner.run_sql(execution_repo, sql, params, final_opts)
+    case {sql, params} do
+      {:error, msg} ->
+        {:error, msg}
+
+      {sql, params} ->
+        repo_from_opts = Keyword.get(opts, :repo)
+        repo_from_query = q.data_repo
+
+        search_path_from_opts = Keyword.get(opts, :search_path)
+        search_path = search_path_from_opts || q.search_path
+
+        final_opts =
+          if search_path do
+            Keyword.put(opts, :search_path, search_path)
+          else
+            opts
+          end
+
+        execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
+        Runner.run_sql(execution_repo, sql, params, final_opts)
+    end
   end
 
   def run_query(id, opts) do
@@ -144,7 +158,7 @@ defmodule Lotus do
 
       # With parameters
       {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
-      
+
       # With search_path for schema resolution
       {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
   """
@@ -175,11 +189,11 @@ defmodule Lotus do
 
       {:ok, tables} = Lotus.list_tables("postgres")
       # Returns [{"public", "users"}, {"public", "posts"}, ...]
-      
+
       {:ok, tables} = Lotus.list_tables("postgres", search_path: "reporting, public")
       # Returns [{"reporting", "customers"}, {"public", "users"}, ...]
-      
-      {:ok, tables} = Lotus.list_tables("sqlite")  
+
+      {:ok, tables} = Lotus.list_tables("sqlite")
       # Returns ["products", "orders", "order_items"]
   """
   def list_tables(repo_or_name, opts \\ []), do: Schema.list_tables(repo_or_name, opts)

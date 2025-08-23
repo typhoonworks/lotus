@@ -22,8 +22,8 @@ defmodule LotusTest do
     end
 
     test "returns all queries" do
-      query1 = query_fixture(%{name: "Users Query"})
-      query2 = query_fixture(%{name: "Posts Query"})
+      query1 = query_fixture(%{name: "Users Query", statement: "SELECT * FROM test_users"})
+      query2 = query_fixture(%{name: "Posts Query", statement: "SELECT * FROM test_posts"})
 
       queries = Lotus.list_queries()
 
@@ -35,7 +35,7 @@ defmodule LotusTest do
 
   describe "get_query!/1" do
     test "returns query when found" do
-      query = query_fixture(%{name: "Test Query"})
+      query = query_fixture(%{name: "Test Query", statement: "SELECT 1"})
 
       result = Lotus.get_query!(query.id)
 
@@ -55,22 +55,22 @@ defmodule LotusTest do
       attrs = %{
         name: "New Query",
         description: "A test query",
-        query: %{sql: "SELECT * FROM test_users", params: []},
-        tags: ["test", "users"]
+        statement: "SELECT * FROM test_users",
+        var_defaults: %{}
       }
 
       assert {:ok, query} = Lotus.create_query(attrs)
       assert query.name == "New Query"
       assert query.description == "A test query"
-      assert query.query == %{sql: "SELECT * FROM test_users", params: []}
-      assert query.tags == ["test", "users"]
+      assert query.statement == "SELECT * FROM test_users"
+      assert query.var_defaults == %{}
       assert query.data_repo == nil
     end
 
     test "creates query with data_repo" do
       attrs = %{
         name: "Analytics Query",
-        query: %{sql: "SELECT COUNT(*) FROM page_views"},
+        statement: "SELECT COUNT(*) FROM page_views",
         data_repo: "sqlite"
       }
 
@@ -79,7 +79,7 @@ defmodule LotusTest do
     end
 
     test "returns error with invalid attributes" do
-      attrs = %{name: "", query: %{}}
+      attrs = %{name: "", statement: ""}
 
       assert {:error, changeset} = Lotus.create_query(attrs)
       refute changeset.valid?
@@ -88,7 +88,7 @@ defmodule LotusTest do
 
   describe "update_query/2" do
     test "updates query with valid attributes" do
-      query = query_fixture(%{name: "Original Query"})
+      query = query_fixture(%{name: "Original Query", statement: "SELECT 1"})
       attrs = %{name: "Updated Query"}
 
       assert {:ok, updated_query} = Lotus.update_query(query, attrs)
@@ -99,7 +99,7 @@ defmodule LotusTest do
 
   describe "delete_query/1" do
     test "deletes existing query" do
-      query = query_fixture(%{name: "To Delete"})
+      query = query_fixture(%{name: "To Delete", statement: "SELECT 1"})
 
       assert {:ok, deleted_query} = Lotus.delete_query(query)
       assert deleted_query.id == query.id
@@ -111,75 +111,67 @@ defmodule LotusTest do
   end
 
   describe "run_query/2 with Query struct" do
-    test "runs query with SQL and no params" do
+    test "runs query with SQL and no vars" do
       query =
         query_fixture(%{
           name: "Active Users Query",
-          query: %{sql: "SELECT name, email FROM test_users WHERE active = true ORDER BY name"}
+          statement: "SELECT name, email FROM test_users WHERE active = true ORDER BY name"
         })
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 2
 
       rows = result.rows
-      assert length(rows) == 2
       assert ["Hunter S. Thompson", "hunter@gonzo.net"] in rows
       assert ["Jack Kerouac", "jack@ontheroad.com"] in rows
     end
 
-    test "runs query with SQL and params" do
+    test "runs query with smart variable and default" do
       query =
         query_fixture(%{
           name: "Users by Age Query",
-          query: %{
-            sql: "SELECT name, age FROM test_users WHERE age > $1 ORDER BY age DESC",
-            params: [40]
-          }
+          statement: "SELECT name, age FROM test_users WHERE age > {min_age} ORDER BY age DESC",
+          var_defaults: %{"min_age" => 40}
         })
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 2
 
       rows = result.rows
-      assert length(rows) == 2
       assert ["Charles Bukowski", 73] in rows
       assert ["Jack Kerouac", 47] in rows
     end
 
-    test "handles query with nil params" do
+    test "runs query with runtime vars overriding defaults" do
       query =
         query_fixture(%{
-          name: "Count Query",
-          query: %{
-            sql: "SELECT count(*) as total FROM test_users"
-          }
+          name: "Override Vars Query",
+          statement: "SELECT name FROM test_users WHERE age > {min_age}",
+          var_defaults: %{"min_age" => 20}
         })
 
-      assert {:ok, result} = Lotus.run_query(query)
+      # Override min_age = 50 at runtime
+      assert {:ok, result} = Lotus.run_query(query, vars: %{"min_age" => 50})
       assert result.num_rows == 1
-      assert result.rows == [[3]]
+      assert result.rows == [["Charles Bukowski"]]
     end
 
-    test "handles query with empty params" do
+    test "errors if required var is missing and no default" do
       query =
         query_fixture(%{
-          name: "Simple Query",
-          query: %{
-            sql: "SELECT 1 as result",
-            params: []
-          }
+          name: "Missing Var Query",
+          statement: "SELECT name FROM test_users WHERE age > {min_age}"
         })
 
-      assert {:ok, result} = Lotus.run_query(query)
-      assert result.num_rows == 1
-      assert result.rows == [[1]]
+      assert {:error, msg} = Lotus.run_query(query)
+      assert msg =~ "Missing required variable"
     end
 
     test "passes options through" do
       query =
         query_fixture(%{
           name: "Simple Query with Options",
-          query: %{sql: "SELECT 1 as result"}
+          statement: "SELECT 1 as result"
         })
 
       opts = [timeout: 5000]
@@ -192,7 +184,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Error Query",
-          query: %{sql: "SELECT invalid_column FROM nonexistent_table"}
+          statement: "SELECT invalid_column FROM nonexistent_table"
         })
 
       assert {:error, error} = Lotus.run_query(query)
@@ -203,7 +195,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Test Data Query",
-          query: %{sql: "SELECT 1 as result"},
+          statement: "SELECT 1 as result",
           data_repo: "postgres"
         })
 
@@ -216,7 +208,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Override Test Query",
-          query: %{sql: "SELECT 1 as result"},
+          statement: "SELECT 1 as result",
           data_repo: "sqlite"
         })
 
@@ -229,7 +221,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Default Repo Query",
-          query: %{sql: "SELECT 1 as result"}
+          statement: "SELECT 1 as result"
         })
 
       assert {:ok, result} = Lotus.run_query(query)
@@ -243,7 +235,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "ID Query",
-          query: %{sql: "SELECT name FROM test_users WHERE active = false"}
+          statement: "SELECT name FROM test_users WHERE active = false"
         })
 
       assert {:ok, result} = Lotus.run_query(query.id)
@@ -255,7 +247,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "ID with Options Query",
-          query: %{sql: "SELECT 1 as result"}
+          statement: "SELECT 1 as result"
         })
 
       opts = [timeout: 5000]

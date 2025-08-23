@@ -12,8 +12,8 @@ defmodule Lotus.StorageTest do
     end
 
     test "returns all queries" do
-      query1 = query_fixture(%{name: "Users Query", tags: ["users"]})
-      query2 = query_fixture(%{name: "Posts Query", tags: ["posts"]})
+      query1 = query_fixture(%{name: "Users Query"})
+      query2 = query_fixture(%{name: "Posts Query"})
 
       queries = Storage.list_queries()
 
@@ -25,23 +25,9 @@ defmodule Lotus.StorageTest do
 
   describe "list_queries_by/1" do
     setup do
-      query1 =
-        query_fixture(%{
-          name: "Active Users",
-          tags: ["users", "analytics"]
-        })
-
-      query2 =
-        query_fixture(%{
-          name: "User Reports",
-          tags: ["reporting", "users"]
-        })
-
-      query3 =
-        query_fixture(%{
-          name: "Product Analytics",
-          tags: ["analytics", "products"]
-        })
+      query1 = query_fixture(%{name: "Active Users"})
+      query2 = query_fixture(%{name: "User Reports"})
+      query3 = query_fixture(%{name: "Product Analytics"})
 
       {:ok, queries: %{users_analytics: query1, user_reports: query2, product_analytics: query3}}
     end
@@ -55,24 +41,6 @@ defmodule Lotus.StorageTest do
       assert queries.product_analytics in result
     end
 
-    test "filters by single tag", %{queries: queries} do
-      result = Storage.list_queries_by(tags: ["analytics"])
-
-      assert length(result) == 2
-      assert queries.users_analytics in result
-      assert queries.product_analytics in result
-      refute queries.user_reports in result
-    end
-
-    test "filters by multiple tags (OR logic)", %{queries: queries} do
-      result = Storage.list_queries_by(tags: ["reporting", "products"])
-
-      assert length(result) == 2
-      assert queries.user_reports in result
-      assert queries.product_analytics in result
-      refute queries.users_analytics in result
-    end
-
     test "filters by search term (case insensitive)", %{queries: queries} do
       result = Storage.list_queries_by(search: "user")
 
@@ -82,31 +50,11 @@ defmodule Lotus.StorageTest do
       refute queries.product_analytics in result
     end
 
-    test "combines tag and search filters", %{queries: queries} do
-      result = Storage.list_queries_by(tags: ["analytics"], search: "user")
-
-      assert length(result) == 1
-      assert queries.users_analytics in result
-      refute queries.user_reports in result
-      refute queries.product_analytics in result
-    end
-
     test "returns empty list when no matches found" do
-      query_fixture(%{name: "Test Query", tags: ["test"]})
-
-      result = Storage.list_queries_by(tags: ["nonexistent"])
-      assert result == []
+      query_fixture(%{name: "Test Query"})
 
       result = Storage.list_queries_by(search: "nonexistent")
       assert result == []
-    end
-
-    test "handles empty tags list" do
-      query = query_fixture(%{name: "Test Query", tags: ["test"]})
-
-      result = Storage.list_queries_by(tags: [])
-      assert length(result) == 4
-      assert query in result
     end
   end
 
@@ -132,15 +80,13 @@ defmodule Lotus.StorageTest do
       attrs = %{
         name: "New Query",
         description: "A test query",
-        query: %{sql: "SELECT * FROM users", params: []},
-        tags: ["test", "users"]
+        statement: "SELECT * FROM users"
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
       assert query.name == "New Query"
       assert query.description == "A test query"
-      assert query.query == %{sql: "SELECT * FROM users", params: []}
-      assert query.tags == ["test", "users"]
+      assert query.statement == "SELECT * FROM users"
       assert query.id
       assert query.inserted_at
       assert query.updated_at
@@ -149,21 +95,20 @@ defmodule Lotus.StorageTest do
     test "creates query with minimal attributes" do
       attrs = %{
         name: "Minimal Query",
-        query: %{sql: "SELECT 1"}
+        statement: "SELECT 1"
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
       assert query.name == "Minimal Query"
       assert query.description == nil
-      assert query.query == %{sql: "SELECT 1"}
-      assert query.tags == []
+      assert query.statement == "SELECT 1"
       assert query.data_repo == nil
     end
 
     test "creates query with valid data_repo" do
       attrs = %{
         name: "Analytics Query",
-        query: %{sql: "SELECT COUNT(*) FROM page_views"},
+        statement: "SELECT COUNT(*) FROM page_views",
         data_repo: "postgres"
       }
 
@@ -174,7 +119,7 @@ defmodule Lotus.StorageTest do
     test "normalizes empty string data_repo to nil" do
       attrs = %{
         name: "Test Query",
-        query: %{sql: "SELECT 1"},
+        statement: "SELECT 1",
         data_repo: ""
       }
 
@@ -185,25 +130,25 @@ defmodule Lotus.StorageTest do
     test "returns error with invalid data_repo" do
       attrs = %{
         name: "Invalid Repo Query",
-        query: %{sql: "SELECT 1"},
+        statement: "SELECT 1",
         data_repo: "nonexistent_repo"
       }
 
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
       assert %{data_repo: [error_msg]} = errors_on(changeset)
-      assert error_msg =~ "must be one of the configured data repositories"
+      assert error_msg =~ "must be one of: postgres, sqlite"
     end
 
     test "returns error with invalid attributes" do
-      attrs = %{name: "", query: %{}}
+      attrs = %{name: "", statement: ""}
 
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
 
       assert %{
                name: ["can't be blank"],
-               query: ["must include sql (string) and optionally params (list)"]
+               statement: ["can't be blank"]
              } = errors_on(changeset)
     end
 
@@ -212,18 +157,7 @@ defmodule Lotus.StorageTest do
 
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
-      assert %{name: ["can't be blank"], query: ["can't be blank"]} = errors_on(changeset)
-    end
-
-    test "normalizes tags" do
-      attrs = %{
-        name: "Tag Test",
-        query: %{sql: "SELECT 1"},
-        tags: ["  Analytics  ", "REPORTING", "analytics", "", "reporting"]
-      }
-
-      assert {:ok, query} = Storage.create_query(attrs)
-      assert query.tags == ["analytics", "reporting"]
+      assert %{name: ["can't be blank"], statement: ["can't be blank"]} = errors_on(changeset)
     end
   end
 
@@ -234,24 +168,21 @@ defmodule Lotus.StorageTest do
          query_fixture(%{
            name: "Original Query",
            description: "Original description",
-           query: %{sql: "SELECT * FROM users"},
-           tags: ["original"]
+           statement: "SELECT * FROM users"
          })}
     end
 
     test "updates query with valid attributes", %{query: query} do
       attrs = %{
         name: "Updated Query",
-        description: "Updated description",
-        tags: ["updated", "test"]
+        description: "Updated description"
       }
 
       assert {:ok, updated_query} = Storage.update_query(query, attrs)
       assert updated_query.id == query.id
       assert updated_query.name == "Updated Query"
       assert updated_query.description == "Updated description"
-      assert updated_query.tags == ["updated", "test"]
-      assert updated_query.query == %{sql: "SELECT * FROM users"}
+      assert updated_query.statement == "SELECT * FROM users"
     end
 
     test "updates only provided attributes", %{query: query} do
@@ -260,33 +191,25 @@ defmodule Lotus.StorageTest do
       assert {:ok, updated_query} = Storage.update_query(query, attrs)
       assert updated_query.name == "New Name Only"
       assert updated_query.description == "Original description"
-      assert updated_query.tags == ["original"]
     end
 
-    test "updates query payload", %{query: query} do
-      attrs = %{query: %{sql: "SELECT count(*) FROM users", params: []}}
+    test "updates statement", %{query: query} do
+      attrs = %{statement: "SELECT count(*) FROM users"}
 
       assert {:ok, updated_query} = Storage.update_query(query, attrs)
-      assert updated_query.query == %{sql: "SELECT count(*) FROM users", params: []}
+      assert updated_query.statement == "SELECT count(*) FROM users"
     end
 
     test "returns error with invalid attributes", %{query: query} do
-      attrs = %{name: "", query: %{sql: ""}}
+      attrs = %{name: "", statement: ""}
 
       assert {:error, changeset} = Storage.update_query(query, attrs)
       refute changeset.valid?
 
       assert %{
                name: ["can't be blank"],
-               query: ["sql cannot be empty"]
+               statement: ["can't be blank"]
              } = errors_on(changeset)
-    end
-
-    test "normalizes tags on update", %{query: query} do
-      attrs = %{tags: ["  NEW  ", "tag", "NEW", ""]}
-
-      assert {:ok, updated_query} = Storage.update_query(query, attrs)
-      assert updated_query.tags == ["new", "tag"]
     end
   end
 
@@ -313,7 +236,7 @@ defmodule Lotus.StorageTest do
       query =
         query_fixture(%{
           name: "Test Query",
-          query: %{sql: "SELECT 1 as result"}
+          statement: "SELECT 1 as result"
         })
 
       expected_result = {:ok, %{"result" => 1}}
@@ -330,7 +253,7 @@ defmodule Lotus.StorageTest do
       query =
         query_fixture(%{
           name: "Test Query",
-          query: %{sql: "SELECT 1 as result"}
+          statement: "SELECT 1 as result"
         })
 
       opts = [statement_timeout_ms: 3000, prefix: "analytics"]
@@ -348,7 +271,7 @@ defmodule Lotus.StorageTest do
       query =
         query_fixture(%{
           name: "Failing Query",
-          query: %{sql: "SELECT invalid"}
+          statement: "SELECT invalid"
         })
 
       expected_error = {:error, "Invalid SQL"}

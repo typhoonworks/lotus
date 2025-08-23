@@ -7,111 +7,41 @@ defmodule Lotus.Storage.QueryTest do
     test "builds a valid changeset with required fields" do
       attrs = %{
         name: "Recent Users",
-        query: %{sql: "SELECT * FROM users WHERE active = true", params: []},
-        tags: ["Users", "  ACTIVE  ", "users"]
+        statement: "SELECT * FROM users WHERE active = true"
       }
 
       changeset = Query.new(attrs)
 
       assert changeset.valid?
       assert get_field(changeset, :name) == "Recent Users"
-
-      assert get_field(changeset, :query) == %{
-               sql: "SELECT * FROM users WHERE active = true",
-               params: []
-             }
-
-      assert get_field(changeset, :tags) == ["users", "active"]
-    end
-
-    test "builds valid changeset with string keys" do
-      attrs = %{
-        name: "User Count",
-        query: %{"sql" => "SELECT count(*) FROM users", "params" => []},
-        tags: ["analytics"]
-      }
-
-      changeset = Query.new(attrs)
-
-      assert changeset.valid?
-      assert get_field(changeset, :name) == "User Count"
-
-      assert get_field(changeset, :query) == %{
-               "sql" => "SELECT count(*) FROM users",
-               "params" => []
-             }
-
-      assert get_field(changeset, :tags) == ["analytics"]
-    end
-
-    test "builds valid changeset without params" do
-      attrs = %{
-        name: "All Users",
-        query: %{sql: "SELECT * FROM users"}
-      }
-
-      changeset = Query.new(attrs)
-
-      assert changeset.valid?
-      assert get_field(changeset, :name) == "All Users"
-      assert get_field(changeset, :query) == %{sql: "SELECT * FROM users"}
-      assert get_field(changeset, :tags) == []
+      assert get_field(changeset, :statement) == "SELECT * FROM users WHERE active = true"
     end
 
     test "is invalid without required fields" do
       changeset = Query.new(%{})
 
       refute changeset.valid?
-      assert %{name: ["can't be blank"], query: ["can't be blank"]} = errors_on(changeset)
+      assert %{name: ["can't be blank"], statement: ["can't be blank"]} = errors_on(changeset)
     end
 
     test "is invalid when name is empty" do
-      changeset = Query.new(%{name: "", query: %{sql: "SELECT 1"}})
+      changeset = Query.new(%{name: "", statement: "SELECT 1"})
 
       refute changeset.valid?
       assert %{name: ["can't be blank"]} = errors_on(changeset)
     end
 
-    test "is invalid when query has no sql" do
-      changeset = Query.new(%{name: "Test", query: %{params: []}})
+    test "is invalid when statement is empty" do
+      changeset = Query.new(%{name: "Test", statement: ""})
 
       refute changeset.valid?
-
-      assert %{query: ["must include sql (string) and optionally params (list)"]} =
-               errors_on(changeset)
-    end
-
-    test "is invalid when query sql is empty" do
-      changeset = Query.new(%{name: "Test", query: %{sql: "   "}})
-
-      refute changeset.valid?
-      assert %{query: ["sql cannot be empty"]} = errors_on(changeset)
-    end
-
-    test "is invalid when query params is not a list" do
-      changeset = Query.new(%{name: "Test", query: %{sql: "SELECT 1", params: "invalid"}})
-
-      refute changeset.valid?
-      assert %{query: ["params must be a list when present"]} = errors_on(changeset)
-    end
-
-    test "normalizes tags by trimming, downcasing, and removing duplicates" do
-      attrs = %{
-        name: "Test Query",
-        query: %{sql: "SELECT 1"},
-        tags: ["  Analytics  ", "REPORTING", "analytics", "", "reporting"]
-      }
-
-      changeset = Query.new(attrs)
-
-      assert changeset.valid?
-      assert get_field(changeset, :tags) == ["analytics", "reporting"]
+      assert %{statement: ["can't be blank"]} = errors_on(changeset)
     end
 
     test "accepts valid search_path" do
       attrs = %{
         name: "Schema Query",
-        query: %{sql: "SELECT * FROM users"},
+        statement: "SELECT * FROM users",
         search_path: "reporting, public"
       }
 
@@ -125,7 +55,7 @@ defmodule Lotus.Storage.QueryTest do
       changeset =
         Query.new(%{
           name: "Test",
-          query: %{sql: "SELECT 1"},
+          statement: "SELECT 1",
           search_path: "analytics"
         })
 
@@ -137,7 +67,7 @@ defmodule Lotus.Storage.QueryTest do
       changeset =
         Query.new(%{
           name: "Test",
-          query: %{sql: "SELECT 1"},
+          statement: "SELECT 1",
           search_path: ""
         })
 
@@ -149,17 +79,13 @@ defmodule Lotus.Storage.QueryTest do
       changeset =
         Query.new(%{
           name: "Test",
-          query: %{sql: "SELECT 1"},
+          statement: "SELECT 1",
           search_path: "invalid-schema, 123schema"
         })
 
       refute changeset.valid?
 
-      assert %{
-               search_path: [
-                 "must be a comma-separated list of valid schema identifiers (letters, numbers, underscores only)"
-               ]
-             } =
+      assert %{search_path: ["must be a comma-separated list of identifiers"]} =
                errors_on(changeset)
     end
 
@@ -167,7 +93,7 @@ defmodule Lotus.Storage.QueryTest do
       changeset =
         Query.new(%{
           name: "Test",
-          query: %{sql: "SELECT 1"},
+          statement: "SELECT 1",
           search_path: 123
         })
 
@@ -178,60 +104,240 @@ defmodule Lotus.Storage.QueryTest do
 
   describe "update/2" do
     setup do
-      {:ok, query: %Query{name: "Original", query: %{sql: "SELECT 1"}, tags: ["foo"]}}
+      {:ok, query: %Query{name: "Original", statement: "SELECT 1"}}
     end
 
-    test "updates fields and normalizes tags", %{query: query} do
-      changeset = Query.update(query, %{name: "Updated", tags: [" Foo ", "bar", "BAR"]})
+    test "updates fields", %{query: query} do
+      changeset = Query.update(query, %{name: "Updated"})
 
       assert changeset.valid?
       assert get_field(changeset, :name) == "Updated"
-      assert get_field(changeset, :tags) == ["foo", "bar"]
     end
 
-    test "validates updated query payload", %{query: query} do
-      changeset = Query.update(query, %{query: %{sql: ""}})
+    test "validates updated query statement", %{query: query} do
+      changeset = Query.update(query, %{statement: ""})
 
       refute changeset.valid?
-      assert %{query: ["sql cannot be empty"]} = errors_on(changeset)
+      assert %{statement: ["can't be blank"]} = errors_on(changeset)
     end
   end
 
-  describe "to_sql_params/1" do
-    test "extracts sql and params with string keys" do
-      query = %Query{query: %{"sql" => "SELECT * FROM users WHERE id = $1", "params" => [123]}}
+  describe "to_sql_params/2" do
+    test "to_sql_params with PostgreSQL adapter uses $N placeholders" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {min_age} AND active = {active}",
+        var_defaults: %{},
+        data_repo: "postgres"
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users WHERE id = $1", [123]}
+      {sql, params} = Query.to_sql_params(q, %{"min_age" => 30, "active" => true})
+
+      assert sql == "SELECT * FROM users WHERE age > $1 AND active = $2"
+      assert params == [30, true]
     end
 
-    test "extracts sql and params with atom keys" do
-      query = %Query{query: %{sql: "SELECT * FROM users WHERE id = $1", params: [123]}}
+    test "to_sql_params with SQLite adapter uses ? placeholders" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {min_age} AND active = {active}",
+        var_defaults: %{},
+        data_repo: "sqlite"
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users WHERE id = $1", [123]}
+      {sql, params} = Query.to_sql_params(q, %{"min_age" => 30, "active" => true})
+
+      assert sql == "SELECT * FROM users WHERE age > ? AND active = ?"
+      assert params == [30, true]
     end
 
-    test "handles missing params with string keys" do
-      query = %Query{query: %{"sql" => "SELECT * FROM users"}}
+    test "to_sql_params with nil data_repo defaults to PostgreSQL style" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE id = {id}",
+        var_defaults: %{},
+        data_repo: nil
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users", []}
+      {sql, params} = Query.to_sql_params(q, %{"id" => 123})
+
+      assert sql == "SELECT * FROM users WHERE id = $1"
+      assert params == [123]
     end
 
-    test "handles missing params with atom keys" do
-      query = %Query{query: %{sql: "SELECT * FROM users"}}
+    test "uses var_defaults when vars are not provided (PostgreSQL)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {min_age}",
+        var_defaults: %{"min_age" => 40},
+        data_repo: "postgres"
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users", []}
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert params == [40]
     end
 
-    test "handles nil params with string keys" do
-      query = %Query{query: %{"sql" => "SELECT * FROM users", "params" => nil}}
+    test "uses var_defaults when vars are not provided (SQLite)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {min_age}",
+        var_defaults: %{"min_age" => 40},
+        data_repo: "sqlite"
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users", []}
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE age > ?"
+      assert params == [40]
     end
 
-    test "handles nil params with atom keys" do
-      query = %Query{query: %{sql: "SELECT * FROM users", params: nil}}
+    test "raises if required var missing and no default" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {min_age}",
+        var_defaults: %{}
+      }
 
-      assert Query.to_sql_params(query) == {"SELECT * FROM users", []}
+      assert_raise ArgumentError, ~r/Missing required variable: min_age/, fn ->
+        Query.to_sql_params(q, %{})
+      end
+    end
+
+    test "handles table names as parameters (PostgreSQL)" do
+      q = %Query{
+        statement: "SELECT * FROM {table}",
+        var_defaults: %{"table" => "test_users"},
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+      assert sql == "SELECT * FROM $1"
+      assert params == ["test_users"]
+    end
+
+    test "handles table names as parameters (SQLite)" do
+      q = %Query{
+        statement: "SELECT * FROM {table}",
+        var_defaults: %{"table" => "test_users"},
+        data_repo: "sqlite"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+      assert sql == "SELECT * FROM ?"
+      assert params == ["test_users"]
+    end
+
+    test "ignores unused defaults" do
+      q = %Query{
+        statement: "SELECT * FROM users",
+        var_defaults: %{"unused" => "value"}
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+      assert sql == "SELECT * FROM users"
+      assert params == []
+    end
+
+    test "handles multiple occurrences of the same var (PostgreSQL)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE name = {name} OR nickname = {name}",
+        var_defaults: %{"name" => "Jack"},
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE name = $1 OR nickname = $2"
+      assert params == ["Jack", "Jack"]
+    end
+
+    test "handles multiple occurrences of the same var (SQLite)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE name = {name} OR nickname = {name}",
+        var_defaults: %{"name" => "Jack"},
+        data_repo: "sqlite"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE name = ? OR nickname = ?"
+      assert params == ["Jack", "Jack"]
+    end
+
+    test "handles complex query with multiple vars (PostgreSQL)" do
+      q = %Query{
+        statement:
+          "SELECT * FROM {table} WHERE age BETWEEN {min} AND {max} AND status = {status}",
+        var_defaults: %{"table" => "users", "status" => "active"},
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"min" => 18, "max" => 65})
+
+      assert sql == "SELECT * FROM $1 WHERE age BETWEEN $2 AND $3 AND status = $4"
+      assert params == ["users", 18, 65, "active"]
+    end
+
+    test "handles complex query with multiple vars (SQLite)" do
+      q = %Query{
+        statement:
+          "SELECT * FROM {table} WHERE age BETWEEN {min} AND {max} AND status = {status}",
+        var_defaults: %{"table" => "users", "status" => "active"},
+        data_repo: "sqlite"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"min" => 18, "max" => 65})
+
+      assert sql == "SELECT * FROM ? WHERE age BETWEEN ? AND ? AND status = ?"
+      assert params == ["users", 18, 65, "active"]
+    end
+
+    test "overrides defaults with provided vars" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE status = {status}",
+        var_defaults: %{"status" => "inactive"},
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"status" => "active"})
+
+      assert sql == "SELECT * FROM users WHERE status = $1"
+      assert params == ["active"]
+    end
+
+    test "handles empty string values" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE name = {name}",
+        var_defaults: %{},
+        data_repo: "sqlite"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"name" => ""})
+
+      assert sql == "SELECT * FROM users WHERE name = ?"
+      assert params == [""]
+    end
+
+    test "raises when nil value is provided" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE deleted_at IS {deleted}",
+        var_defaults: %{},
+        data_repo: "postgres"
+      }
+
+      assert_raise ArgumentError, ~r/Missing required variable: deleted/, fn ->
+        Query.to_sql_params(q, %{"deleted" => nil})
+      end
+    end
+
+    test "preserves var order in params list" do
+      q = %Query{
+        statement: "INSERT INTO users (name, age, email) VALUES ({name}, {age}, {email})",
+        var_defaults: %{},
+        data_repo: "postgres"
+      }
+
+      {sql, params} =
+        Query.to_sql_params(q, %{"name" => "John", "age" => 30, "email" => "john@example.com"})
+
+      assert sql == "INSERT INTO users (name, age, email) VALUES ($1, $2, $3)"
+      assert params == ["John", 30, "john@example.com"]
     end
   end
 end
