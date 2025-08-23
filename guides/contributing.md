@@ -65,7 +65,7 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
    # Create and run queries
    {:ok, query} = Lotus.create_query(%{
      name: "Test Query",
-     query: %{sql: "SELECT 1 as test"}
+     statement: "SELECT 1 as test"
    })
    Lotus.run_query(query)
    ```
@@ -148,7 +148,7 @@ Creates a new query with the given attributes.
 
 ## Examples
 
-    iex> Lotus.create_query(%{name: "User Count", query: %{sql: "SELECT COUNT(*) FROM users"}})
+    iex> Lotus.create_query(%{name: "User Count", statement: "SELECT COUNT(*) FROM users"})
     {:ok, %Lotus.Storage.Query{}}
 
 """
@@ -168,14 +168,14 @@ end
 ```elixir
 describe "create_query/1" do
   test "creates query with valid attributes" do
-    attrs = %{name: "Test Query", query: %{sql: "SELECT 1"}}
+    attrs = %{name: "Test Query", statement: "SELECT 1"}
 
     assert {:ok, query} = Lotus.create_query(attrs)
     assert query.name == "Test Query"
   end
 
   test "returns error with invalid attributes" do
-    attrs = %{name: "", query: %{sql: "SELECT 1"}}
+    attrs = %{name: "", statement: "SELECT 1"}
 
     assert {:error, changeset} = Lotus.create_query(attrs)
     assert "can't be blank" in errors_on(changeset).name

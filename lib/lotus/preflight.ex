@@ -226,10 +226,8 @@ defmodule Lotus.Preflight do
 
   # If a driver glued the SQL after the message (e.g. "\nquery: EXPLAIN ..."),
   # hide it so tests/users don't see our internal EXPLAIN wrapper.
-  defp strip_explain_query_tail(msg) when is_binary(msg) do
+  defp strip_explain_query_tail(msg) do
     Regex.replace(~r/\n?query:\s*EXPLAIN[\s\S]*\z/i, msg, "")
     |> String.trim_trailing()
   end
-
-  defp strip_explain_query_tail(msg), do: msg
 end

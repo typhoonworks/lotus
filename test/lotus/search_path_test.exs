@@ -11,7 +11,7 @@ defmodule Lotus.SearchPathTest do
       {:ok, query} =
         Storage.create_query(%{
           name: "Unqualified Customers Query",
-          query: %{sql: "SELECT COUNT(*) FROM customers"},
+          statement: "SELECT COUNT(*) FROM customers",
           search_path: "reporting, public",
           data_repo: "postgres"
         })
@@ -35,7 +35,7 @@ defmodule Lotus.SearchPathTest do
       {:ok, query} =
         Storage.create_query(%{
           name: "Override Test",
-          query: %{sql: "SELECT COUNT(*) FROM customers"},
+          statement: "SELECT COUNT(*) FROM customers",
           data_repo: "postgres"
         })
 

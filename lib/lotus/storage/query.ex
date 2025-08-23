@@ -3,6 +3,8 @@ defmodule Lotus.Storage.Query do
   Represents a saved Lotus query.
 
   Queries can be stored, updated, listed, and executed by the host app.
+  Supports `{var}` placeholders in the SQL `statement`, which can be
+  bound at runtime with `vars:` or defaulted via `var_defaults`.
   """
 
   use Ecto.Schema
@@ -20,23 +22,23 @@ defmodule Lotus.Storage.Query do
              :id,
              :name,
              :description,
-             :query,
-             :tags,
+             :statement,
+             :var_defaults,
              :data_repo,
              :search_path,
              :inserted_at,
              :updated_at
            ]}
 
-  @permitted ~w(name description query tags data_repo search_path)a
-  @required ~w(name query)a
+  @permitted ~w(name description statement var_defaults data_repo search_path)a
+  @required ~w(name statement)a
 
   @type t :: %__MODULE__{
           id: term(),
           name: String.t(),
           description: String.t() | nil,
-          query: map(),
-          tags: [String.t()],
+          statement: String.t(),
+          var_defaults: map(),
           data_repo: String.t() | nil,
           search_path: String.t() | nil,
           inserted_at: DateTime.t(),
@@ -46,50 +48,67 @@ defmodule Lotus.Storage.Query do
   schema "lotus_queries" do
     field(:name, :string)
     field(:description, :string)
-    field(:query, :map)
-    field(:tags, {:array, :string}, default: [])
+    field(:statement, :string)
+    field(:var_defaults, :map, default: %{})
     field(:data_repo, :string)
     field(:search_path, :string)
 
     timestamps(type: :utc_datetime_usec)
   end
 
-  @doc """
-  Build a new `Lotus.Storage.Query` struct from attributes.
-
-  Does not persist to the database.
-  """
+  @doc "Build a new Query changeset."
   @spec new(map()) :: Ecto.Changeset.t()
-  def new(attrs) when is_map(attrs) do
-    %__MODULE__{}
-    |> changeset(attrs)
-  end
+  def new(attrs) when is_map(attrs),
+    do: %__MODULE__{} |> changeset(attrs)
+
+  @doc "Update an existing Query changeset."
+  @spec update(t(), map()) :: Ecto.Changeset.t()
+  def update(%__MODULE__{} = query, attrs) when is_map(attrs),
+    do: changeset(query, attrs)
 
   @doc """
-  Update an existing `Lotus.Storage.Query` struct with new attributes.
+  Convert a query struct and variable map into a safe `{sql, params}` tuple.
 
-  Does not persist to the database.
+  Replaces `{var}` placeholders in the `statement` with the correct placeholder
+  syntax for the underlying database adapter (e.g. `$1, $2, ...` for Postgres,
+  `?` for SQLite, etc.).
+
+  The params list is built from the provided `vars` map, falling back to
+  `var_defaults` stored with the query. Raises if a required variable has no
+  value or default.
   """
-  @spec update(t(), map()) :: Ecto.Changeset.t()
-  def update(%__MODULE__{} = query, attrs) when is_map(attrs) do
-    changeset(query, attrs)
-  end
+  @spec to_sql_params(t(), map()) :: {String.t(), list(any())}
+  def to_sql_params(%__MODULE__{statement: sql, var_defaults: defaults} = q, vars \\ %{}) do
+    regex = ~r/\{([A-Za-z_][A-Za-z0-9_]*)\}/
 
-  @spec to_sql_params(t()) :: {String.t(), list(any())}
-  def to_sql_params(%__MODULE__{query: %{"sql" => sql, "params" => params}}) do
-    {sql, params || []}
-  end
+    vars_in_order =
+      Regex.scan(regex, sql)
+      |> Enum.map(fn [_, var] -> var end)
 
-  def to_sql_params(%__MODULE__{query: %{"sql" => sql}}) do
-    {sql, []}
-  end
+    adapter = Lotus.Adapter.param_style(q.data_repo)
 
-  def to_sql_params(%__MODULE__{query: %{sql: sql, params: params}}) do
-    {sql, params || []}
-  end
+    Enum.reduce(
+      Enum.with_index(vars_in_order, 1),
+      {sql, []},
+      fn {var, idx}, {acc_sql, acc_params} ->
+        value =
+          Map.get(vars, var) ||
+            Map.get(defaults || %{}, var) ||
+            raise ArgumentError, "Missing required variable: #{var}"
 
-  def to_sql_params(%__MODULE__{query: %{sql: sql}}) do
-    {sql, []}
+        placeholder =
+          case adapter do
+            :postgres -> "$#{idx}"
+            :sqlite -> "?"
+            _ -> "?"
+          end
+
+        {
+          String.replace(acc_sql, "{#{var}}", placeholder, global: false),
+          acc_params ++ [value]
+        }
+      end
+    )
   end
 
   defp changeset(query, attrs) do
@@ -97,11 +116,36 @@ defmodule Lotus.Storage.Query do
     |> cast(attrs, @permitted)
     |> validate_required(@required)
     |> validate_length(:name, min: 1, max: 255)
-    |> validate_change(:query, &validate_query_payload/2)
+    |> validate_statement()
+    |> validate_var_defaults()
     |> validate_data_repo()
     |> validate_search_path()
     |> maybe_add_unique_constraint()
-    |> put_normalized_tags()
+  end
+
+  defp validate_statement(changeset) do
+    case get_field(changeset, :statement) do
+      nil ->
+        changeset
+
+      sql when is_binary(sql) ->
+        if String.trim(sql) == "" do
+          add_error(changeset, :statement, "cannot be empty")
+        else
+          changeset
+        end
+
+      _ ->
+        add_error(changeset, :statement, "must be a string")
+    end
+  end
+
+  defp validate_var_defaults(changeset) do
+    case get_field(changeset, :var_defaults) do
+      nil -> changeset
+      m when is_map(m) -> changeset
+      _ -> add_error(changeset, :var_defaults, "must be a map")
+    end
   end
 
   defp maybe_add_unique_constraint(changeset) do
@@ -111,35 +155,6 @@ defmodule Lotus.Storage.Query do
       changeset
     end
   end
-
-  defp validate_query_payload(:query, %{"sql" => sql} = q) when is_binary(sql) do
-    cond do
-      String.trim(sql) == "" ->
-        [query: "sql cannot be empty"]
-
-      Map.has_key?(q, "params") and not is_list(q["params"]) ->
-        [query: "params must be a list when present"]
-
-      true ->
-        []
-    end
-  end
-
-  defp validate_query_payload(:query, %{sql: sql} = q) when is_binary(sql) do
-    cond do
-      String.trim(sql) == "" ->
-        [query: "sql cannot be empty"]
-
-      Map.has_key?(q, :params) and not is_list(q[:params]) ->
-        [query: "params must be a list when present"]
-
-      true ->
-        []
-    end
-  end
-
-  defp validate_query_payload(:query, _),
-    do: [query: "must include sql (string) and optionally params (list)"]
 
   defp validate_data_repo(changeset) do
     case get_change(changeset, :data_repo) do
@@ -153,12 +168,10 @@ defmodule Lotus.Storage.Query do
         if repo_name in Map.keys(Config.data_repos()) do
           changeset
         else
-          available_repos = Map.keys(Config.data_repos()) |> Enum.join(", ")
-
           add_error(
             changeset,
             :data_repo,
-            "must be one of the configured data repositories: #{available_repos}"
+            "must be one of: #{Enum.join(Map.keys(Config.data_repos()), ", ")}"
           )
         end
 
@@ -175,44 +188,23 @@ defmodule Lotus.Storage.Query do
       "" ->
         put_change(changeset, :search_path, nil)
 
-      search_path when is_binary(search_path) ->
-        if valid_search_path?(search_path) do
-          changeset
-        else
-          add_error(
-            changeset,
-            :search_path,
-            "must be a comma-separated list of valid schema identifiers (letters, numbers, underscores only)"
-          )
-        end
+      sp when is_binary(sp) ->
+        if valid_search_path?(sp),
+          do: changeset,
+          else:
+            add_error(changeset, :search_path, "must be a comma-separated list of identifiers")
 
       _ ->
         add_error(changeset, :search_path, "is invalid")
     end
   end
 
-  defp valid_search_path?(search_path) do
-    search_path
+  defp valid_search_path?(sp) do
+    sp
     |> String.split(",")
     |> Enum.all?(fn schema ->
       schema = String.trim(schema)
       Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, schema)
     end)
-  end
-
-  defp put_normalized_tags(changeset) do
-    tags = get_change(changeset, :tags)
-
-    if is_list(tags) do
-      norm =
-        tags
-        |> Enum.map(&String.downcase(String.trim(&1)))
-        |> Enum.reject(&(&1 == ""))
-        |> Enum.uniq()
-
-      put_change(changeset, :tags, norm)
-    else
-      changeset
-    end
   end
 end

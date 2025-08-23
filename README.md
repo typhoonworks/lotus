@@ -29,11 +29,11 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 ## What's planned?
 - [ ] Query versioning and change tracking
 - [ ] Query result caching mechanisms
-- [ ] Query templates with parameter substitution
 - [ ] Export functionality for query results (CSV, JSON)
 - [ ] MySQL support
 - [x] Multi-database support (PostgreSQL, SQLite)
 - [x] Table visibility and access controls
+- [x] Query templates with parameter substitution using `{var}` placeholders
 
 ## Installation
 Add `lotus` to your list of dependencies in `mix.exs`:
@@ -76,7 +76,7 @@ config :lotus,
 # Create and save a query
 {:ok, query} = Lotus.create_query(%{
   name: "Active Users",
-  query: %{sql: "SELECT * FROM users WHERE active = true"}
+  statement: "SELECT * FROM users WHERE active = true"
 })
 
 # Execute a saved query

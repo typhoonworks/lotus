@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **BREAKING:** Removed `tags` field from queries - queries no longer support tagging/filtering by tags
+- **BREAKING:** Changed query field from `query` (map with `sql` and `params`) to `statement` (string)
+- Add smart variable support with `{var}` placeholders in SQL statements
+- Add `var_defaults` field to queries for providing default variable values
+- Add comprehensive adapter tests for `Lotus.Adapter` module
+
 ## [0.2.0] - 2025-01-21
 
 - **BREAKING:** Removed support for fk and pk configuration options

@@ -29,7 +29,7 @@ IO.inspect(query)
 # %Lotus.Storage.Query{
 #   id: 1,
 #   name: "Count Users",
-#   query: %{"sql" => "SELECT COUNT(*) as user_count FROM users"},
+#   statement: "SELECT COUNT(*) as user_count FROM users",
 #   inserted_at: ~N[2024-01-15 10:30:00],
 #   updated_at: ~N[2024-01-15 10:30:00]
 # }
@@ -139,7 +139,7 @@ You can store queries with a specific data repository, so they automatically exe
 # Create a query for the main database
 {:ok, user_query} = Lotus.create_query(%{
   name: "Active Users",
-  query: %{sql: "SELECT COUNT(*) FROM users WHERE active = true"},
+  statement: "SELECT COUNT(*) FROM users WHERE active = true",
   data_repo: "main"
 })
 
@@ -156,7 +156,7 @@ You can override the stored data repository at execution time:
 # Query was saved with data_repo: "analytics"
 {:ok, query} = Lotus.create_query(%{
   name: "User Count",
-  query: %{sql: "SELECT COUNT(*) FROM users"},
+  statement: "SELECT COUNT(*) FROM users",
   data_repo: "analytics"
 })
 
@@ -175,7 +175,7 @@ If you don't specify a `data_repo` when creating a query, it will use the defaul
 # Query without specific data_repo
 {:ok, query} = Lotus.create_query(%{
   name: "Generic Query",
-  query: %{sql: "SELECT 1"}
+  statement: "SELECT 1"
   # No data_repo specified
 })
 
@@ -306,13 +306,14 @@ Here are common patterns for using `search_path`:
 # Query template that works across tenant schemas
 {:ok, tenant_query} = Lotus.create_query(%{
   name: "Tenant User Count",
-  query: %{sql: "SELECT COUNT(*) FROM users WHERE active = $1"},
+  statement: "SELECT COUNT(*) FROM users WHERE active = {is_active}",
+  var_defaults: %{"is_active" => true},
   data_repo: "postgres"
 })
 
 # Execute for different tenants by overriding search_path
-{:ok, tenant_a_result} = Lotus.run_query(tenant_query, [true], search_path: "tenant_123, public")
-{:ok, tenant_b_result} = Lotus.run_query(tenant_query, [true], search_path: "tenant_456, public") 
+{:ok, tenant_a_result} = Lotus.run_query(tenant_query, search_path: "tenant_123, public")
+{:ok, tenant_b_result} = Lotus.run_query(tenant_query, search_path: "tenant_456, public") 
 ```
 
 #### Reporting and Analytics Schemas
@@ -372,25 +373,25 @@ Lotus validates `search_path` values to prevent injection attacks:
 # Valid search_path values
 {:ok, query} = Lotus.create_query(%{
   name: "Valid Query",
-  query: %{sql: "SELECT 1"},
+  statement: "SELECT 1",
   search_path: "reporting"  # single schema
 })
 
 {:ok, query} = Lotus.create_query(%{
   name: "Valid Query",  
-  query: %{sql: "SELECT 1"},
+  statement: "SELECT 1",
   search_path: "schema1, schema_2, public"  # multiple schemas
 })
 
 # Invalid search_path - validation error
 {:error, changeset} = Lotus.create_query(%{
   name: "Invalid Query",
-  query: %{sql: "SELECT 1"}, 
+  statement: "SELECT 1", 
   search_path: "invalid-name, 123schema"  # hyphens and leading numbers not allowed
 })
 
 errors_on(changeset)
-# %{search_path: ["must be a comma-separated list of valid schema identifiers (letters, numbers, underscores only)"]}
+# %{search_path: ["must be a comma-separated list of identifiers"]}
 ```
 
 ### search_path with Other Databases
@@ -416,23 +417,38 @@ Lotus implements `search_path` safely:
 - The same `search_path` is used for both preflight authorization and query execution
 - Schema identifiers are validated to prevent injection attacks
 
-## Working with Parameters
+## Working with Smart Variables
 
-Lotus supports parameterized queries for safety and reusability:
+Lotus supports smart variable substitution using `{var}` placeholders for safety and reusability:
 
 ```elixir
-# Create a parameterized query
+# Create a query with smart variables
 {:ok, query} = Lotus.create_query(%{
   name: "Users by Status",
-  query: %{
-    sql: "SELECT id, name, email FROM users WHERE status = $1 AND created_at > $2",
-    params: ["active", ~D[2024-01-01]]
+  statement: "SELECT id, name, email FROM users WHERE status = {status} AND created_at > {created_date}",
+  var_defaults: %{
+    "status" => "active",
+    "created_date" => ~D[2024-01-01]
   }
 })
 
-# Run with the stored parameters
+# Run with the default variables
 {:ok, result} = Lotus.run_query(query)
+
+# Override variables at runtime
+{:ok, result} = Lotus.run_query(query, vars: %{
+  "status" => "pending",
+  "created_date" => ~D[2024-06-01]
+})
 ```
+
+### Variable Features
+
+- **Safe substitution**: Variables are converted to database-specific placeholders (`$1, $2` for PostgreSQL, `?` for SQLite)
+- **Default values**: Use `var_defaults` to provide fallback values
+- **Runtime override**: Pass `vars:` option to override defaults
+- **Multiple occurrences**: The same variable can appear multiple times and will be bound correctly
+- **Type safety**: Variables are passed as parameters, preventing SQL injection
 
 ## Error Handling
 

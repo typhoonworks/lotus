@@ -132,15 +132,14 @@ defmodule Lotus.Fixtures do
   ## Examples
 
       query = query_fixture()
-      query = query_fixture(%{name: "Custom Query", tags: ["custom"]})
-      
+      query = query_fixture(%{name: "Custom Query"})
+
   """
   def query_fixture(attrs \\ %{}) do
     defaults = %{
       name: "Test Query #{System.unique_integer([:positive])}",
       description: "A test query for automated testing",
-      query: %{"sql" => "SELECT 1 as result"},
-      tags: ["test"]
+      statement: "SELECT 1 as result"
     }
 
     attrs = Map.merge(defaults, attrs)

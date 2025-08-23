@@ -25,17 +25,13 @@ defmodule Lotus.Storage do
   end
 
   @doc """
-  Lists queries with filtering by tags and search term.
+  Lists queries with filtering search term.
 
   ## Options
 
-    * `:tags` - List of tags to filter by (queries must have at least one matching tag)
     * `:search` - Search term to match against query names (case insensitive)
 
   ## Examples
-
-      iex> list_queries_by(tags: ["reporting", "analytics"])
-      [%Query{}, ...]
 
       iex> list_queries_by(search: "user")
       [%Query{}, ...]
@@ -44,18 +40,6 @@ defmodule Lotus.Storage do
   @spec list_queries_by(keyword()) :: [Query.t()]
   def list_queries_by(opts \\ []) do
     q = from(Query)
-
-    q =
-      case Keyword.get(opts, :tags) do
-        nil ->
-          q
-
-        [] ->
-          q
-
-        tags when is_list(tags) ->
-          from(query in q, where: fragment("? && ?", query.tags, ^tags))
-      end
 
     q =
       case Keyword.get(opts, :search) do
@@ -84,7 +68,7 @@ defmodule Lotus.Storage do
 
   ## Examples
 
-      iex> create_query(%{name: "Users", query: %{sql: "SELECT * FROM users"}})
+      iex> create_query(%{name: "Users", statement: "SELECT * FROM users"})
       {:ok, %Query{}}
 
       iex> create_query(%{})

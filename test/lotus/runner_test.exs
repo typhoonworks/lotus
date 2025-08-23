@@ -529,4 +529,29 @@ defmodule Lotus.RunnerTest do
       assert ["Jack Kerouac"] in rows
     end
   end
+
+  describe "to_sql_params/2 with smart vars" do
+    alias Lotus.Storage.Query
+
+    test "expands vars into params" do
+      q = %Query{
+        statement: "SELECT * FROM test_users WHERE age > {min_age} AND active = {is_active}",
+        var_defaults: %{"min_age" => 40}
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"is_active" => true})
+
+      assert sql =~ "$1"
+      assert sql =~ "$2"
+      assert params == [40, true]
+    end
+
+    test "raises when required var missing" do
+      q = %Query{statement: "SELECT * FROM test_users WHERE age > {min_age}", var_defaults: %{}}
+
+      assert_raise ArgumentError, ~r/Missing required variable/, fn ->
+        Query.to_sql_params(q)
+      end
+    end
+  end
 end
