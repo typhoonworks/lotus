@@ -61,7 +61,7 @@ defmodule LotusTest do
     end
 
     test "returns nil when query not found" do
-      assert Lotus.get_query(query.id) == nil
+      assert Lotus.get_query(Lotus.get_query(999_999)) == nil
     end
   end
 

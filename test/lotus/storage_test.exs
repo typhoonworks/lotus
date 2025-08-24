@@ -86,7 +86,7 @@ defmodule Lotus.StorageTest do
     end
 
     test "returns nil when query not found" do
-      assert Storage.get_query(query.id) == nil
+      assert Storage.get_query(Lotus.get_query(999_999)) == nil
     end
   end
 
