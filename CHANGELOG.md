@@ -7,6 +7,7 @@
 - Add smart variable support with `{var}` placeholders in SQL statements
 - Add `var_defaults` field to queries for providing default variable values
 - Add comprehensive adapter tests for `Lotus.Adapter` module
+- Add `get_query` to fetch queries without raising when they don't exist
 
 ## [0.2.0] - 2025-01-21
 

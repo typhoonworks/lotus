@@ -50,6 +50,21 @@ defmodule LotusTest do
     end
   end
 
+  describe "get_query/2" do
+    test "returns query when found" do
+      query = query_fixture(%{name: "Test Query"})
+
+      result = Lotus.get_query(query.id)
+
+      assert result.id == query.id
+      assert result.name == "Test Query"
+    end
+
+    test "returns nil when query not found" do
+      assert Lotus.get_query(query.id) == nil
+    end
+  end
+
   describe "create_query/1" do
     test "creates query with valid attributes" do
       attrs = %{
@@ -130,7 +145,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Users by Age Query",
-          statement: "SELECT name, age FROM test_users WHERE age > {min_age} ORDER BY age DESC",
+          statement: "SELECT name, age FROM test_users WHERE age > {{min_age}} ORDER BY age DESC",
           var_defaults: %{"min_age" => 40}
         })
 
@@ -146,7 +161,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Override Vars Query",
-          statement: "SELECT name FROM test_users WHERE age > {min_age}",
+          statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
           var_defaults: %{"min_age" => 20}
         })
 

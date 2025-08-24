@@ -125,7 +125,7 @@ defmodule Lotus.Storage.QueryTest do
   describe "to_sql_params/2" do
     test "to_sql_params with PostgreSQL adapter uses $N placeholders" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE age > {min_age} AND active = {active}",
+        statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
         var_defaults: %{},
         data_repo: "postgres"
       }
@@ -138,7 +138,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "to_sql_params with SQLite adapter uses ? placeholders" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE age > {min_age} AND active = {active}",
+        statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
         var_defaults: %{},
         data_repo: "sqlite"
       }
@@ -151,7 +151,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "to_sql_params with nil data_repo defaults to PostgreSQL style" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE id = {id}",
+        statement: "SELECT * FROM users WHERE id = {{id}}",
         var_defaults: %{},
         data_repo: nil
       }
@@ -164,7 +164,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "uses var_defaults when vars are not provided (PostgreSQL)" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE age > {min_age}",
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
         var_defaults: %{"min_age" => 40},
         data_repo: "postgres"
       }
@@ -177,7 +177,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "uses var_defaults when vars are not provided (SQLite)" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE age > {min_age}",
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
         var_defaults: %{"min_age" => 40},
         data_repo: "sqlite"
       }
@@ -190,7 +190,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "raises if required var missing and no default" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE age > {min_age}",
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
         var_defaults: %{}
       }
 
@@ -201,7 +201,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "handles table names as parameters (PostgreSQL)" do
       q = %Query{
-        statement: "SELECT * FROM {table}",
+        statement: "SELECT * FROM {{table}}",
         var_defaults: %{"table" => "test_users"},
         data_repo: "postgres"
       }
@@ -213,7 +213,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "handles table names as parameters (SQLite)" do
       q = %Query{
-        statement: "SELECT * FROM {table}",
+        statement: "SELECT * FROM {{table}}",
         var_defaults: %{"table" => "test_users"},
         data_repo: "sqlite"
       }
@@ -236,7 +236,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "handles multiple occurrences of the same var (PostgreSQL)" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE name = {name} OR nickname = {name}",
+        statement: "SELECT * FROM users WHERE name = {{name}} OR nickname = {{name}}",
         var_defaults: %{"name" => "Jack"},
         data_repo: "postgres"
       }
@@ -249,7 +249,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "handles multiple occurrences of the same var (SQLite)" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE name = {name} OR nickname = {name}",
+        statement: "SELECT * FROM users WHERE name = {{name}} OR nickname = {{name}}",
         var_defaults: %{"name" => "Jack"},
         data_repo: "sqlite"
       }
@@ -263,7 +263,7 @@ defmodule Lotus.Storage.QueryTest do
     test "handles complex query with multiple vars (PostgreSQL)" do
       q = %Query{
         statement:
-          "SELECT * FROM {table} WHERE age BETWEEN {min} AND {max} AND status = {status}",
+          "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
         var_defaults: %{"table" => "users", "status" => "active"},
         data_repo: "postgres"
       }
@@ -277,7 +277,7 @@ defmodule Lotus.Storage.QueryTest do
     test "handles complex query with multiple vars (SQLite)" do
       q = %Query{
         statement:
-          "SELECT * FROM {table} WHERE age BETWEEN {min} AND {max} AND status = {status}",
+          "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
         var_defaults: %{"table" => "users", "status" => "active"},
         data_repo: "sqlite"
       }
@@ -290,7 +290,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "overrides defaults with provided vars" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE status = {status}",
+        statement: "SELECT * FROM users WHERE status = {{status}}",
         var_defaults: %{"status" => "inactive"},
         data_repo: "postgres"
       }
@@ -303,7 +303,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "handles empty string values" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE name = {name}",
+        statement: "SELECT * FROM users WHERE name = {{name}}",
         var_defaults: %{},
         data_repo: "sqlite"
       }
@@ -316,7 +316,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "raises when nil value is provided" do
       q = %Query{
-        statement: "SELECT * FROM users WHERE deleted_at IS {deleted}",
+        statement: "SELECT * FROM users WHERE deleted_at IS {{deleted}}",
         var_defaults: %{},
         data_repo: "postgres"
       }
@@ -328,7 +328,7 @@ defmodule Lotus.Storage.QueryTest do
 
     test "preserves var order in params list" do
       q = %Query{
-        statement: "INSERT INTO users (name, age, email) VALUES ({name}, {age}, {email})",
+        statement: "INSERT INTO users (name, age, email) VALUES ({{name}}, {{age}}, {{email}})",
         var_defaults: %{},
         data_repo: "postgres"
       }

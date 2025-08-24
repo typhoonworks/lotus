@@ -33,7 +33,7 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 - [ ] MySQL support
 - [x] Multi-database support (PostgreSQL, SQLite)
 - [x] Table visibility and access controls
-- [x] Query templates with parameter substitution using `{var}` placeholders
+- [x] Query templates with parameter substitution using `{{var}}` placeholders
 
 ## Installation
 Add `lotus` to your list of dependencies in `mix.exs`:

@@ -75,6 +75,21 @@ defmodule Lotus.StorageTest do
     end
   end
 
+  describe "get_query/2" do
+    test "returns query when found" do
+      query = query_fixture(%{name: "Test Query"})
+
+      result = Storage.get_query(query.id)
+
+      assert result.id == query.id
+      assert result.name == "Test Query"
+    end
+
+    test "returns nil when query not found" do
+      assert Storage.get_query(query.id) == nil
+    end
+  end
+
   describe "create_query/2" do
     test "creates query with valid attributes" do
       attrs = %{

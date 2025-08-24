@@ -3,7 +3,7 @@ defmodule Lotus.Storage.Query do
   Represents a saved Lotus query.
 
   Queries can be stored, updated, listed, and executed by the host app.
-  Supports `{var}` placeholders in the SQL `statement`, which can be
+  Supports `{{var}}` placeholders in the SQL `statement`, which can be
   bound at runtime with `vars:` or defaulted via `var_defaults`.
   """
 
@@ -69,7 +69,7 @@ defmodule Lotus.Storage.Query do
   @doc """
   Convert a query struct and variable map into a safe `{sql, params}` tuple.
 
-  Replaces `{var}` placeholders in the `statement` with the correct placeholder
+  Replaces `{{var}}` placeholders in the `statement` with the correct placeholder
   syntax for the underlying database adapter (e.g. `$1, $2, ...` for Postgres,
   `?` for SQLite, etc.).
 
@@ -79,7 +79,7 @@ defmodule Lotus.Storage.Query do
   """
   @spec to_sql_params(t(), map()) :: {String.t(), list(any())}
   def to_sql_params(%__MODULE__{statement: sql, var_defaults: defaults} = q, vars \\ %{}) do
-    regex = ~r/\{([A-Za-z_][A-Za-z0-9_]*)\}/
+    regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
     vars_in_order =
       Regex.scan(regex, sql)
@@ -104,7 +104,7 @@ defmodule Lotus.Storage.Query do
           end
 
         {
-          String.replace(acc_sql, "{#{var}}", placeholder, global: false),
+          String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
           acc_params ++ [value]
         }
       end
