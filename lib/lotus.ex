@@ -73,6 +73,11 @@ defmodule Lotus do
   defdelegate list_queries(), to: Storage
 
   @doc """
+  Gets a single query by ID. Returns nil if not found.
+  """
+  defdelegate get_query(id), to: Storage
+
+  @doc """
   Gets a single query by ID. Raises if not found.
   """
   defdelegate get_query!(id), to: Storage

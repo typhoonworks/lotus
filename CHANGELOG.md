@@ -2,13 +2,16 @@
 
 ## Unreleased
 
+## [0.3.0] - 2025-08-25
+
 - **BREAKING:** Removed `tags` field from queries - queries no longer support tagging/filtering by tags
 - **BREAKING:** Changed query field from `query` (map with `sql` and `params`) to `statement` (string)
 - Add smart variable support with `{var}` placeholders in SQL statements
 - Add `var_defaults` field to queries for providing default variable values
 - Add comprehensive adapter tests for `Lotus.Adapter` module
+- Add `get_query` to fetch queries without raising when they don't exist
 
-## [0.2.0] - 2025-01-21
+## [0.2.0] - 2025-08-21
 
 - **BREAKING:** Removed support for fk and pk configuration options
 - **BREAKING:** Changed configuration structure - `repo` config replaced with `ecto_repo` and `data_repos`
@@ -29,7 +32,7 @@
 - Add comprehensive development environment setup with sample data
 - Add read-only repository configuration guidance
 
-## [0.1.0] - 2025-01-09
+## [0.1.0] - 2025-08-09
 - Initial release
 - Query storage, execution, and basic filtering
 - Read-only SQL runner with safety checks

@@ -56,6 +56,16 @@ defmodule Lotus.Storage do
   @doc """
   Gets a single query by ID.
 
+  Returns `nil` if the Query does not exist.
+  """
+  @spec get_query(id()) :: Query.t() | nil
+  def get_query(id) do
+    Lotus.repo().get(Query, id)
+  end
+
+  @doc """
+  Gets a single query by ID.
+
   Raises `Ecto.NoResultsError` if the Query does not exist.
   """
   @spec get_query!(id()) :: Query.t() | no_return()
