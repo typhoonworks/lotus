@@ -11,7 +11,7 @@ defmodule Lotus.Migrations.SQLite do
       add(:id, :serial, primary_key: true)
       add(:name, :string, null: false)
       add(:description, :text)
-      add(:statement, :string, null: false)
+      add(:statement, :text, null: false)
       add(:var_defaults, :map, null: false)
       add(:data_repo, :string)
       add(:search_path, :string)
