@@ -172,11 +172,13 @@ defmodule Lotus do
           | {:statement_timeout_ms, non_neg_integer()}
           | {:timeout, non_neg_integer()}
           | {:search_path, binary() | nil}
+          | {:repo, atom() | binary()}
         ]) ::
           {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
     execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
-    Runner.run_sql(execution_repo, sql, params, opts)
+    runner_opts = Keyword.delete(opts, :repo)
+    Runner.run_sql(execution_repo, sql, params, runner_opts)
   end
 
   @doc """

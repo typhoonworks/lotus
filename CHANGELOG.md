@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.3.1] - 2025-08-25
+
+- Specify `repo` option in `Lotus.run_sql`
+
 ## [0.3.0] - 2025-08-25
 
 - **BREAKING:** Removed `tags` field from queries - queries no longer support tagging/filtering by tags
