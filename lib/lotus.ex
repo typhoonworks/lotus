@@ -172,6 +172,7 @@ defmodule Lotus do
           | {:statement_timeout_ms, non_neg_integer()}
           | {:timeout, non_neg_integer()}
           | {:search_path, binary() | nil}
+          | {:repo, atom() | binary()}
         ]) ::
           {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
