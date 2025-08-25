@@ -61,7 +61,7 @@ defmodule LotusTest do
     end
 
     test "returns nil when query not found" do
-      assert Lotus.get_query(Lotus.get_query(999_999)) == nil
+      assert Lotus.get_query(999_999) == nil
     end
   end
 
@@ -175,7 +175,7 @@ defmodule LotusTest do
       query =
         query_fixture(%{
           name: "Missing Var Query",
-          statement: "SELECT name FROM test_users WHERE age > {min_age}"
+          statement: "SELECT name FROM test_users WHERE age > {{min_age}}"
         })
 
       assert {:error, msg} = Lotus.run_query(query)
