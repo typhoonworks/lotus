@@ -130,28 +130,30 @@ config :lotus,
     # Default rules apply to all repositories unless overridden
     default: [
       allow: [
-        # Allow specific tables
-        "users",
-        "orders",
+        # Allow specific tables in all schemas
+        "users",                      # Allow 'users' table in any schema
+        "orders",                     # Allow 'orders' table in any schema
         # Allow entire schemas (PostgreSQL)
-        {"analytics", ~r/.*/},
-        # Allow tables matching pattern
-        {"public", ~r/^report_/}
+        {"analytics", ~r/.*/},        # All tables in analytics schema
+        # Allow tables matching pattern in specific schema
+        {"public", ~r/^report_/}      # Tables starting with 'report_' in public
       ],
       deny: [
-        # Block specific sensitive tables
-        "credit_cards",
-        "api_keys",
-        # Block tables matching pattern
-        {"public", ~r/_internal$/}
+        # Block sensitive tables across ALL schemas
+        "credit_cards",               # Blocks credit_cards in any schema
+        "api_keys",                   # Blocks api_keys in any schema  
+        # Block tables in specific schema only
+        {"public", "internal_logs"},  # Only blocks public.internal_logs
+        # Block pattern in specific schema
+        {"public", ~r/_internal$/}    # Tables ending with '_internal' in public
       ]
     ],
     # Repository-specific rules override defaults
     analytics: [
       allow: [
-        {"analytics", ~r/.*/},
-        "users",
-        "sessions"
+        {"analytics", ~r/.*/},        # All tables in analytics schema
+        "users",                      # users table in any schema
+        "sessions"                    # sessions table in any schema
       ]
     ]
   }
@@ -170,18 +172,24 @@ Lotus automatically blocks access to sensitive system tables:
 **Rule Formats:**
 
 ```elixir
-# Table name only (for SQLite or default schema)
-"users"
+# Bare string - matches table name in ANY schema (PostgreSQL) or no schema (SQLite)
+"users"                        # Blocks/allows 'users' table in all schemas
+"api_keys"                     # Blocks/allows 'api_keys' in public, reporting, etc.
 
-# Schema and table (PostgreSQL)
-{"public", "users"}
+# Schema-specific tuple (PostgreSQL only)
+{"public", "users"}            # Only affects public.users
+{"reporting", "api_keys"}      # Only affects reporting.api_keys
 
 # Pattern matching with regex
-{"analytics", ~r/^daily_/}
+{"analytics", ~r/^daily_/}     # Tables starting with 'daily_' in analytics schema
+~r/^temp_/                     # Tables starting with 'temp_' in any schema (as bare regex)
 
 # Schema-wide rules
-{"reporting", ~r/.*/}  # Allow/deny all tables in schema
+{"reporting", ~r/.*/}          # All tables in reporting schema
+{~r/test_/, ~r/.*/}           # All tables in schemas starting with 'test_'
 ```
+
+> **Note**: Bare strings like `"api_keys"` are the simplest way to block sensitive tables across all schemas. Use tuples like `{"public", "api_keys"}` when you need schema-specific control.
 
 **Rule Evaluation:**
 

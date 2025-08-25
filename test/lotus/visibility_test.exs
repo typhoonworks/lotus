@@ -148,17 +148,18 @@ defmodule Lotus.VisibilityTest do
     end
   end
 
-  describe "SQLite convenience syntax" do
+  describe "bare string syntax (matches any schema)" do
     setup do
-      sqlite_config = [
+      config = [
         allow: [],
         deny: [
+          "api_keys",
           "temp_table",
           "another_temp"
         ]
       ]
 
-      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> sqlite_config end)
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
       :ok
     end
 
@@ -166,10 +167,53 @@ defmodule Lotus.VisibilityTest do
       refute Visibility.allowed_relation?("sqlite", {nil, "temp_table"})
       refute Visibility.allowed_relation?("sqlite", {"", "temp_table"})
       refute Visibility.allowed_relation?("sqlite", {nil, "another_temp"})
+      refute Visibility.allowed_relation?("sqlite", {nil, "api_keys"})
     end
 
-    test "does not match bare table names for PostgreSQL with schema" do
-      assert Visibility.allowed_relation?("postgres", {"public", "temp_table"})
+    test "matches bare table names for PostgreSQL regardless of schema" do
+      refute Visibility.allowed_relation?("postgres", {"public", "temp_table"})
+      refute Visibility.allowed_relation?("postgres", {"public", "api_keys"})
+      refute Visibility.allowed_relation?("postgres", {"other_schema", "api_keys"})
+      refute Visibility.allowed_relation?("postgres", {"reporting", "temp_table"})
+
+      assert Visibility.allowed_relation?("postgres", {"public", "users"})
+      assert Visibility.allowed_relation?("postgres", {"reporting", "orders"})
+    end
+  end
+
+  describe "mixed rule formats" do
+    setup do
+      config = [
+        allow: [],
+        deny: [
+          "api_keys",
+          {"public", "sensitive_data"},
+          {"reporting", ~r/^temp_/}
+        ]
+      ]
+
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      :ok
+    end
+
+    test "bare string blocks table in all schemas" do
+      refute Visibility.allowed_relation?("postgres", {"public", "api_keys"})
+      refute Visibility.allowed_relation?("postgres", {"reporting", "api_keys"})
+      refute Visibility.allowed_relation?("postgres", {"custom", "api_keys"})
+    end
+
+    test "tuple with schema only blocks in that specific schema" do
+      refute Visibility.allowed_relation?("postgres", {"public", "sensitive_data"})
+      assert Visibility.allowed_relation?("postgres", {"reporting", "sensitive_data"})
+      assert Visibility.allowed_relation?("postgres", {"other", "sensitive_data"})
+    end
+
+    test "regex patterns work with schema restrictions" do
+      refute Visibility.allowed_relation?("postgres", {"reporting", "temp_users"})
+      refute Visibility.allowed_relation?("postgres", {"reporting", "temp_cache"})
+
+      assert Visibility.allowed_relation?("postgres", {"public", "temp_users"})
+      assert Visibility.allowed_relation?("postgres", {"other", "temp_cache"})
     end
   end
 

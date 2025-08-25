@@ -476,12 +476,18 @@ Configure table visibility rules to ensure schema introspection only shows allow
 config :lotus,
   table_visibility: %{
     default: [
-      deny: ["api_keys", "user_passwords", "audit_logs"]
+      # Bare strings block tables across ALL schemas
+      deny: [
+        "api_keys",         # Blocks api_keys in any schema
+        "user_passwords",   # Blocks user_passwords in any schema
+        "audit_logs"        # Blocks audit_logs in any schema
+      ]
     ],
     reporting: [
       allow: [
         {"reporting", ~r/.*/},  # All reporting schema tables
-        {"public", "users"}      # Specific public tables
+        {"public", "users"},    # Specific public.users table
+        "summaries"             # Allow 'summaries' table in any schema
       ]
     ]
   }

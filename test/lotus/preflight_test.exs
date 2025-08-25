@@ -1,5 +1,6 @@
 defmodule Lotus.PreflightTest do
   use Lotus.Case
+  use Mimic
   alias Lotus.Preflight
 
   @pg_repo Lotus.Test.Repo
@@ -41,7 +42,7 @@ defmodule Lotus.PreflightTest do
     test "allows subqueries and CTEs" do
       # Subquery
       sql = """
-        SELECT * FROM test_users 
+        SELECT * FROM test_users
         WHERE id IN (SELECT user_id FROM test_posts WHERE published = true)
       """
 
@@ -160,7 +161,7 @@ defmodule Lotus.PreflightTest do
     test "allows subqueries and CTEs" do
       # Subquery
       sql = """
-        SELECT * FROM products 
+        SELECT * FROM products
         WHERE id IN (SELECT product_id FROM order_items WHERE quantity > 1)
       """
 
@@ -245,6 +246,162 @@ defmodule Lotus.PreflightTest do
     test "handles invalid repo gracefully" do
       assert {:error, msg} = Preflight.authorize(@pg_repo, "unknown_repo", "SELECT 1", [])
       assert msg == "Unknown data repo 'unknown_repo'"
+    end
+  end
+
+  describe "PostgreSQL preflight with bare string deny rules" do
+    setup do
+      Mimic.copy(Lotus.Config)
+
+      config = [
+        allow: [],
+        deny: [
+          "test_posts",
+          "test_comments"
+        ]
+      ]
+
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      :ok
+    end
+
+    test "blocks queries against tables matching bare string deny rules in public schema" do
+      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_posts", [])
+      assert msg =~ "blocked table"
+      assert msg =~ "test_posts"
+    end
+
+    test "blocks queries against tables matching bare string deny rules with explicit schema" do
+      {:error, msg} =
+        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_posts", [])
+
+      assert msg =~ "blocked table"
+      assert msg =~ "test_posts"
+    end
+
+    test "blocks JOIN queries including denied tables" do
+      sql = """
+        SELECT u.name, p.title
+        FROM test_users u
+        JOIN test_posts p ON u.id = p.user_id
+      """
+
+      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      assert msg =~ "blocked table"
+      assert msg =~ "test_posts"
+    end
+
+    test "allows queries against tables not in deny list" do
+      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
+      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT 1", [])
+    end
+  end
+
+  describe "PostgreSQL preflight with bare string allow rules" do
+    setup do
+      Mimic.copy(Lotus.Config)
+
+      config = [
+        allow: [
+          "test_users"
+        ],
+        deny: []
+      ]
+
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      :ok
+    end
+
+    test "allows queries against tables matching bare string allow rules" do
+      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
+    end
+
+    test "allows queries with explicit schema for allowed tables" do
+      assert :ok =
+               Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_users", [])
+    end
+
+    test "blocks queries against tables not in allow list" do
+      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_posts", [])
+      assert msg =~ "blocked table"
+      assert msg =~ "test_posts"
+    end
+  end
+
+  describe "PostgreSQL preflight with mixed rule formats" do
+    setup do
+      Mimic.copy(Lotus.Config)
+
+      config = [
+        allow: [],
+        deny: [
+          "test_comments",
+          {"public", "test_posts"}
+        ]
+      ]
+
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      :ok
+    end
+
+    test "tuple with schema only blocks in that specific schema" do
+      {:error, msg} =
+        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_posts", [])
+
+      assert msg =~ "blocked table"
+      assert msg =~ "test_posts"
+    end
+
+    test "allows tables not matching any deny rules" do
+      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
+    end
+  end
+
+  describe "SQLite preflight with bare string deny rules" do
+    setup do
+      Mimic.copy(Lotus.Config)
+
+      config = [
+        allow: [],
+        deny: [
+          "products",
+          "order_items"
+        ]
+      ]
+
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      :ok
+    end
+
+    @tag :sqlite
+    test "blocks queries against tables matching bare string deny rules" do
+      {:error, msg} = Preflight.authorize(@sqlite_repo, "sqlite", "SELECT * FROM products", [])
+      assert msg =~ "blocked table"
+      assert msg =~ "products"
+
+      {:error, msg} = Preflight.authorize(@sqlite_repo, "sqlite", "SELECT * FROM order_items", [])
+      assert msg =~ "blocked table"
+      assert msg =~ "order_items"
+    end
+
+    @tag :sqlite
+    test "blocks JOIN queries including denied tables" do
+      sql = """
+        SELECT o.order_number, p.name
+        FROM orders o
+        JOIN order_items oi ON o.id = oi.order_id
+        JOIN products p ON oi.product_id = p.id
+      """
+
+      {:error, msg} = Preflight.authorize(@sqlite_repo, "sqlite", sql, [])
+      assert msg =~ "blocked table"
+      assert msg =~ "products"
+      assert msg =~ "order_items"
+    end
+
+    @tag :sqlite
+    test "allows queries against tables not in deny list" do
+      assert :ok = Preflight.authorize(@sqlite_repo, "sqlite", "SELECT * FROM orders", [])
     end
   end
 end
