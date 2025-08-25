@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.3.2] - 2025-08-25
+
+- Change `statement` col from varchar to text
+
 ## [0.3.1] - 2025-08-25
 
 - Specify `repo` option in `Lotus.run_sql`
