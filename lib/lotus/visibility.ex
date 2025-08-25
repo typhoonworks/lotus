@@ -3,6 +3,13 @@ defmodule Lotus.Visibility do
   Table visibility filtering for Lotus.
 
   Built-ins deny common metadata/system relations; user config can add allow/deny.
+
+  ## Rule Formats
+
+  - `{"schema", "table"}` - Matches specific schema.table
+  - `"table"` - Matches table name in any schema (convenience for blocking across all schemas)
+  - `{~r/pattern/, "table"}` - Matches table in schemas matching the regex
+  - `{"schema", ~r/pattern/}` - Matches tables matching regex in specific schema
   """
 
   alias Lotus.Config
@@ -87,7 +94,9 @@ defmodule Lotus.Visibility do
         pattern_match?(schema_pat, s) and pattern_match?(table_pat, t)
 
       tbl when is_binary(tbl) ->
-        s in [nil, ""] and pattern_match?(tbl, t)
+        # Bare string matches table name regardless of schema
+        # This makes "api_keys" match both {nil, "api_keys"} and {"public", "api_keys"}
+        pattern_match?(tbl, t)
 
       other ->
         other == {s, t}

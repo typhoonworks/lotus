@@ -31,6 +31,7 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 - [ ] Query result caching mechanisms
 - [ ] Export functionality for query results (CSV, JSON)
 - [ ] MySQL support
+- [ ] Column-level visibility and access control
 - [x] Multi-database support (PostgreSQL, SQLite)
 - [x] Table visibility and access controls
 - [x] Query templates with parameter substitution using `{{var}}` placeholders

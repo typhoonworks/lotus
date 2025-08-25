@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
+- Improved table visibility rules: bare string patterns (e.g., `"api_keys"`) now match table names across all schemas in PostgreSQL, not just nil/empty schemas. This provides a more intuitive API where `"api_keys"` blocks the table in any schema, while `{"public", "api_keys"}` blocks it only in the public schema.
+
 ## [0.3.2] - 2025-08-25
 
 - Change `statement` col from varchar to text
