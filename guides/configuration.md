@@ -363,6 +363,8 @@ config :my_app, MyApp.Repo,
 
 ### SQLite Configuration
 
+**Security Note**: SQLite 3.8.0+ (2013) provides enhanced security through `PRAGMA query_only`, which prevents write operations at the database engine level.
+
 ```elixir
 config :my_app, MyApp.SqliteRepo,
   database: Path.expand("../my_app.db", Path.dirname(__ENV__.file)),

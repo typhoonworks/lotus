@@ -3,6 +3,7 @@ defmodule Lotus.RunnerTest do
 
   alias Lotus.Runner
   alias Lotus.Test.Repo
+  alias Lotus.Test.SqliteRepo
   alias Lotus.Fixtures
 
   setup do
@@ -552,6 +553,258 @@ defmodule Lotus.RunnerTest do
       assert_raise ArgumentError, ~r/Missing required variable/, fn ->
         Query.to_sql_params(q)
       end
+    end
+  end
+
+  describe "CTE with destructive operations - PostgreSQL" do
+    test "rejects CTE with DELETE operation" do
+      sql = """
+      WITH deleted_rows AS (
+        DELETE FROM test_users WHERE active = false
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM deleted_rows
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects CTE with INSERT operation" do
+      sql = """
+      WITH inserted_users AS (
+        INSERT INTO test_users (name, email, active)
+        VALUES ('test', 'test@example.com', true)
+        RETURNING *
+      )
+      SELECT * FROM inserted_users
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects CTE with UPDATE operation" do
+      sql = """
+      WITH updated_users AS (
+        UPDATE test_users SET active = true
+        WHERE active = false
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM updated_users
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects nested CTE with destructive operation" do
+      sql = """
+      WITH active_users AS (
+        SELECT * FROM test_users WHERE active = true
+      ),
+      deleted_inactive AS (
+        DELETE FROM test_users
+        WHERE id NOT IN (SELECT id FROM active_users)
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM deleted_inactive
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects CTE with DROP operation" do
+      sql = """
+      WITH temp_data AS (
+        SELECT * FROM test_users
+      ),
+      drop_result AS (
+        DROP TABLE test_posts
+      )
+      SELECT * FROM temp_data
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects CTE with CREATE operation" do
+      sql = """
+      WITH new_table AS (
+        CREATE TABLE temp_users AS SELECT * FROM test_users
+      )
+      SELECT 1
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "rejects CTE with TRUNCATE operation" do
+      sql = """
+      WITH truncated AS (
+        TRUNCATE test_users
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM truncated
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "allows safe CTE with only SELECT operations" do
+      sql = """
+      WITH active_users AS (
+        SELECT * FROM test_users WHERE active = true
+      ),
+      user_count AS (
+        SELECT COUNT(*) as total FROM active_users
+      )
+      SELECT * FROM user_count
+      """
+
+      result = Runner.run_sql(Repo, sql)
+      assert {:ok, %{columns: ["total"], rows: _}} = result
+    end
+  end
+
+  describe "CTE with destructive operations - SQLite" do
+    @tag :sqlite
+    test "rejects CTE with DELETE operation" do
+      sql = """
+      WITH deleted_rows AS (
+        DELETE FROM test_users WHERE active = 0
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM deleted_rows
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "rejects CTE with INSERT operation" do
+      sql = """
+      WITH inserted_users AS (
+        INSERT INTO test_users (name, email, active)
+        VALUES ('test', 'test@example.com', 1)
+        RETURNING *
+      )
+      SELECT * FROM inserted_users
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "rejects CTE with UPDATE operation" do
+      sql = """
+      WITH updated_users AS (
+        UPDATE test_users SET active = 1
+        WHERE active = 0
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM updated_users
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "rejects nested CTE with destructive operation" do
+      sql = """
+      WITH active_users AS (
+        SELECT * FROM test_users WHERE active = 1
+      ),
+      deleted_inactive AS (
+        DELETE FROM test_users
+        WHERE id NOT IN (SELECT id FROM active_users)
+        RETURNING *
+      )
+      SELECT COUNT(*) FROM deleted_inactive
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "rejects CTE with DROP operation" do
+      sql = """
+      WITH temp_data AS (
+        SELECT * FROM test_users
+      ),
+      drop_result AS (
+        DROP TABLE test_posts
+      )
+      SELECT * FROM temp_data
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "rejects CTE with CREATE operation" do
+      sql = """
+      WITH new_table AS (
+        CREATE TABLE temp_users AS SELECT * FROM test_users
+      )
+      SELECT 1
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    @tag :sqlite
+    test "allows safe CTE with only SELECT operations" do
+      sql = """
+      WITH active_users AS (
+        SELECT * FROM test_users WHERE active = 1
+      ),
+      user_count AS (
+        SELECT COUNT(*) as total FROM active_users
+      )
+      SELECT * FROM user_count
+      """
+
+      result = Runner.run_sql(SqliteRepo, sql)
+      assert {:ok, %{columns: ["total"], rows: _}} = result
+    end
+  end
+
+  describe "Database-level protection tests" do
+    test "PostgreSQL transaction_read_only prevents writes even if regex bypassed" do
+      Repo.transaction(fn ->
+        Repo.query!("SET LOCAL transaction_read_only = on")
+
+        {:error, error} =
+          Repo.query("INSERT INTO test_users (name, email) VALUES ('test', 'test@example.com')")
+
+        assert %Postgrex.Error{} = error
+        assert error.postgres.code == :read_only_sql_transaction
+        assert error.postgres.message =~ "read-only"
+      end)
+    end
+
+    @tag :sqlite
+    test "SQLite PRAGMA query_only prevents writes (if supported)" do
+      SqliteRepo.query!("PRAGMA query_only = ON")
+
+      assert_raise Exqlite.Error, fn ->
+        SqliteRepo.query!(
+          "INSERT INTO test_users (name, email) VALUES ('test', 'test@example.com')"
+        )
+      end
+
+      SqliteRepo.query!("PRAGMA query_only = OFF")
     end
   end
 end

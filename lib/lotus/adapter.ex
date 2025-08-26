@@ -5,15 +5,34 @@ defmodule Lotus.Adapter do
   Handles differences between database adapters like PostgreSQL, SQLite, etc.
   """
 
+  require Logger
+
   @doc "Sets read-only mode for the given repository's adapter."
   @spec set_read_only(Ecto.Repo.t()) :: :ok | no_return()
   def set_read_only(repo) do
     case repo.__adapter__() do
       Ecto.Adapters.Postgres ->
         repo.query!("SET LOCAL transaction_read_only = on")
+        :ok
 
       Ecto.Adapters.SQLite3 ->
-        :ok
+        try do
+          repo.query!("PRAGMA query_only = ON")
+          :ok
+        rescue
+          error in [Exqlite.Error] ->
+            if error.message =~ "no such pragma" or error.message =~ "unknown pragma" do
+              Logger.warning("""
+              SQLite version does not support PRAGMA query_only.
+              Consider opening the connection in read-only mode instead
+              (database=...&mode=ro or database=...&immutable=1).
+              """)
+
+              :ok
+            else
+              reraise error, __STACKTRACE__
+            end
+        end
 
       _ ->
         :ok
@@ -26,6 +45,7 @@ defmodule Lotus.Adapter do
     case repo.__adapter__() do
       Ecto.Adapters.Postgres ->
         repo.query!("SET LOCAL statement_timeout = #{timeout_ms}")
+        :ok
 
       Ecto.Adapters.SQLite3 ->
         :ok
@@ -41,6 +61,7 @@ defmodule Lotus.Adapter do
     case repo.__adapter__() do
       Ecto.Adapters.Postgres ->
         repo.query!("SET LOCAL search_path = #{search_path}")
+        :ok
 
       _ ->
         :ok

@@ -7,6 +7,7 @@ This guide walks you through setting up Lotus in your Elixir application.
 - Elixir 1.16 or later
 - OTP 25 or later
 - An Ecto-based application with PostgreSQL or SQLite
+  - **SQLite**: Version 3.8.0+ recommended for database-level read-only protection
 
 ## Step 1: Add Dependency
 
@@ -112,6 +113,15 @@ config :my_app, MyApp.SqliteRepo,
   adapter: Ecto.Adapters.SQLite3,
   database: Path.expand("../my_app.db", Path.dirname(__ENV__.file))
 ```
+
+#### SQLite Security Features
+
+Lotus provides database-level read-only protection for SQLite:
+
+- **SQLite 3.8.0+** (2013): Supports `PRAGMA query_only` for database-level write prevention
+- **Older versions**: Fall back to regex-based query validation (still secure)
+
+The `PRAGMA query_only` feature provides an additional security layer by preventing INSERT, UPDATE, DELETE, CREATE, DROP, and other write operations at the database engine level, even if they somehow bypassed Lotus's regex validation.
 
 ### Mixed Database Environments
 

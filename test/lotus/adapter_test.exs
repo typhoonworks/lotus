@@ -6,21 +6,20 @@ defmodule Lotus.AdapterTest do
   describe "set_read_only/1" do
     @tag :postgres
     test "sets PostgreSQL transaction to read-only" do
-      result = Adapter.set_read_only(Lotus.Test.Repo)
-      assert %Postgrex.Result{command: :set} = result
+      assert :ok = Adapter.set_read_only(Lotus.Test.Repo)
     end
 
     @tag :sqlite
-    test "is a no-op for SQLite" do
+    test "sets PRAGMA query_only for SQLite" do
       assert :ok = Adapter.set_read_only(Lotus.Test.SqliteRepo)
+      Lotus.Test.SqliteRepo.query!("PRAGMA query_only = OFF")
     end
   end
 
   describe "set_statement_timeout/2" do
     @tag :postgres
     test "sets statement timeout for PostgreSQL" do
-      result = Adapter.set_statement_timeout(Lotus.Test.Repo, 5000)
-      assert %Postgrex.Result{command: :set} = result
+      assert :ok = Adapter.set_statement_timeout(Lotus.Test.Repo, 5000)
     end
 
     @tag :sqlite
@@ -32,8 +31,7 @@ defmodule Lotus.AdapterTest do
   describe "set_search_path/2" do
     @tag :postgres
     test "sets search_path for PostgreSQL" do
-      result = Adapter.set_search_path(Lotus.Test.Repo, "public")
-      assert %Postgrex.Result{command: :set} = result
+      assert :ok = Adapter.set_search_path(Lotus.Test.Repo, "public")
     end
 
     @tag :sqlite
