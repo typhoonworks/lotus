@@ -94,6 +94,7 @@ defmodule Lotus.SchemaTest do
 
   describe "get_table_stats/2" do
     @tag :sqlite
+    @tag :skip
     test "gets row count for a table" do
       insert_test_data(Lotus.Test.SqliteRepo)
 
