@@ -12,7 +12,7 @@ defmodule Lotus.Migrations.SQLite do
       add(:name, :string, null: false)
       add(:description, :text)
       add(:statement, :text, null: false)
-      add(:var_defaults, :map, null: false)
+      add(:variables, :map, null: false, default: "[]")
       add(:data_repo, :string)
       add(:search_path, :string)
       timestamps(type: :utc_datetime_usec)

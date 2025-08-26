@@ -306,8 +306,10 @@ Here are common patterns for using `search_path`:
 # Query template that works across tenant schemas
 {:ok, tenant_query} = Lotus.create_query(%{
   name: "Tenant User Count",
-  statement: "SELECT COUNT(*) FROM users WHERE active = {is_active}",
-  var_defaults: %{"is_active" => true},
+  statement: "SELECT COUNT(*) FROM users WHERE active = {{is_active}}",
+  variables: [
+    %{name: "is_active", type: :text, label: "Is Active", default: "true"}
+  ],
   data_repo: "postgres"
 })
 
@@ -419,17 +421,17 @@ Lotus implements `search_path` safely:
 
 ## Working with Smart Variables
 
-Lotus supports smart variable substitution using `{var}` placeholders for safety and reusability:
+Lotus supports smart variable substitution using `{{var}}` placeholders for safety and reusability:
 
 ```elixir
 # Create a query with smart variables
 {:ok, query} = Lotus.create_query(%{
   name: "Users by Status",
-  statement: "SELECT id, name, email FROM users WHERE status = {status} AND created_at > {created_date}",
-  var_defaults: %{
-    "status" => "active",
-    "created_date" => ~D[2024-01-01]
-  }
+  statement: "SELECT id, name, email FROM users WHERE status = {{status}} AND created_at > {{created_date}}",
+  variables: [
+    %{name: "status", type: :text, label: "User Status", default: "active"},
+    %{name: "created_date", type: :date, label: "Created After", default: "2024-01-01"}
+  ]
 })
 
 # Run with the default variables
@@ -438,14 +440,72 @@ Lotus supports smart variable substitution using `{var}` placeholders for safety
 # Override variables at runtime
 {:ok, result} = Lotus.run_query(query, vars: %{
   "status" => "pending",
-  "created_date" => ~D[2024-06-01]
+  "created_date" => "2024-06-01"
 })
 ```
+
+### Variable Types and Widgets
+
+Variables can be configured with different types and UI widgets to create better user interfaces:
+
+```elixir
+# Example with different variable types and widgets
+attrs = %{
+  name: "Active Users",
+  statement: "SELECT * FROM users WHERE org_id = {{org_id}} AND created_at >= {{since}} AND status = {{status}}",
+  variables: [
+    # Number input with default
+    %{name: "org_id", type: :number, label: "Organization ID", default: "1"},
+    
+    # Date input
+    %{name: "since", type: :date, label: "Created Since"},
+    
+    # Static dropdown with predefined options
+    %{
+      name: "status", 
+      type: :text, 
+      widget: :select, 
+      label: "Status",
+      static_options: ["active", "inactive", "pending"]
+    }
+  ]
+}
+
+q = Lotus.Storage.Query.new(attrs) |> Repo.insert!()
+
+# Use to_sql_params for parameterized queries
+Lotus.Storage.Query.to_sql_params(q, %{"since" => "2024-01-01"})
+# => {"SELECT * FROM users WHERE org_id = $1 AND created_at >= $2 AND status = $3", [1, ~D[2024-01-01], "active"]}
+```
+
+### Dynamic Dropdown Options
+
+For select widgets, you can populate options dynamically using `options_query`:
+
+```elixir
+# Dynamic dropdown populated from database
+%{
+  name: "org_id",
+  type: :number,
+  widget: :select,
+  label: "Organization",
+  options_query: "SELECT id, name FROM orgs ORDER BY name"
+}
+```
+
+The `options_query` should return two columns:
+- First column: the value to be used in the query
+- Second column: the label to display to users
 
 ### Variable Features
 
 - **Safe substitution**: Variables are converted to database-specific placeholders (`$1, $2` for PostgreSQL, `?` for SQLite)
-- **Default values**: Use `var_defaults` to provide fallback values
+- **Structured variables**: Define variables with type, label, and default values for better UI integration
+- **Type support**: Supports text, number, and date types
+- **Widget controls**: Specify input or select widgets for UI rendering
+- **Static options**: Use `static_options` for predefined dropdown choices
+- **Dynamic options**: Use `options_query` to populate dropdowns from database queries
+- **Default values**: Provide fallback values in variable definitions
 - **Runtime override**: Pass `vars:` option to override defaults
 - **Multiple occurrences**: The same variable can appear multiple times and will be bound correctly
 - **Type safety**: Variables are passed as parameters, preventing SQL injection

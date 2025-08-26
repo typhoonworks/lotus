@@ -3,14 +3,27 @@ defmodule Lotus.Storage.Query do
   Represents a saved Lotus query.
 
   Queries can be stored, updated, listed, and executed by the host app.
-  Supports `{{var}}` placeholders in the SQL `statement`, which can be
-  bound at runtime with `vars:` or defaulted via `var_defaults`.
+  Supports `{{var}}` placeholders in the SQL `statement`, which are
+  bound at runtime using configured variables.
   """
 
   use Ecto.Schema
   import Ecto.Changeset
 
   alias Lotus.Config
+  alias Lotus.Storage.QueryVariable
+
+  @type t :: %__MODULE__{
+          id: term(),
+          name: String.t(),
+          description: String.t() | nil,
+          statement: String.t(),
+          variables: [QueryVariable.t()],
+          data_repo: String.t() | nil,
+          search_path: String.t() | nil,
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
 
   @primary_key {:id, :id, autogenerate: true}
   @foreign_key_type :id
@@ -23,62 +36,44 @@ defmodule Lotus.Storage.Query do
              :name,
              :description,
              :statement,
-             :var_defaults,
+             :variables,
              :data_repo,
              :search_path,
              :inserted_at,
              :updated_at
            ]}
 
-  @permitted ~w(name description statement var_defaults data_repo search_path)a
-  @required ~w(name statement)a
-
-  @type t :: %__MODULE__{
-          id: term(),
-          name: String.t(),
-          description: String.t() | nil,
-          statement: String.t(),
-          var_defaults: map(),
-          data_repo: String.t() | nil,
-          search_path: String.t() | nil,
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
-        }
-
   schema "lotus_queries" do
     field(:name, :string)
     field(:description, :string)
     field(:statement, :string)
-    field(:var_defaults, :map, default: %{})
     field(:data_repo, :string)
     field(:search_path, :string)
+
+    embeds_many(:variables, QueryVariable, on_replace: :delete)
 
     timestamps(type: :utc_datetime_usec)
   end
 
-  @doc "Build a new Query changeset."
-  @spec new(map()) :: Ecto.Changeset.t()
-  def new(attrs) when is_map(attrs),
-    do: %__MODULE__{} |> changeset(attrs)
+  @required ~w(name statement)a
+  @permitted ~w(name description statement data_repo search_path)a
 
-  @doc "Update an existing Query changeset."
-  @spec update(t(), map()) :: Ecto.Changeset.t()
-  def update(%__MODULE__{} = query, attrs) when is_map(attrs),
-    do: changeset(query, attrs)
+  def new(attrs), do: changeset(%__MODULE__{}, attrs)
+  def update(query, attrs), do: changeset(query, attrs)
 
-  @doc """
-  Convert a query struct and variable map into a safe `{sql, params}` tuple.
+  def changeset(query, attrs) do
+    query
+    |> cast(attrs, @permitted)
+    |> cast_embed(:variables, with: &QueryVariable.changeset/2)
+    |> validate_required(@required)
+    |> validate_length(:name, min: 1, max: 255)
+    |> validate_statement()
+    |> validate_data_repo()
+    |> validate_search_path()
+    |> maybe_add_unique_constraint()
+  end
 
-  Replaces `{{var}}` placeholders in the `statement` with the correct placeholder
-  syntax for the underlying database adapter (e.g. `$1, $2, ...` for Postgres,
-  `?` for SQLite, etc.).
-
-  The params list is built from the provided `vars` map, falling back to
-  `var_defaults` stored with the query. Raises if a required variable has no
-  value or default.
-  """
-  @spec to_sql_params(t(), map()) :: {String.t(), list(any())}
-  def to_sql_params(%__MODULE__{statement: sql, var_defaults: defaults} = q, vars \\ %{}) do
+  def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
     regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
     vars_in_order =
@@ -87,41 +82,34 @@ defmodule Lotus.Storage.Query do
 
     adapter = Lotus.Adapter.param_style(q.data_repo)
 
-    Enum.reduce(
-      Enum.with_index(vars_in_order, 1),
-      {sql, []},
-      fn {var, idx}, {acc_sql, acc_params} ->
-        value =
-          Map.get(vars, var) ||
-            Map.get(defaults || %{}, var) ||
-            raise ArgumentError, "Missing required variable: #{var}"
+    Enum.reduce(Enum.with_index(vars_in_order, 1), {sql, []}, fn {var, idx},
+                                                                 {acc_sql, acc_params} ->
+      meta = Enum.find(vars, %{}, &(&1.name == var))
 
-        placeholder =
-          case adapter do
-            :postgres -> "$#{idx}"
-            :sqlite -> "?"
-            _ -> "?"
-          end
+      value =
+        Map.get(supplied_vars, var) ||
+          Map.get(meta, :default) ||
+          raise ArgumentError, "Missing required variable: #{var}"
 
-        {
-          String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
-          acc_params ++ [value]
-        }
-      end
-    )
+      placeholder =
+        case adapter do
+          :postgres -> "$#{idx}"
+          :sqlite -> "?"
+          _ -> "?"
+        end
+
+      type = Map.get(meta, :type)
+
+      {
+        String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
+        acc_params ++ [cast_value(value, type)]
+      }
+    end)
   end
 
-  defp changeset(query, attrs) do
-    query
-    |> cast(attrs, @permitted)
-    |> validate_required(@required)
-    |> validate_length(:name, min: 1, max: 255)
-    |> validate_statement()
-    |> validate_var_defaults()
-    |> validate_data_repo()
-    |> validate_search_path()
-    |> maybe_add_unique_constraint()
-  end
+  defp cast_value(value, :number) when is_binary(value), do: String.to_integer(value)
+  defp cast_value(value, :date) when is_binary(value), do: Date.from_iso8601!(value)
+  defp cast_value(value, _), do: value
 
   defp validate_statement(changeset) do
     case get_field(changeset, :statement) do
@@ -137,22 +125,6 @@ defmodule Lotus.Storage.Query do
 
       _ ->
         add_error(changeset, :statement, "must be a string")
-    end
-  end
-
-  defp validate_var_defaults(changeset) do
-    case get_field(changeset, :var_defaults) do
-      nil -> changeset
-      m when is_map(m) -> changeset
-      _ -> add_error(changeset, :var_defaults, "must be a map")
-    end
-  end
-
-  defp maybe_add_unique_constraint(changeset) do
-    if Config.unique_names?() do
-      unique_constraint(changeset, :name, name: "lotus_queries_name_index")
-    else
-      changeset
     end
   end
 
@@ -206,5 +178,13 @@ defmodule Lotus.Storage.Query do
       schema = String.trim(schema)
       Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, schema)
     end)
+  end
+
+  defp maybe_add_unique_constraint(changeset) do
+    if Config.unique_names?() do
+      unique_constraint(changeset, :name, name: "lotus_queries_name_index")
+    else
+      changeset
+    end
   end
 end

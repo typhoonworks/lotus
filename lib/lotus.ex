@@ -18,11 +18,13 @@ defmodule Lotus do
 
   ## Usage
 
-      # Create and save a query with smart variables
+      # Create and save a query with variables
       {:ok, query} = Lotus.create_query(%{
         name: "Active Users",
-        statement: "SELECT * FROM users WHERE active = {is_active}",
-        var_defaults: %{"is_active" => true},
+        statement: "SELECT * FROM users WHERE active = {{is_active}}",
+        variables: [
+          %{name: "is_active", type: :text, label: "Is Active", default: "true"}
+        ],
         search_path: "reporting, public"
       })
 

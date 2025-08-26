@@ -71,14 +71,14 @@ defmodule LotusTest do
         name: "New Query",
         description: "A test query",
         statement: "SELECT * FROM test_users",
-        var_defaults: %{}
+        variables: []
       }
 
       assert {:ok, query} = Lotus.create_query(attrs)
       assert query.name == "New Query"
       assert query.description == "A test query"
       assert query.statement == "SELECT * FROM test_users"
-      assert query.var_defaults == %{}
+      assert query.variables == []
       assert query.data_repo == nil
     end
 
@@ -146,7 +146,9 @@ defmodule LotusTest do
         query_fixture(%{
           name: "Users by Age Query",
           statement: "SELECT name, age FROM test_users WHERE age > {{min_age}} ORDER BY age DESC",
-          var_defaults: %{"min_age" => 40}
+          variables: [
+            %{name: "min_age", type: :number, default: "40"}
+          ]
         })
 
       assert {:ok, result} = Lotus.run_query(query)
@@ -162,7 +164,9 @@ defmodule LotusTest do
         query_fixture(%{
           name: "Override Vars Query",
           statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
-          var_defaults: %{"min_age" => 20}
+          variables: [
+            %{name: "min_age", type: :number, default: "20"}
+          ]
         })
 
       # Override min_age = 50 at runtime
