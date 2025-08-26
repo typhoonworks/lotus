@@ -10,8 +10,9 @@ defmodule Lotus.AdapterTest do
     end
 
     @tag :sqlite
-    test "is a no-op for SQLite" do
+    test "sets PRAGMA query_only for SQLite" do
       assert :ok = Adapter.set_read_only(Lotus.Test.SqliteRepo)
+      Lotus.Test.SqliteRepo.query!("PRAGMA query_only = OFF")
     end
   end
 
