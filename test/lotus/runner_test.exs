@@ -537,7 +537,9 @@ defmodule Lotus.RunnerTest do
     test "expands vars into params" do
       q = %Query{
         statement: "SELECT * FROM test_users WHERE age > {{min_age}} AND active = {{is_active}}",
-        var_defaults: %{"min_age" => 40}
+        variables: [
+          %{name: "min_age", type: :number, default: "40"}
+        ]
       }
 
       {sql, params} = Query.to_sql_params(q, %{"is_active" => true})
@@ -548,7 +550,7 @@ defmodule Lotus.RunnerTest do
     end
 
     test "raises when required var missing" do
-      q = %Query{statement: "SELECT * FROM test_users WHERE age > {{min_age}}", var_defaults: %{}}
+      q = %Query{statement: "SELECT * FROM test_users WHERE age > {{min_age}}", variables: []}
 
       assert_raise ArgumentError, ~r/Missing required variable/, fn ->
         Query.to_sql_params(q)

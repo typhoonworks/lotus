@@ -126,7 +126,7 @@ defmodule Lotus.Storage.QueryTest do
     test "to_sql_params with PostgreSQL adapter uses $N placeholders" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
-        var_defaults: %{},
+        variables: [],
         data_repo: "postgres"
       }
 
@@ -139,7 +139,7 @@ defmodule Lotus.Storage.QueryTest do
     test "to_sql_params with SQLite adapter uses ? placeholders" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
-        var_defaults: %{},
+        variables: [],
         data_repo: "sqlite"
       }
 
@@ -152,7 +152,7 @@ defmodule Lotus.Storage.QueryTest do
     test "to_sql_params with nil data_repo defaults to PostgreSQL style" do
       q = %Query{
         statement: "SELECT * FROM users WHERE id = {{id}}",
-        var_defaults: %{},
+        variables: [],
         data_repo: nil
       }
 
@@ -162,10 +162,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [123]
     end
 
-    test "uses var_defaults when vars are not provided (PostgreSQL)" do
+    test "uses query variable defaults when supplied_vars are not provided (PostgreSQL)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
-        var_defaults: %{"min_age" => 40},
+        variables: [
+          %{name: "min_age", type: :number, default: "40"}
+        ],
         data_repo: "postgres"
       }
 
@@ -175,10 +177,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [40]
     end
 
-    test "uses var_defaults when vars are not provided (SQLite)" do
+    test "uses query variable defaults when supplied_vars are not provided (SQLite)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
-        var_defaults: %{"min_age" => 40},
+        variables: [
+          %{name: "min_age", type: :number, default: "40"}
+        ],
         data_repo: "sqlite"
       }
 
@@ -188,10 +192,10 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [40]
     end
 
-    test "raises if required var missing and no default" do
+    test "raises if required variable missing and there is no query variable default" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
-        var_defaults: %{}
+        variables: []
       }
 
       assert_raise ArgumentError, ~r/Missing required variable: min_age/, fn ->
@@ -202,7 +206,9 @@ defmodule Lotus.Storage.QueryTest do
     test "handles table names as parameters (PostgreSQL)" do
       q = %Query{
         statement: "SELECT * FROM {{table}}",
-        var_defaults: %{"table" => "test_users"},
+        variables: [
+          %{name: "table", type: :text, default: "test_users"}
+        ],
         data_repo: "postgres"
       }
 
@@ -214,7 +220,9 @@ defmodule Lotus.Storage.QueryTest do
     test "handles table names as parameters (SQLite)" do
       q = %Query{
         statement: "SELECT * FROM {{table}}",
-        var_defaults: %{"table" => "test_users"},
+        variables: [
+          %{name: "table", type: :text, default: "test_users"}
+        ],
         data_repo: "sqlite"
       }
 
@@ -223,10 +231,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["test_users"]
     end
 
-    test "ignores unused defaults" do
+    test "ignores unused query variables" do
       q = %Query{
         statement: "SELECT * FROM users",
-        var_defaults: %{"unused" => "value"}
+        variables: [
+          %{name: "unused", type: :text, default: "value"}
+        ]
       }
 
       {sql, params} = Query.to_sql_params(q, %{})
@@ -234,10 +244,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == []
     end
 
-    test "handles multiple occurrences of the same var (PostgreSQL)" do
+    test "handles multiple occurrences of the same variable (PostgreSQL)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}} OR nickname = {{name}}",
-        var_defaults: %{"name" => "Jack"},
+        variables: [
+          %{name: "name", type: :text, default: "Jack"}
+        ],
         data_repo: "postgres"
       }
 
@@ -247,10 +259,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["Jack", "Jack"]
     end
 
-    test "handles multiple occurrences of the same var (SQLite)" do
+    test "handles multiple occurrences of the same variable (SQLite)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}} OR nickname = {{name}}",
-        var_defaults: %{"name" => "Jack"},
+        variables: [
+          %{name: "name", type: :text, default: "Jack"}
+        ],
         data_repo: "sqlite"
       }
 
@@ -260,11 +274,14 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["Jack", "Jack"]
     end
 
-    test "handles complex query with multiple vars (PostgreSQL)" do
+    test "handles complex query with multiple variables (PostgreSQL)" do
       q = %Query{
         statement:
           "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
-        var_defaults: %{"table" => "users", "status" => "active"},
+        variables: [
+          %{name: "table", type: :text, default: "users"},
+          %{name: "status", type: :text, default: "active"}
+        ],
         data_repo: "postgres"
       }
 
@@ -274,11 +291,14 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["users", 18, 65, "active"]
     end
 
-    test "handles complex query with multiple vars (SQLite)" do
+    test "handles complex query with multiple variables (SQLite)" do
       q = %Query{
         statement:
           "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
-        var_defaults: %{"table" => "users", "status" => "active"},
+        variables: [
+          %{name: "table", type: :text, default: "users"},
+          %{name: "status", type: :text, default: "active"}
+        ],
         data_repo: "sqlite"
       }
 
@@ -288,10 +308,12 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["users", 18, 65, "active"]
     end
 
-    test "overrides defaults with provided vars" do
+    test "overrides query variable defaults with provided supplied_vars" do
       q = %Query{
         statement: "SELECT * FROM users WHERE status = {{status}}",
-        var_defaults: %{"status" => "inactive"},
+        variables: [
+          %{name: "status", type: :text, default: "inactive"}
+        ],
         data_repo: "postgres"
       }
 
@@ -304,7 +326,7 @@ defmodule Lotus.Storage.QueryTest do
     test "handles empty string values" do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}}",
-        var_defaults: %{},
+        variables: [],
         data_repo: "sqlite"
       }
 
@@ -317,7 +339,7 @@ defmodule Lotus.Storage.QueryTest do
     test "raises when nil value is provided" do
       q = %Query{
         statement: "SELECT * FROM users WHERE deleted_at IS {{deleted}}",
-        var_defaults: %{},
+        variables: [],
         data_repo: "postgres"
       }
 
@@ -329,7 +351,7 @@ defmodule Lotus.Storage.QueryTest do
     test "preserves var order in params list" do
       q = %Query{
         statement: "INSERT INTO users (name, age, email) VALUES ({{name}}, {{age}}, {{email}})",
-        var_defaults: %{},
+        variables: [],
         data_repo: "postgres"
       }
 
@@ -338,6 +360,357 @@ defmodule Lotus.Storage.QueryTest do
 
       assert sql == "INSERT INTO users (name, age, email) VALUES ($1, $2, $3)"
       assert params == ["John", 30, "john@example.com"]
+    end
+  end
+
+  describe "variables field" do
+    test "accepts valid variables" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users WHERE org_id = {{org_id}} AND status = {{status}}",
+        variables: [
+          %{name: "org_id", type: :number, label: "Organization ID", default: "1"},
+          %{name: "status", type: :text, label: "Status", default: "active"}
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      assert changeset.valid?
+      variables = get_field(changeset, :variables)
+      assert length(variables) == 2
+
+      org_var = Enum.find(variables, &(&1.name == "org_id"))
+      assert org_var.type == :number
+      assert org_var.label == "Organization ID"
+      assert org_var.default == "1"
+
+      status_var = Enum.find(variables, &(&1.name == "status"))
+      assert status_var.type == :text
+      assert status_var.label == "Status"
+      assert status_var.default == "active"
+    end
+
+    test "accepts variables with select widgets and static_options" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users WHERE status = {{status}}",
+        variables: [
+          %{
+            name: "status",
+            type: :text,
+            widget: :select,
+            label: "Status",
+            static_options: ["active", "inactive", "pending"]
+          }
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      assert changeset.valid?
+      variables = get_field(changeset, :variables)
+      status_var = hd(variables)
+      assert status_var.widget == :select
+      assert status_var.static_options == ["active", "inactive", "pending"]
+    end
+
+    test "accepts variables with select widgets and options_query" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users WHERE org_id = {{org_id}}",
+        variables: [
+          %{
+            name: "org_id",
+            type: :number,
+            widget: :select,
+            label: "Organization",
+            options_query: "SELECT id, name FROM orgs ORDER BY name"
+          }
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      assert changeset.valid?
+      variables = get_field(changeset, :variables)
+      org_var = hd(variables)
+      assert org_var.widget == :select
+      assert org_var.options_query == "SELECT id, name FROM orgs ORDER BY name"
+    end
+
+    test "rejects variables with invalid types" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users",
+        variables: [
+          %{name: "invalid", type: :invalid_type, label: "Invalid"}
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      refute changeset.valid?
+      assert %{variables: [%{type: ["is invalid"]}]} = errors_on(changeset)
+    end
+
+    test "rejects variables with invalid widgets" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users",
+        variables: [
+          %{name: "test", type: :text, widget: :invalid_widget, label: "Test"}
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      refute changeset.valid?
+      assert %{variables: [%{widget: ["is invalid"]}]} = errors_on(changeset)
+    end
+
+    test "rejects select widgets without options" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users WHERE status = {{status}}",
+        variables: [
+          %{
+            name: "status",
+            type: :text,
+            widget: :select,
+            label: "Status"
+          }
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      refute changeset.valid?
+
+      assert %{
+               variables: [
+                 %{widget: ["select must define either static_options or options_query"]}
+               ]
+             } = errors_on(changeset)
+    end
+
+    test "sets default widget to input when not specified" do
+      attrs = %{
+        name: "Test Query",
+        statement: "SELECT * FROM users WHERE name = {{name}}",
+        variables: [
+          %{name: "name", type: :text, label: "Name"}
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      assert changeset.valid?
+      variables = get_field(changeset, :variables)
+      name_var = hd(variables)
+      assert name_var.widget == :input
+    end
+  end
+
+  describe "variable type casting" do
+    test "casts number type from string" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
+        variables: [
+          %{name: "min_age", type: :number, default: "30"}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert params == [30]
+    end
+
+    test "casts date type from string" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE created_at >= {{since}}",
+        variables: [
+          %{name: "since", type: :date, default: "2024-01-01"}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE created_at >= $1"
+      assert params == [~D[2024-01-01]]
+    end
+
+    test "handles text type without casting" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE status = {{status}}",
+        variables: [
+          %{name: "status", type: :text, default: "active"}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE status = $1"
+      assert params == ["active"]
+    end
+
+    test "casts runtime supplied values" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {{min_age}} AND created_at >= {{since}}",
+        variables: [
+          %{name: "min_age", type: :number},
+          %{name: "since", type: :date}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"min_age" => "25", "since" => "2024-06-01"})
+
+      assert sql == "SELECT * FROM users WHERE age > $1 AND created_at >= $2"
+      assert params == [25, ~D[2024-06-01]]
+    end
+
+    test "runtime values override defaults with casting" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
+        variables: [
+          %{name: "min_age", type: :number, default: "30"}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"min_age" => "45"})
+
+      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert params == [45]
+    end
+
+    test "handles variables without type metadata" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE name = {{name}}",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"name" => "John"})
+
+      assert sql == "SELECT * FROM users WHERE name = $1"
+      assert params == ["John"]
+    end
+  end
+
+  describe "comprehensive variable scenarios" do
+    test "complex query with mixed variable types and widgets" do
+      attrs = %{
+        name: "User Report",
+        statement: """
+        SELECT u.* FROM users u
+        WHERE u.org_id = {{org_id}}
+          AND u.created_at >= {{since_date}}
+          AND u.status = {{status}}
+          AND u.age > {{min_age}}
+        """,
+        variables: [
+          %{
+            name: "org_id",
+            type: :number,
+            widget: :select,
+            label: "Organization",
+            options_query: "SELECT id, name FROM orgs ORDER BY name"
+          },
+          %{
+            name: "since_date",
+            type: :date,
+            label: "Created Since",
+            default: "2024-01-01"
+          },
+          %{
+            name: "status",
+            type: :text,
+            widget: :select,
+            label: "Status",
+            static_options: ["active", "inactive", "pending"],
+            default: "active"
+          },
+          %{
+            name: "min_age",
+            type: :number,
+            label: "Minimum Age",
+            default: "18"
+          }
+        ]
+      }
+
+      changeset = Query.new(attrs)
+      assert changeset.valid?
+
+      # Test with the query struct
+      q = %Query{
+        statement: String.trim(attrs.statement),
+        variables: get_field(changeset, :variables),
+        data_repo: "postgres"
+      }
+
+      # org_id has no default, so it should raise an error when called with empty vars
+      assert_raise ArgumentError, ~r/Missing required variable: org_id/, fn ->
+        Query.to_sql_params(q, %{})
+      end
+
+      # Test with runtime values
+      {sql, params} =
+        Query.to_sql_params(q, %{
+          "org_id" => "5",
+          "since_date" => "2024-06-01",
+          "status" => "pending",
+          "min_age" => "25"
+        })
+
+      expected_sql =
+        "SELECT u.* FROM users u\nWHERE u.org_id = $1\n  AND u.created_at >= $2\n  AND u.status = $3\n  AND u.age > $4"
+
+      assert sql == expected_sql
+      assert params == [5, ~D[2024-06-01], "pending", 25]
+    end
+
+    test "handles validation errors in variable definitions" do
+      attrs = %{
+        name: "Invalid Query",
+        statement: "SELECT * FROM users",
+        variables: [
+          # Missing required name field
+          %{type: :text, label: "Test"},
+          # Missing required type field
+          %{name: "test2", label: "Test 2"},
+          # Select widget without options
+          %{name: "test3", type: :text, widget: :select, label: "Test 3"}
+        ]
+      }
+
+      changeset = Query.new(attrs)
+
+      refute changeset.valid?
+      errors = errors_on(changeset)
+
+      assert %{variables: variable_errors} = errors
+      assert length(variable_errors) == 3
+
+      # Check specific error patterns
+      assert Enum.any?(variable_errors, fn errors ->
+               Map.has_key?(errors, :name) and "can't be blank" in errors.name
+             end)
+
+      assert Enum.any?(variable_errors, fn errors ->
+               Map.has_key?(errors, :type) and "can't be blank" in errors.type
+             end)
+
+      assert Enum.any?(variable_errors, fn errors ->
+               Map.has_key?(errors, :widget) and
+                 "select must define either static_options or options_query" in errors.widget
+             end)
     end
   end
 end

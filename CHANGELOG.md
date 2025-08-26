@@ -2,9 +2,20 @@
 
 ## Unreleased
 
+## [0.4.0] - 2025-08-26
+
 ### Added
 - Database-level read-only protection for SQLite using `PRAGMA query_only` (SQLite 3.8.0+)
 - Comprehensive CTE (Common Table Expression) destructive operation tests for both PostgreSQL and SQLite
+
+### Changed
+- **BREAKING:** Replaced `var_defaults` field with structured `variables` field for enhanced UI integration
+- **BREAKING:** Changed variable placeholder syntax from `{var}` to `{{var}}` for better parsing
+- **BREAKING:** Database schema migration removes `var_defaults` column and adds `variables` column to `lotus_queries` table
+- Enhanced QueryVariable schema with type definitions (text, number, date), widget controls (input, select), labels, and option support
+- Added `static_options` field for predefined dropdown choices
+- Added `options_query` field for dynamic dropdown population from database queries
+- Added validation to ensure select widgets define either `static_options` or `options_query`
 
 ## [0.3.3] - 2025-08-25
 
