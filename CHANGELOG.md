@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+- Database-level read-only protection for SQLite using `PRAGMA query_only` (SQLite 3.8.0+)
+- Comprehensive CTE (Common Table Expression) destructive operation tests for both PostgreSQL and SQLite
+
 ## [0.3.3] - 2025-08-25
 
 ### Changed
