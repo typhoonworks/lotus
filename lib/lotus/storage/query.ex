@@ -13,6 +13,18 @@ defmodule Lotus.Storage.Query do
   alias Lotus.Config
   alias Lotus.Storage.QueryVariable
 
+  @type t :: %__MODULE__{
+          id: term(),
+          name: String.t(),
+          description: String.t() | nil,
+          statement: String.t(),
+          variables: [QueryVariable.t()],
+          data_repo: String.t() | nil,
+          search_path: String.t() | nil,
+          inserted_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+
   @primary_key {:id, :id, autogenerate: true}
   @foreign_key_type :id
 

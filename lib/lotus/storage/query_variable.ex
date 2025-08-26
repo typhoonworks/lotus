@@ -23,6 +23,16 @@ defmodule Lotus.Storage.QueryVariable do
   @available_types [:text, :number, :date]
   @available_widgets [:input, :select]
 
+  @type t :: %__MODULE__{
+          name: String.t(),
+          type: :text | :number | :date,
+          widget: :input | :select | nil,
+          label: String.t() | nil,
+          default: String.t() | nil,
+          static_options: [String.t()],
+          options_query: String.t() | nil
+        }
+
   @permitted ~w(name type widget label default static_options options_query)a
   @required ~w(name type)a
 
