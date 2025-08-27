@@ -10,10 +10,10 @@ config :lotus,
   },
   table_visibility: %{
     # Built-in rules automatically exclude:
-    # - schema_migrations, lotus_queries 
+    # - schema_migrations, lotus_queries
     # - pg_catalog, information_schema
     # - sqlite_* tables
-    # 
+    #
     # This config is just for additional custom rules if needed
     default: []
   }
@@ -45,16 +45,14 @@ config :lotus, Lotus.Test.SqliteRepo,
   stacktrace: true
 
 config :lotus, Lotus.Test.MysqlRepo,
-  username: "lotus",
-  password: "lotus",
-  hostname: "localhost",
-  port: 3307,
-  database: "lotus_mysql_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2,
   priv: "test/support/mysql",
   migration_source: "lotus_mysql_schema_migrations",
   show_sensitive_data_on_connection_error: true,
-  stacktrace: true
+  stacktrace: true,
+  url:
+    System.get_env("MYSQL_URL") ||
+      "mysql://lotus:lotus@localhost:3307/lotus_test#{System.get_env("MIX_TEST_PARTITION")}"
 
 config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo]

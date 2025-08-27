@@ -45,18 +45,15 @@ jobs:
 
       mysql:
         image: mysql:8.0
-        ports:
-          - 3307:3306
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: lotus_mysql_test
-          MYSQL_USER: lotus
-          MYSQL_PASSWORD: lotus
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
         options: >-
           --health-cmd="mysqladmin ping"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=3
+        ports:
+          - 3306/tcp
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +81,11 @@ jobs:
       - run: mix compile --warnings-as-errors
 
       - run: mix test.setup
+        env:
+          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix test
+        env:
+          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix dialyzer

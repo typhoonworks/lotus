@@ -140,7 +140,7 @@ mix test --cover
 
 The test suite uses separate databases:
 - PostgreSQL: `lotus_test` (with partitioning for parallel tests)
-- MySQL: `lotus_mysql_test` (via Docker Compose)
+- MySQL: `lotus_test` (via Docker Compose)
 - SQLite: `lotus_sqlite_test.db`
 
 ## Contributing
