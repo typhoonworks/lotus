@@ -53,6 +53,6 @@ config :lotus, Lotus.Test.MysqlRepo,
   stacktrace: true,
   url:
     System.get_env("MYSQL_URL") ||
-      "mysql://lotus:lotus@localhost:3307/lotus_test#{System.get_env("MIX_TEST_PARTITION")}"
+      "mysql://root:mysql@localhost:3307/lotus_test#{System.get_env("MIX_TEST_PARTITION")}"
 
 config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo]

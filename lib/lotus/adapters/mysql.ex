@@ -4,6 +4,8 @@ defmodule Lotus.Adapter.MySQL do
   @behaviour Lotus.Adapter
   require Logger
 
+  @myxql_error Module.concat([:MyXQL, :Error])
+
   @impl true
   def set_read_only(repo) do
     repo.query!("SET SESSION TRANSACTION READ ONLY")
@@ -21,7 +23,7 @@ defmodule Lotus.Adapter.MySQL do
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
-  def format_error(%MyXQL.Error{} = e) do
+  def format_error(%{__struct__: mod} = e) when mod == @myxql_error do
     case e do
       %{mysql: %{code: code, message: message}} when is_binary(message) ->
         "MySQL Error (#{code}): #{message}"
