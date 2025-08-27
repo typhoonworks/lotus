@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-08-26
+
 ### Added
 - Introduced `Lotus.Adapter` behaviour with dedicated implementations for PostgreSQL, SQLite, MySQL, and Default
 - Added MySQL support with full adapter implementation using `:myxql` dependency
