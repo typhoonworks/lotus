@@ -12,6 +12,7 @@ defmodule Lotus.AdapterTest do
     @tag :sqlite
     test "sets PRAGMA query_only for SQLite" do
       assert :ok = Adapter.set_read_only(Lotus.Test.SqliteRepo)
+      # reset it so other tests don't inherit read-only
       Lotus.Test.SqliteRepo.query!("PRAGMA query_only = OFF")
     end
   end
@@ -51,68 +52,52 @@ defmodule Lotus.AdapterTest do
   describe "format_error/1" do
     test "formats Postgrex syntax errors" do
       error = %Postgrex.Error{
-        postgres: %{
-          code: :syntax_error,
-          message: "syntax error at or near \"SELCT\""
-        }
+        postgres: %{code: :syntax_error, message: "syntax error at or near \"SELCT\""}
       }
 
-      assert Adapter.format_error(error) == "SQL syntax error: syntax error at or near \"SELCT\""
+      assert Adapter.format_error(error) ==
+               "SQL syntax error: syntax error at or near \"SELCT\""
     end
 
     test "formats Postgrex general SQL errors" do
       error = %Postgrex.Error{
-        postgres: %{
-          message: "relation \"nonexistent\" does not exist"
-        }
+        postgres: %{message: "relation \"nonexistent\" does not exist"}
       }
 
-      assert Adapter.format_error(error) == "SQL error: relation \"nonexistent\" does not exist"
+      assert Adapter.format_error(error) ==
+               "SQL error: relation \"nonexistent\" does not exist"
     end
 
     test "formats Postgrex errors with message field" do
-      error = %Postgrex.Error{
-        message: "connection timeout"
-      }
-
+      error = %Postgrex.Error{message: "connection timeout"}
       assert Adapter.format_error(error) == "SQL error: connection timeout"
     end
 
     test "formats Postgrex errors with exception message" do
       error = %Postgrex.Error{}
-      result = Adapter.format_error(error)
-      assert is_binary(result)
+      assert is_binary(Adapter.format_error(error))
     end
 
     test "formats Exqlite errors" do
-      error = %Exqlite.Error{
-        message: "no such table: users"
-      }
-
+      error = %Exqlite.Error{message: "no such table: users"}
       assert Adapter.format_error(error) == "SQLite Error: no such table: users"
     end
 
     test "formats DBConnection.EncodeError" do
-      error = %DBConnection.EncodeError{
-        message: "expected an integer, got \"not_a_number\""
-      }
-
-      assert Adapter.format_error(error) == "expected an integer, got \"not_a_number\""
+      error = %DBConnection.EncodeError{message: "expected int"}
+      assert Adapter.format_error(error) == "expected int"
     end
 
     test "formats ArgumentError" do
-      error = %ArgumentError{
-        message: "invalid argument"
-      }
-
+      error = %ArgumentError{message: "invalid argument"}
       assert Adapter.format_error(error) == "invalid argument"
     end
 
     test "returns binary messages as-is" do
-      assert Adapter.format_error("Already formatted message") == "Already formatted message"
+      assert Adapter.format_error("Already formatted") == "Already formatted"
     end
 
-    test "formats other errors with inspect" do
+    test "formats other terms with inspect" do
       assert Adapter.format_error(:some_atom) == "Database Error: :some_atom"
       assert Adapter.format_error(123) == "Database Error: 123"
       assert Adapter.format_error({:error, "test"}) == "Database Error: {:error, \"test\"}"
@@ -124,31 +109,21 @@ defmodule Lotus.AdapterTest do
     end
   end
 
-  describe "param_style/1" do
-    test "returns :postgres for nil" do
-      assert Adapter.param_style(nil) == :postgres
+  describe "param_placeholder/4" do
+    @tag :postgres
+    test "returns postgres placeholders with $N" do
+      assert Adapter.param_placeholder(Lotus.Test.Repo, 1, "id", :integer) == "$1"
+      assert Adapter.param_placeholder(Lotus.Test.Repo, 2, "id", :integer) == "$2"
     end
 
-    test "returns :postgres for PostgreSQL repo name" do
-      assert Adapter.param_style("postgres") == :postgres
+    @tag :sqlite
+    test "returns sqlite placeholders with ?" do
+      assert Adapter.param_placeholder(Lotus.Test.SqliteRepo, 1, "id", :integer) == "?"
+      assert Adapter.param_placeholder(Lotus.Test.SqliteRepo, 2, "id", :integer) == "?"
     end
 
-    test "returns :sqlite for SQLite repo name" do
-      assert Adapter.param_style("sqlite") == :sqlite
-    end
-
-    test "returns :postgres for PostgreSQL repo module" do
-      assert Adapter.param_style(Lotus.Test.Repo) == :postgres
-    end
-
-    test "returns :sqlite for SQLite repo module" do
-      assert Adapter.param_style(Lotus.Test.SqliteRepo) == :sqlite
-    end
-
-    test "raises for invalid repo name" do
-      assert_raise ArgumentError, ~r/Data repo .* not configured/, fn ->
-        Adapter.param_style("nonexistent_repo")
-      end
+    test "defaults to Postgres when repo is nil" do
+      assert Adapter.param_placeholder(nil, 1, "id", :integer) == "$1"
     end
   end
 end

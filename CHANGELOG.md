@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+### Added
+- Introduced `Lotus.Adapter` behaviour with dedicated implementations for PostgreSQL, SQLite, and Default
+- Added `param_placeholder/3` callback to adapter behaviour for generating database-specific SQL parameter placeholders
+- Added `handled_errors/0` callback to allow adapters to declare which exceptions they format
+
+### Changed
+- **BREAKING:** Removed `param_style/1` API in favor of `param_placeholder/4` facade that delegates to adapters
+- Refactored error formatting to delegate based on `handled_errors/0`, ensuring cleaner and more extensible error handling
+- Consolidated adapter tests into a single facade-level `Lotus.AdapterTest` covering all supported databasesd
 
 ## [0.4.0] - 2025-08-26
 

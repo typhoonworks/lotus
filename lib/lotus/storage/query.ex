@@ -80,8 +80,6 @@ defmodule Lotus.Storage.Query do
       Regex.scan(regex, sql)
       |> Enum.map(fn [_, var] -> var end)
 
-    adapter = Lotus.Adapter.param_style(q.data_repo)
-
     Enum.reduce(Enum.with_index(vars_in_order, 1), {sql, []}, fn {var, idx},
                                                                  {acc_sql, acc_params} ->
       meta = Enum.find(vars, %{}, &(&1.name == var))
@@ -91,14 +89,8 @@ defmodule Lotus.Storage.Query do
           Map.get(meta, :default) ||
           raise ArgumentError, "Missing required variable: #{var}"
 
-      placeholder =
-        case adapter do
-          :postgres -> "$#{idx}"
-          :sqlite -> "?"
-          _ -> "?"
-        end
-
       type = Map.get(meta, :type)
+      placeholder = Lotus.Adapter.param_placeholder(q.data_repo, idx, var, type)
 
       {
         String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
