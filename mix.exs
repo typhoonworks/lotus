@@ -2,7 +2,7 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.4.0"
+  @version "0.5.0"
 
   def project do
     [
@@ -42,7 +42,7 @@ defmodule Lotus.MixProject do
       {:ecto, "~> 3.10"},
       {:ecto_sql, "~> 3.10"},
       {:postgrex, "~> 0.20", optional: true},
-      # {:myxql, "~> 0.7", optional: true},ie
+      {:myxql, "~> 0.8", optional: true},
       {:ecto_sqlite3, "~> 0.21", optional: true},
       {:nimble_options, "~> 1.0"},
       {:jason, "~> 1.4"},
@@ -75,7 +75,7 @@ defmodule Lotus.MixProject do
 
   defp dialyzer do
     [
-      plt_add_apps: [:mix, :ex_unit, :ecto, :ecto_sql, :postgrex],
+      plt_add_apps: [:mix, :ex_unit, :ecto, :ecto_sql, :postgrex, :myxql],
       plt_core_path: "_build/#{Mix.env()}",
       flags: [:error_handling, :missing_return, :underspecs],
       ignore_warnings: ".dialyzer_ignore.exs"

@@ -152,7 +152,7 @@ defmodule Lotus.StorageTest do
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
       assert %{data_repo: [error_msg]} = errors_on(changeset)
-      assert error_msg =~ "must be one of: postgres, sqlite"
+      assert error_msg =~ "must be one of: mysql, postgres, sqlite"
     end
 
     test "returns error with invalid attributes" do

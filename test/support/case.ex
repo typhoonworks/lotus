@@ -30,6 +30,14 @@ defmodule Lotus.Case do
       on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid2) end)
     end
 
+    # If test needs MySQL, set up MySQL sandbox too
+    if context[:mysql] do
+      pid3 =
+        Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.MysqlRepo, shared: not context[:async])
+
+      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid3) end)
+    end
+
     :ok
   end
 

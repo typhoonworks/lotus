@@ -10,7 +10,7 @@ The Schema module (`Lotus.Schema`) provides functions to:
 - Inspect table structure and column information
 - Get table statistics like row counts
 - Work with multi-schema PostgreSQL databases
-- Support both PostgreSQL and SQLite databases
+- Support PostgreSQL, MySQL, and SQLite databases
 
 All Schema functions respect the configured table visibility rules, ensuring you only see tables you're allowed to access.
 

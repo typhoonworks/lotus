@@ -6,11 +6,13 @@ defmodule Lotus.DataRepoTest do
       repo_names = Lotus.list_data_repo_names()
       assert "postgres" in repo_names
       assert "sqlite" in repo_names
+      assert "mysql" in repo_names
     end
 
     test "gets data repository by name" do
       assert Lotus.get_data_repo!("postgres") == Lotus.Test.Repo
       assert Lotus.get_data_repo!("sqlite") == Lotus.Test.SqliteRepo
+      assert Lotus.get_data_repo!("mysql") == Lotus.Test.MysqlRepo
     end
 
     test "raises when getting non-existent data repo" do
@@ -23,6 +25,7 @@ defmodule Lotus.DataRepoTest do
       data_repos = Lotus.data_repos()
       assert data_repos["postgres"] == Lotus.Test.Repo
       assert data_repos["sqlite"] == Lotus.Test.SqliteRepo
+      assert data_repos["mysql"] == Lotus.Test.MysqlRepo
     end
   end
 
@@ -36,6 +39,13 @@ defmodule Lotus.DataRepoTest do
     @tag :sqlite
     test "executes SQL against sqlite repo by name" do
       {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "sqlite")
+      assert result.columns == ["test_value"]
+      assert result.rows == [[1]]
+    end
+
+    @tag :mysql
+    test "executes SQL against mysql repo by name" do
+      {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "mysql")
       assert result.columns == ["test_value"]
       assert result.rows == [[1]]
     end

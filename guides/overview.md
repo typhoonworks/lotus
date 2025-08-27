@@ -18,7 +18,7 @@ Lotus addresses these challenges by providing:
 ### 🔐 Safety First
 - **Read-only execution**: Built-in protections prevent destructive operations
 - **Statement validation**: Queries are checked before execution
-- **Database-level guards**: PostgreSQL (`transaction_read_only`) and SQLite 3.8.0+ (`PRAGMA query_only`)
+- **Database-level guards**: PostgreSQL (`transaction_read_only`), MySQL (`transaction_read_only`), and SQLite 3.8.0+ (`PRAGMA query_only`)
 - **Table visibility controls**: Configurable rules block access to sensitive tables
 - **Multi-layered security**: Defense-in-depth with preflight authorization
 - **Timeout controls**: Configurable timeouts prevent runaway queries
@@ -30,7 +30,7 @@ Lotus addresses these challenges by providing:
 
 ### 🏗️ Framework Agnostic
 - **Ecto integration**: Works with any Ecto-based application
-- **Multi-database support**: Supports PostgreSQL and SQLite simultaneously
+- **Multi-database support**: Supports PostgreSQL, MySQL, and SQLite simultaneously
 - **Flexible architecture**: Separate storage and execution repositories
 - **Minimal dependencies**: Lightweight with few external requirements
 

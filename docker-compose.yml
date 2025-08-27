@@ -18,5 +18,21 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
 
+  mysql:
+    image: mysql:8.0
+    restart: always
+    container_name: lotus_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: lotus_test
+      MYSQL_USER: lotus
+      MYSQL_PASSWORD: lotus
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
 volumes:
   db:
+  mysql_data:

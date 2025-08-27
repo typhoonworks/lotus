@@ -32,10 +32,8 @@ defmodule Lotus.Migrations.SQLiteTest do
 
     config = MigrationRepo.config()
 
-    # Clean up any existing database file
     _ = MigrationRepo.__adapter__().storage_down(config)
 
-    # Create the database
     :ok = MigrationRepo.__adapter__().storage_up(config)
 
     assert Ecto.Migrator.up(MigrationRepo, 1, Migration) in [:ok, :already_up]
@@ -44,7 +42,6 @@ defmodule Lotus.Migrations.SQLiteTest do
     assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Migration)
     refute table_exists?("lotus_queries")
   after
-    # Always clean up
     try do
       _ = MigrationRepo.__adapter__().storage_down(MigrationRepo.config())
     rescue

@@ -13,6 +13,20 @@ defmodule Lotus.Adapter do
   @callback format_error(any()) :: String.t()
 
   @doc """
+  Return the list of built-in deny rules for system tables and metadata relations
+  that should be hidden from the schema browser for this adapter.
+
+  Each rule is a `{schema_pattern, table_pattern}` tuple where patterns can be
+  exact strings or regexes. Example rules:
+
+    * `{"pg_catalog", ~r/.*/}` → deny all tables in Postgres `pg_catalog`
+    * `{nil, ~r/^sqlite_/}`   → deny all tables starting with `sqlite_` in SQLite
+    * `{"public", "schema_migrations"}` → deny migrations table in Postgres
+  """
+  @callback builtin_denies(repo) ::
+              [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
+
+  @doc """
   Return the SQL parameter placeholder string for a variable at a given index.
 
   Examples of adapter-specific output:
@@ -29,7 +43,8 @@ defmodule Lotus.Adapter do
 
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Adapter.Postgres,
-    Ecto.Adapters.SQLite3 => Lotus.Adapter.SQLite3
+    Ecto.Adapters.SQLite3 => Lotus.Adapter.SQLite3,
+    Ecto.Adapters.MyXQL => Lotus.Adapter.MySQL
   }
 
   @doc """
@@ -57,6 +72,14 @@ defmodule Lotus.Adapter do
     do: impl_for(repo).set_search_path(repo, path)
 
   def set_search_path(_, _), do: :ok
+
+  @doc """
+  Returns the list of built-in deny rules for system tables and metadata relations.
+
+  These rules are used by the visibility module to filter out system tables.
+  """
+  @spec builtin_denies(repo) :: [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
+  def builtin_denies(repo), do: impl_for(repo).builtin_denies(repo)
 
   @doc """
   Formats a database error into a consistent, human-readable string.
