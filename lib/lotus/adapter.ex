@@ -1,124 +1,112 @@
 defmodule Lotus.Adapter do
   @moduledoc """
-  Database adapter-specific functionality for Lotus.
+  Adapter behavior for database-specific operations.
 
-  Handles differences between database adapters like PostgreSQL, SQLite, etc.
+  Defines the interface that each database adapter's operations module must implement.
   """
 
-  require Logger
+  @type repo :: Ecto.Repo.t()
 
-  @doc "Sets read-only mode for the given repository's adapter."
-  @spec set_read_only(Ecto.Repo.t()) :: :ok | no_return()
-  def set_read_only(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres ->
-        repo.query!("SET LOCAL transaction_read_only = on")
-        :ok
+  @callback set_read_only(repo) :: :ok | no_return()
+  @callback set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
+  @callback set_search_path(repo, String.t()) :: :ok | no_return()
+  @callback format_error(any()) :: String.t()
 
-      Ecto.Adapters.SQLite3 ->
-        try do
-          repo.query!("PRAGMA query_only = ON")
-          :ok
-        rescue
-          error in [Exqlite.Error] ->
-            if error.message =~ "no such pragma" or error.message =~ "unknown pragma" do
-              Logger.warning("""
-              SQLite version does not support PRAGMA query_only.
-              Consider opening the connection in read-only mode instead
-              (database=...&mode=ro or database=...&immutable=1).
-              """)
+  @doc """
+  Return the SQL parameter placeholder string for a variable at a given index.
 
-              :ok
-            else
-              reraise error, __STACKTRACE__
-            end
-        end
+  Examples of adapter-specific output:
+    * Postgres → `"$1"`, `"$2"`, ...
+    * SQLite   → `"?"`
+  """
+  @callback param_placeholder(index :: pos_integer(), var :: String.t(), type :: atom() | nil) ::
+              String.t()
 
-      _ ->
-        :ok
-    end
-  end
+  @doc """
+  List the exception modules that this adapter formats specially in `format_error/1`.
+  """
+  @callback handled_errors() :: [module()]
 
-  @doc "Sets statement timeout (ms) for the given repository's adapter."
-  @spec set_statement_timeout(Ecto.Repo.t(), non_neg_integer()) :: :ok | no_return()
-  def set_statement_timeout(repo, timeout_ms) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres ->
-        repo.query!("SET LOCAL statement_timeout = #{timeout_ms}")
-        :ok
+  @impls %{
+    Ecto.Adapters.Postgres => Lotus.Adapter.Postgres,
+    Ecto.Adapters.SQLite3 => Lotus.Adapter.SQLite3
+  }
 
-      Ecto.Adapters.SQLite3 ->
-        :ok
+  @doc """
+  Sets the current session/transaction into **read-only** mode for the
+  given repository, if supported by the underlying adapter.
+  """
+  @spec set_read_only(repo) :: :ok | no_return()
+  def set_read_only(repo), do: impl_for(repo).set_read_only(repo)
 
-      _ ->
-        :ok
-    end
-  end
+  @doc """
+  Sets the **statement timeout** (in milliseconds) for the given repository,
+  if supported by the underlying adapter.
+  """
+  @spec set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
+  def set_statement_timeout(repo, ms), do: impl_for(repo).set_statement_timeout(repo, ms)
 
-  @doc "Sets search_path for the given repository's adapter."
-  @spec set_search_path(Ecto.Repo.t(), String.t()) :: :ok | no_return()
-  def set_search_path(repo, search_path) when is_binary(search_path) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres ->
-        repo.query!("SET LOCAL search_path = #{search_path}")
-        :ok
+  @doc """
+  Sets the **search path** (schema list) for the given repository,
+  if supported by the underlying adapter.
 
-      _ ->
-        :ok
-    end
-  end
+  On unsupported adapters this is a no-op.
+  """
+  @spec set_search_path(repo, String.t()) :: :ok | no_return()
+  def set_search_path(repo, path) when is_binary(path),
+    do: impl_for(repo).set_search_path(repo, path)
 
-  def set_search_path(_repo, _search_path), do: :ok
+  def set_search_path(_, _), do: :ok
 
-  @doc "Formats database errors into a consistent string."
+  @doc """
+  Formats a database error into a consistent, human-readable string.
+
+  Dispatches to the correct adapter if the error type is recognized,
+  otherwise falls back to the default implementation.
+  """
   @spec format_error(any()) :: String.t()
-  def format_error(%{__exception__: true, __struct__: mod} = e) do
-    cond do
-      mod == Postgrex.Error ->
-        pg = Map.get(e, :postgres)
+  def format_error(error), do: impl_for_error(error).format_error(error)
 
-        cond do
-          is_map(pg) and pg[:code] == :syntax_error and is_binary(pg[:message]) ->
-            "SQL syntax error: #{pg[:message]}"
+  @doc """
+  Returns the adapter-specific **SQL parameter placeholder** to substitute
+  for `{{var}}` occurrences.
 
-          is_map(pg) and is_binary(pg[:message]) ->
-            "SQL error: #{pg[:message]}"
+  - `repo_or_name` can be the Repo module or a data-repo name string.
+  - `index` is 1-based (for drivers like Postgres that need `$1`, `$2`, …).
+  - `var` and `type` are available to adapters if they need special handling.
 
-          is_binary(Map.get(e, :message)) ->
-            "SQL error: #{Map.get(e, :message)}"
-
-          true ->
-            Exception.message(e)
-        end
-
-      mod == Exqlite.Error ->
-        "SQLite Error: " <> (Map.get(e, :message) || Exception.message(e))
-
-      true ->
-        Exception.message(e)
+  If the repo cannot be resolved, we default to Postgres-style placeholders.
+  """
+  @spec param_placeholder(repo | String.t() | nil, pos_integer(), String.t(), atom() | nil) ::
+          String.t()
+  def param_placeholder(repo_or_name, index, var, type) when is_integer(index) and index > 0 do
+    case resolve_repo(repo_or_name) do
+      nil -> Lotus.Adapter.Postgres.param_placeholder(index, var, type)
+      repo -> impl_for(repo).param_placeholder(index, var, type)
     end
   end
 
-  def format_error(%DBConnection.EncodeError{message: msg}), do: msg
-  def format_error(%ArgumentError{message: msg}), do: msg
-  def format_error(msg) when is_binary(msg), do: msg
-  def format_error(other), do: "Database Error: #{inspect(other)}"
+  defp resolve_repo(nil), do: nil
+  defp resolve_repo(repo) when is_atom(repo), do: repo
 
-  @doc "Returns parameter style for the given repo or repo name."
-  @spec param_style(nil | String.t() | module()) ::
-          :postgres | :sqlite | :unknown
-  def param_style(nil), do: :postgres
-
-  def param_style(repo_name) when is_binary(repo_name) do
-    repo = Lotus.Config.get_data_repo!(repo_name)
-    param_style(repo)
+  defp resolve_repo(repo_name) when is_binary(repo_name) do
+    Lotus.Config.get_data_repo!(repo_name)
   end
 
-  def param_style(repo) when is_atom(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> :postgres
-      Ecto.Adapters.SQLite3 -> :sqlite
-      _ -> :unknown
-    end
+  defp impl_for(repo) do
+    adapter_mod = repo.__adapter__()
+    Map.get(@impls, adapter_mod, Lotus.Adapter.Default)
   end
+
+  defp impl_for_error(%{__exception__: true, __struct__: exc_mod}) do
+    Enum.find_value(
+      Map.values(@impls) ++ [Lotus.Adapter.Default],
+      Lotus.Adapter.Default,
+      fn impl ->
+        if exc_mod in impl.handled_errors(), do: impl, else: false
+      end
+    )
+  end
+
+  defp impl_for_error(_), do: Lotus.Adapter.Default
 end
