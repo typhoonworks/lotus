@@ -9,7 +9,7 @@ defmodule Lotus.Migrations.MySQLTest do
     alias Lotus.Test.MysqlRepo
 
     def init(_, _) do
-      {:ok, Keyword.put(MysqlRepo.config(), :database, "lotus_test")}
+      {:ok, Keyword.put(MysqlRepo.config(), :database, "lotus_migration_test")}
     end
   end
 
@@ -41,7 +41,7 @@ defmodule Lotus.Migrations.MySQLTest do
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.TABLES
-      WHERE TABLE_SCHEMA = 'lotus_test'
+      WHERE TABLE_SCHEMA = 'lotus_migration_test'
       AND TABLE_NAME = '#{table_name}'
     )
     """

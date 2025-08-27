@@ -3,6 +3,8 @@ defmodule Lotus.Adapter.Postgres do
 
   @behaviour Lotus.Adapter
 
+  @postgrex_error Module.concat([:Postgrex, :Error])
+
   @impl true
   def set_read_only(repo) do
     repo.query!("SET LOCAL transaction_read_only = on")
@@ -22,7 +24,7 @@ defmodule Lotus.Adapter.Postgres do
   end
 
   @impl true
-  def format_error(%Postgrex.Error{} = e) do
+  def format_error(%{__struct__: mod} = e) when mod == @postgrex_error do
     pg = Map.get(e, :postgres)
 
     cond do

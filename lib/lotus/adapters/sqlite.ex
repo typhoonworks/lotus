@@ -4,6 +4,8 @@ defmodule Lotus.Adapter.SQLite3 do
   @behaviour Lotus.Adapter
   require Logger
 
+  @exlite_error Module.concat([:Exqlite, :Error])
+
   @impl true
   def set_read_only(repo) do
     try do
@@ -36,7 +38,7 @@ defmodule Lotus.Adapter.SQLite3 do
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
-  def format_error(%Exqlite.Error{} = e) do
+  def format_error(%{__struct__: mod} = e) when mod == @exlite_error do
     "SQLite Error: " <> (Map.get(e, :message) || Exception.message(e))
   end
 

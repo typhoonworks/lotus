@@ -34,6 +34,7 @@ defmodule Lotus.Preflight do
       case adapter(repo) do
         :postgres -> authorize_pg(repo, repo_name, sql, params, search_path)
         :sqlite -> authorize_sqlite(repo, repo_name, sql, params, search_path)
+        :mysql -> authorize_mysql(repo, repo_name, sql, params, search_path)
         # fallback: allow if unknown adapter
         _ -> :ok
       end
@@ -44,6 +45,7 @@ defmodule Lotus.Preflight do
     case repo.__adapter__() do
       Ecto.Adapters.Postgres -> :postgres
       Ecto.Adapters.SQLite3 -> :sqlite
+      Ecto.Adapters.MyXQL -> :mysql
       _ -> :other
     end
   end
@@ -137,6 +139,109 @@ defmodule Lotus.Preflight do
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
     end
+  end
+
+  defp authorize_mysql(repo, repo_name, sql, params, _search_path) do
+    alias_map = parse_alias_map(sql)
+
+    explain = "EXPLAIN FORMAT=JSON " <> sql
+
+    case repo.query(explain, params) do
+      {:ok, %{rows: [[json]]}} ->
+        plan_data = Lotus.JSON.decode!(json)
+
+        explain_rels =
+          plan_data
+          |> collect_mysql_relations(MapSet.new())
+          |> MapSet.to_list()
+          |> Enum.map(fn {schema, table_name} ->
+            actual_name = resolve_alias(table_name, alias_map)
+            {schema, actual_name}
+          end)
+          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
+
+        sql_rels = extract_mysql_tables_from_sql(sql)
+
+        rels =
+          if Enum.empty?(explain_rels) or
+               Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
+               String.contains?(sql, "information_schema") or
+               String.contains?(sql, "performance_schema") or
+               String.contains?(sql, "mysql.") or
+               String.contains?(sql, "sys.") do
+            sql_rels
+          else
+            explain_rels
+          end
+
+        if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
+          :ok
+        else
+          blocked = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
+          {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
+        end
+
+      {:error, e} ->
+        {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp collect_mysql_relations(%{"query_block" => query_block}, acc) do
+    collect_mysql_query_block(query_block, acc)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_list(data) do
+    Enum.reduce(data, acc, &collect_mysql_relations/2)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_map(data) do
+    case Map.get(data, "query_block") do
+      nil -> acc
+      query_block -> collect_mysql_query_block(query_block, acc)
+    end
+  end
+
+  defp collect_mysql_relations(_, acc), do: acc
+
+  defp collect_mysql_query_block(%{"table" => table_info}, acc) when is_map(table_info) do
+    case Map.get(table_info, "table_name") do
+      table_name when is_binary(table_name) ->
+        schema = Map.get(table_info, "schema")
+        MapSet.put(acc, {schema, table_name})
+
+      _ ->
+        acc
+    end
+  end
+
+  defp collect_mysql_query_block(%{"nested_loop" => nested_loop}, acc)
+       when is_list(nested_loop) do
+    Enum.reduce(nested_loop, acc, fn item, acc_inner ->
+      collect_mysql_query_block(item, acc_inner)
+    end)
+  end
+
+  defp collect_mysql_query_block(data, acc) when is_map(data) do
+    data
+    |> Enum.reduce(acc, fn {_key, value}, acc_inner ->
+      collect_mysql_relations(value, acc_inner)
+    end)
+  end
+
+  defp collect_mysql_query_block(_, acc), do: acc
+
+  # Extract table names directly from SQL when EXPLAIN aliases fail
+  defp extract_mysql_tables_from_sql(sql) do
+    # Look for schema.table and table patterns in FROM/JOIN clauses
+    table_regex =
+      ~r/(?:FROM|JOIN)\s+(?:(`?)([a-zA-Z_][a-zA-Z0-9_]*)\1\.)?(`?)([a-zA-Z_][a-zA-Z0-9_]*)\3(?:\s+(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)?/i
+
+    Regex.scan(table_regex, sql)
+    |> Enum.map(fn
+      [_, _, schema, _, table] when schema != "" -> {schema, table}
+      [_, "", "", _, table] -> {nil, table}
+    end)
+    |> Enum.uniq()
   end
 
   # Map of alias -> base table derived from SQL text.
