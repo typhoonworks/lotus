@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2025-08-27
+
 ### Fixed
 - Fixed error handling for optional Ecto adapters - removed hardcoded references to specific adapter error structs (`Postgrex.Error`, `MyXQL.Error`, `Exqlite.Error`) to prevent compilation crashes when those adapters are not installed in host applications
 - Added MySQL preflight authorization support with intelligent alias resolution and schema-qualified table parsing
