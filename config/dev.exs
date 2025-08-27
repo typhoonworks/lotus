@@ -65,7 +65,7 @@ config :lotus, Lotus.Test.SqliteRepo,
 
 config :lotus, Lotus.Test.MysqlRepo,
   username: "lotus",
-  password: "lotus123",
+  password: "lotus",
   hostname: "localhost",
   # Docker Compose MySQL port
   port: 3307,

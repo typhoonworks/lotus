@@ -51,7 +51,7 @@ jobs:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: lotus_mysql_test
           MYSQL_USER: lotus
-          MYSQL_PASSWORD: lotus123
+          MYSQL_PASSWORD: lotus
         options: >-
           --health-cmd="mysqladmin ping"
           --health-interval=10s
