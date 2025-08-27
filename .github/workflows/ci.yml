@@ -83,10 +83,10 @@ jobs:
 
       - run: mix test.setup
         env:
-          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
+          MYSQL_URL: mysql://root:mysql@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix test
         env:
-          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
+          MYSQL_URL: mysql://root:mysql@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix dialyzer
