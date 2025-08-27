@@ -21,7 +21,7 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 ## Current Features
 - 🔐 **Enhanced security** with read-only execution and table visibility controls
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
-- 🏗️ **Multi-database support** - PostgreSQL and SQLite with flexible repository architecture
+- 🏗️ **Multi-database support** - PostgreSQL, MySQL, and SQLite with flexible repository architecture
 - ⚡ **Configurable execution** with timeout controls and connection management
 - 🎯 **Type-safe results** with structured query result handling
 - 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
@@ -30,9 +30,9 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 - [ ] Query versioning and change tracking
 - [ ] Query result caching mechanisms
 - [ ] Export functionality for query results (CSV, JSON)
-- [ ] MySQL support
 - [ ] Column-level visibility and access control
-- [x] Multi-database support (PostgreSQL, SQLite)
+- [x] MySQL support
+- [x] Multi-database support (PostgreSQL, MySQL, SQLite)
 - [x] Table visibility and access controls
 - [x] Query templates with parameter substitution using `{{var}}` placeholders
 
@@ -42,7 +42,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.3.3"}
+    {:lotus, "~> 0.5.0"}
   ]
 end
 ```
@@ -64,10 +64,12 @@ Add to your config:
 
 ```elixir
 config :lotus,
-  ecto_repo: MyApp.Repo,  # Repo where Lotus stores saved queries
-  data_repos: %{           # Repos where queries run against actual data
+  ecto_repo: MyApp.Repo,    # Repo where Lotus stores saved queries
+  default_repo: "main",     # Default repo for queries (required with multiple repos)
+  data_repos: %{            # Repos where queries run against actual data
     "main" => MyApp.Repo,
-    "analytics" => MyApp.AnalyticsRepo
+    "analytics" => MyApp.AnalyticsRepo,
+    "mysql" => MyApp.MySQLRepo
   }
 ```
 
@@ -94,6 +96,7 @@ config :lotus,
 
 ### Prerequisites
 - PostgreSQL (tested with version 14+)
+- MySQL (tested with version 8.0+)
 - SQLite 3
 - Elixir 1.16+
 - OTP 25+
@@ -109,12 +112,17 @@ mix deps.get
 
 2. Set up the development databases:
 ```bash
+# Start MySQL with Docker Compose (optional)
+docker compose up -d mysql
+
+# Create and migrate databases
 mix ecto.create
 mix ecto.migrate
 ```
 
 This creates:
 - PostgreSQL database (`lotus_dev`) with both Lotus tables and test data tables
+- MySQL database (`lotus_dev`) via Docker Compose on port 3307
 - SQLite database (`lotus_dev.db`) with e-commerce sample data
 
 ### Running tests
@@ -132,6 +140,7 @@ mix test --cover
 
 The test suite uses separate databases:
 - PostgreSQL: `lotus_test` (with partitioning for parallel tests)
+- MySQL: `lotus_test` (via Docker Compose)
 - SQLite: `lotus_sqlite_test.db`
 
 ## Contributing

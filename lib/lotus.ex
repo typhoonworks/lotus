@@ -241,13 +241,8 @@ defmodule Lotus do
   """
   def list_relations(repo_or_name, opts \\ []), do: Schema.list_relations(repo_or_name, opts)
 
-  # Private helper to resolve execution repo from various inputs
   defp resolve_execution_repo(nil) do
-    # Default behavior: use first configured data repo, or storage repo if none
-    case list_data_repo_names() do
-      [] -> repo()
-      [first_name | _] -> get_data_repo!(first_name)
-    end
+    Config.default_data_repo()
   end
 
   defp resolve_execution_repo(repo_name) when is_binary(repo_name) do

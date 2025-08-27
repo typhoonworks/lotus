@@ -34,49 +34,9 @@ defmodule Lotus.Visibility do
     repo = Config.data_repos() |> Map.get(repo_name)
 
     if is_nil(repo) do
-      [
-        {"pg_catalog", ~r/.*/},
-        {"information_schema", ~r/.*/},
-        {"public", "schema_migrations"},
-        {nil, "schema_migrations"},
-        {nil, ~r/^sqlite_/},
-        {"public", "lotus_queries"},
-        {nil, "lotus_queries"}
-      ]
+      Lotus.Adapter.Default.builtin_denies(nil)
     else
-      adapter = repo.__adapter__()
-      ms = repo.config()[:migration_source] || "schema_migrations"
-
-      case adapter do
-        Ecto.Adapters.Postgres ->
-          prefix = repo.config()[:migration_default_prefix] || "public"
-
-          [
-            {"pg_catalog", ~r/.*/},
-            {"information_schema", ~r/.*/},
-            {prefix, ms},
-            {prefix, "lotus_queries"}
-          ]
-
-        Ecto.Adapters.SQLite3 ->
-          [
-            {nil, ~r/^sqlite_/},
-            {nil, ms},
-            {nil, "lotus_queries"}
-          ]
-
-        _ ->
-          # Conservative default for unknown adapters
-          [
-            {"pg_catalog", ~r/.*/},
-            {"information_schema", ~r/.*/},
-            {nil, ~r/^sqlite_/},
-            {nil, "schema_migrations"},
-            {"public", "schema_migrations"},
-            {"public", "lotus_queries"},
-            {nil, "lotus_queries"}
-          ]
-      end
+      Lotus.Adapter.builtin_denies(repo)
     end
   end
 

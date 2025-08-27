@@ -3,14 +3,21 @@
 ## [Unreleased]
 
 ### Added
-- Introduced `Lotus.Adapter` behaviour with dedicated implementations for PostgreSQL, SQLite, and Default
+- Introduced `Lotus.Adapter` behaviour with dedicated implementations for PostgreSQL, SQLite, MySQL, and Default
+- Added MySQL support with full adapter implementation using `:myxql` dependency
+- Added `default_repo` configuration option for cleaner multi-database setup
 - Added `param_placeholder/3` callback to adapter behaviour for generating database-specific SQL parameter placeholders
+- Added `builtin_denies/1` callback to allow adapters to define system table filtering rules
 - Added `handled_errors/0` callback to allow adapters to declare which exceptions they format
+- Added MySQL development environment setup with Docker Compose
 
 ### Changed
 - **BREAKING:** Removed `param_style/1` API in favor of `param_placeholder/4` facade that delegates to adapters
+- **BREAKING:** Storage repo no longer used as fallback for query execution - only data repos are valid execution targets
+- Enhanced configuration validation to require `default_repo` when multiple data repositories are configured
 - Refactored error formatting to delegate based on `handled_errors/0`, ensuring cleaner and more extensible error handling
-- Consolidated adapter tests into a single facade-level `Lotus.AdapterTest` covering all supported databasesd
+- Refactored table visibility system to use adapter-specific `builtin_denies/1` for system table filtering
+- Consolidated adapter tests into a single facade-level `Lotus.AdapterTest` covering all supported databases
 
 ## [0.4.0] - 2025-08-26
 

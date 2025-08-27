@@ -98,7 +98,7 @@ IO.inspect(result.rows)
 
 ## Working with Multiple Data Repositories
 
-If you have configured multiple data repositories, you can execute queries against specific databases:
+Lotus supports PostgreSQL, MySQL, and SQLite databases. If you have configured multiple data repositories, you can execute queries against specific databases:
 
 ```elixir
 # Execute against a specific repository by name
@@ -112,13 +112,13 @@ If you have configured multiple data repositories, you can execute queries again
 {:ok, result} = Lotus.run_sql(
   "SELECT SUM(amount) FROM transactions",
   [],
-  repo: MyApp.SqliteRepo
+  repo: MyApp.MySQLRepo
 )
 
 # List all available data repositories
 repo_names = Lotus.list_data_repo_names()
 IO.inspect(repo_names)
-# ["main", "analytics", "sqlite_data"]
+# ["postgres", "mysql", "sqlite", "analytics"]
 ```
 
 ### Storing Queries with Specific Data Repositories
@@ -167,11 +167,19 @@ You can override the stored data repository at execution time:
 {:ok, result} = Lotus.run_query(query, repo: "main")
 ```
 
-### Fallback Behavior
+### Default Repository Behavior
 
-If you don't specify a `data_repo` when creating a query, it will use the default repository when executed:
+If you don't specify a `data_repo` when creating a query, it will use the configured `default_repo` when executed:
 
 ```elixir
+# Configuration with default_repo
+config :lotus,
+  default_repo: "main",
+  data_repos: %{
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
+
 # Query without specific data_repo
 {:ok, query} = Lotus.create_query(%{
   name: "Generic Query",
@@ -179,7 +187,7 @@ If you don't specify a `data_repo` when creating a query, it will use the defaul
   # No data_repo specified
 })
 
-# Will use the default configured repository
+# Will use the "main" repository (from default_repo config)
 {:ok, result} = Lotus.run_query(query)
 ```
 

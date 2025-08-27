@@ -37,11 +37,23 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          options: >-
-            --health-cmd pg_isready
-            --health-interval 10s
-            --health-timeout 5s
-            --health-retries 5
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306/tcp
 
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +81,11 @@ jobs:
       - run: mix compile --warnings-as-errors
 
       - run: mix test.setup
+        env:
+          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix test
+        env:
+          MYSQL_URL: mysql://root@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
 
       - run: mix dialyzer

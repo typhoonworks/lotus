@@ -2,16 +2,18 @@ import Config
 
 config :lotus,
   ecto_repo: Lotus.Test.Repo,
+  default_repo: "postgres",
   data_repos: %{
     "postgres" => Lotus.Test.Repo,
-    "sqlite" => Lotus.Test.SqliteRepo
+    "sqlite" => Lotus.Test.SqliteRepo,
+    "mysql" => Lotus.Test.MysqlRepo
   },
   table_visibility: %{
     # Built-in rules automatically exclude:
-    # - schema_migrations, lotus_queries 
+    # - schema_migrations, lotus_queries
     # - pg_catalog, information_schema
     # - sqlite_* tables
-    # 
+    #
     # This config is just for additional custom rules if needed
     default: []
   }
@@ -42,4 +44,15 @@ config :lotus, Lotus.Test.SqliteRepo,
   show_sensitive_data_on_connection_error: true,
   stacktrace: true
 
-config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo]
+config :lotus, Lotus.Test.MysqlRepo,
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: System.schedulers_online() * 2,
+  priv: "test/support/mysql",
+  migration_source: "lotus_mysql_schema_migrations",
+  show_sensitive_data_on_connection_error: true,
+  stacktrace: true,
+  url:
+    System.get_env("MYSQL_URL") ||
+      "mysql://lotus:lotus@localhost:3307/lotus_test#{System.get_env("MIX_TEST_PARTITION")}"
+
+config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo]

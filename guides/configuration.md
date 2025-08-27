@@ -9,7 +9,8 @@ Lotus configuration is typically placed in your `config/config.exs` file:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,        # Repository for Lotus query storage
-  data_repos: %{                 # Repositories for executing queries
+  default_repo: "main",         # Default repository for query execution
+  data_repos: %{                # Repositories for executing queries
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
@@ -32,7 +33,7 @@ config :lotus,
 
 #### `data_repos` (required)
 
-A map of repositories where queries can be executed against actual data. This powerful feature allows Lotus to work with multiple databases simultaneously, supporting both PostgreSQL and SQLite.
+A map of repositories where queries can be executed against actual data. This powerful feature allows Lotus to work with multiple databases simultaneously, supporting PostgreSQL, MySQL, and SQLite.
 
 Keys are friendly names that you use when executing queries, values are Ecto repository modules.
 
@@ -42,11 +43,33 @@ config :lotus,
     "main" => MyApp.Repo,           # Can be the same as ecto_repo
     "analytics" => MyApp.AnalyticsRepo,
     "reporting" => MyApp.ReportingRepo,
+    "mysql_data" => MyApp.MySQLRepo,    # MySQL repository
     "sqlite_data" => MyApp.SqliteRepo   # Mix database types
   }
 ```
 
 **Type**: `%{String.t() => module()}`
+
+#### `default_repo` (required when multiple data_repos)
+
+When you have multiple data repositories configured, you must specify which one to use by default when no explicit repository is provided in query execution.
+
+```elixir
+config :lotus,
+  default_repo: "main",  # Must match a key in data_repos
+  data_repos: %{
+    "main" => MyApp.Repo,
+    "analytics" => MyApp.AnalyticsRepo
+  }
+```
+
+**Type**: `String.t()`
+**Default**: Not required if only one data repository is configured
+
+**Behavior**:
+- **Single repo**: When only one data repository is configured, it's automatically used as the default
+- **Multiple repos**: You must configure `default_repo` to specify which one to use when no repo is explicitly provided
+- **No repos**: Raises an error if no data repositories are configured
 
 **Usage Examples:**
 
@@ -57,8 +80,8 @@ Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "analytics")
 # Execute against a repository module directly
 Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: MyApp.AnalyticsRepo)
 
-# When no repo is specified, uses the first configured data repo (alphabetically)
-Lotus.run_sql("SELECT COUNT(*) FROM users")
+# When no repo is specified, uses the configured default_repo
+Lotus.run_sql("SELECT COUNT(*) FROM users")  # Uses "main" repo from default_repo config
 ```
 
 **Repository Management:**
@@ -167,6 +190,7 @@ config :lotus,
 Lotus automatically blocks access to sensitive system tables:
 
 - **PostgreSQL**: `pg_catalog.*`, `information_schema.*`, `schema_migrations`, `lotus_queries`
+- **MySQL**: `information_schema.*`, `mysql.*`, `performance_schema.*`, `sys.*`, `schema_migrations`, `lotus_queries`
 - **SQLite**: `sqlite_*`, migration tables, `lotus_queries`
 
 **Rule Formats:**
@@ -348,7 +372,7 @@ Lotus.unique_names?()
 
 ## Multi-Database Support
 
-Lotus supports both PostgreSQL and SQLite databases. The migration system automatically detects the adapter and runs the appropriate migrations.
+Lotus supports PostgreSQL, MySQL, and SQLite databases. The migration system automatically detects the adapter and runs the appropriate migrations.
 
 ### PostgreSQL Configuration
 
@@ -357,6 +381,18 @@ config :my_app, MyApp.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
+  database: "my_app_dev",
+  pool_size: 10
+```
+
+### MySQL Configuration
+
+```elixir
+config :my_app, MyApp.MySQLRepo,
+  username: "root",
+  password: "mysql",
+  hostname: "localhost",
+  port: 3306,
   database: "my_app_dev",
   pool_size: 10
 ```
@@ -373,13 +409,15 @@ config :my_app, MyApp.SqliteRepo,
 
 ### Mixed Database Environments
 
-You can mix PostgreSQL and SQLite repositories:
+You can mix PostgreSQL, MySQL, and SQLite repositories:
 
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,          # PostgreSQL for storage
+  default_repo: "postgres",       # Default repository for queries
   data_repos: %{
     "postgres" => MyApp.Repo,     # PostgreSQL data
+    "mysql" => MyApp.MySQLRepo,   # MySQL data
     "sqlite" => MyApp.SqliteRepo, # SQLite data
     "analytics" => MyApp.AnalyticsRepo  # Another PostgreSQL
   }

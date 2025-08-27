@@ -43,4 +43,23 @@ defmodule Lotus.Adapter.Default do
   @impl true
   @doc "The default adapter does not handle any specific exceptions."
   def handled_errors, do: []
+
+  @impl true
+  @doc """
+  Returns conservative deny rules covering common system tables from various databases.
+
+  Since we don't know the specific adapter, we include deny rules for all known
+  system tables to be safe.
+  """
+  def builtin_denies(_repo) do
+    [
+      {"pg_catalog", ~r/.*/},
+      {"information_schema", ~r/.*/},
+      {nil, ~r/^sqlite_/},
+      {nil, "schema_migrations"},
+      {"public", "schema_migrations"},
+      {"public", "lotus_queries"},
+      {nil, "lotus_queries"}
+    ]
+  end
 end

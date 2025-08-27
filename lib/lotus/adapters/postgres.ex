@@ -47,4 +47,17 @@ defmodule Lotus.Adapter.Postgres do
 
   @impl true
   def handled_errors, do: [Postgrex.Error]
+
+  @impl true
+  def builtin_denies(repo) do
+    ms = repo.config()[:migration_source] || "schema_migrations"
+    prefix = repo.config()[:migration_default_prefix] || "public"
+
+    [
+      {"pg_catalog", ~r/.*/},
+      {"information_schema", ~r/.*/},
+      {prefix, ms},
+      {prefix, "lotus_queries"}
+    ]
+  end
 end

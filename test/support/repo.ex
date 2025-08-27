@@ -13,3 +13,11 @@ defmodule Lotus.Test.SqliteRepo do
     otp_app: :lotus,
     adapter: Ecto.Adapters.SQLite3
 end
+
+defmodule Lotus.Test.MysqlRepo do
+  @moduledoc false
+
+  use Ecto.Repo,
+    otp_app: :lotus,
+    adapter: Ecto.Adapters.MyXQL
+end

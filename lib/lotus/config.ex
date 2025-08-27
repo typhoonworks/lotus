@@ -26,6 +26,7 @@ defmodule Lotus.Config do
   ## Optional Configuration
 
       config :lotus,
+        default_repo: "primary",       # Default data repo for queries
         unique_names: false            # Defaults to true
   """
 
@@ -33,6 +34,7 @@ defmodule Lotus.Config do
           ecto_repo: module(),
           unique_names: boolean(),
           data_repos: %{String.t() => module()},
+          default_repo: String.t() | nil,
           table_visibility: map()
         }
 
@@ -47,6 +49,12 @@ defmodule Lotus.Config do
       default: %{},
       doc:
         "Named data repositories that can be used for query execution. Keys are strings, values are repo modules."
+    ],
+    default_repo: [
+      type: :string,
+      required: false,
+      doc:
+        "The default data repository name to use when no repo is specified. Required when multiple data_repos are configured."
     ],
     unique_names: [
       type: :boolean,
@@ -76,7 +84,7 @@ defmodule Lotus.Config do
 
   defp get_lotus_config do
     Application.get_all_env(:lotus)
-    |> Keyword.take([:ecto_repo, :unique_names, :data_repos, :table_visibility])
+    |> Keyword.take([:ecto_repo, :unique_names, :data_repos, :default_repo, :table_visibility])
   end
 
   @doc """
@@ -119,6 +127,53 @@ defmodule Lotus.Config do
   """
   @spec list_data_repo_names() :: [String.t()]
   def list_data_repo_names, do: Map.keys(data_repos())
+
+  @doc """
+  Returns the default data repository.
+
+  - If there's only one data repo configured, returns it
+  - If multiple repos are configured and default_repo is set, returns that repo
+  - If multiple repos are configured without default_repo, raises an error
+  - If no data repos are configured, raises an error
+  """
+  @spec default_data_repo() :: module()
+  def default_data_repo do
+    repos = data_repos()
+
+    case :maps.size(repos) do
+      0 ->
+        raise ArgumentError, """
+        No data repository available for query execution.
+
+        Please configure at least one data repository:
+
+            config :lotus,
+              data_repos: %{
+                "primary" => MyApp.Repo
+              }
+        """
+
+      1 ->
+        {_name, repo} = Enum.at(repos, 0)
+        repo
+
+      _ ->
+        case load!()[:default_repo] do
+          nil ->
+            raise ArgumentError, """
+            Multiple data repositories configured but no default_repo specified.
+            Please configure a default_repo:
+
+                config :lotus, default_repo: "primary"
+
+            Available repos: #{inspect(Map.keys(repos))}
+            """
+
+          default_name ->
+            get_data_repo!(default_name)
+        end
+    end
+  end
 
   @doc """
   Returns table visibility rules for a specific repository.

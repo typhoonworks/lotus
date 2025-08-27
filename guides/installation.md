@@ -6,7 +6,7 @@ This guide walks you through setting up Lotus in your Elixir application.
 
 - Elixir 1.16 or later
 - OTP 25 or later
-- An Ecto-based application with PostgreSQL or SQLite
+- An Ecto-based application with PostgreSQL, MySQL, or SQLite
   - **SQLite**: Version 3.8.0+ recommended for database-level read-only protection
 
 ## Step 1: Add Dependency
@@ -16,7 +16,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.3.3"}
+    {:lotus, "~> 0.5.0"}
   ]
 end
 ```
@@ -30,7 +30,8 @@ Add Lotus configuration to your `config/config.exs`:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,        # Where Lotus stores queries
-  data_repos: %{                 # Where queries execute
+  default_repo: "main",         # Default repo for queries (required with multiple repos)
+  data_repos: %{                # Where queries execute
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
@@ -40,6 +41,7 @@ config :lotus,
 
 - `ecto_repo` (required): Repository where Lotus stores saved queries
 - `data_repos` (required): Map of repositories where queries can be executed
+- `default_repo`: Default repository name to use when none specified (required with multiple repos)
 - `unique_names`: Whether to enforce unique query names (default: `true`)
 - `table_visibility`: Rules controlling which tables can be accessed (optional)
 
@@ -130,15 +132,33 @@ You can use different database types for storage and data:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,          # PostgreSQL for Lotus storage
+  default_repo: "postgres",       # Default repository for queries
   data_repos: %{
     "postgres" => MyApp.Repo,     # PostgreSQL data
+    "mysql" => MyApp.MySQLRepo,   # MySQL data
     "sqlite" => MyApp.SqliteRepo  # SQLite data
   }
 ```
 
-### MySQL (Coming Soon)
+### MySQL
 
-MySQL support is planned for a future release.
+Lotus supports MySQL through the `myxql` adapter. Add the dependency to your `mix.exs`:
+
+```elixir
+{:myxql, "~> 0.7"}
+```
+
+Configure your MySQL repository:
+
+```elixir
+config :my_app, MyApp.MySQLRepo,
+  adapter: Ecto.Adapters.MyXQL,
+  username: "root",
+  password: "mysql",
+  hostname: "localhost",
+  database: "my_app_dev",
+  port: 3306
+```
 
 ## Troubleshooting
 

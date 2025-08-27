@@ -15,6 +15,11 @@ defmodule Lotus.AdapterTest do
       # reset it so other tests don't inherit read-only
       Lotus.Test.SqliteRepo.query!("PRAGMA query_only = OFF")
     end
+
+    @tag :mysql
+    test "sets MySQL transaction to read-only" do
+      assert :ok = Adapter.set_read_only(Lotus.Test.MysqlRepo)
+    end
   end
 
   describe "set_statement_timeout/2" do
@@ -27,6 +32,11 @@ defmodule Lotus.AdapterTest do
     test "is a no-op for SQLite" do
       assert :ok = Adapter.set_statement_timeout(Lotus.Test.SqliteRepo, 5000)
     end
+
+    @tag :mysql
+    test "sets max_execution_time for MySQL" do
+      assert :ok = Adapter.set_statement_timeout(Lotus.Test.MysqlRepo, 5000)
+    end
   end
 
   describe "set_search_path/2" do
@@ -38,6 +48,11 @@ defmodule Lotus.AdapterTest do
     @tag :sqlite
     test "is a no-op for SQLite" do
       assert :ok = Adapter.set_search_path(Lotus.Test.SqliteRepo, "ignored")
+    end
+
+    @tag :mysql
+    test "is a no-op for MySQL" do
+      assert :ok = Adapter.set_search_path(Lotus.Test.MysqlRepo, "ignored")
     end
 
     test "handles nil search_path" do
@@ -120,6 +135,12 @@ defmodule Lotus.AdapterTest do
     test "returns sqlite placeholders with ?" do
       assert Adapter.param_placeholder(Lotus.Test.SqliteRepo, 1, "id", :integer) == "?"
       assert Adapter.param_placeholder(Lotus.Test.SqliteRepo, 2, "id", :integer) == "?"
+    end
+
+    @tag :mysql
+    test "returns mysql placeholders with ?" do
+      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 1, "id", :integer) == "?"
+      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 2, "id", :integer) == "?"
     end
 
     test "defaults to Postgres when repo is nil" do

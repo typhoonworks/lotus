@@ -47,4 +47,15 @@ defmodule Lotus.Adapter.SQLite3 do
 
   @impl true
   def handled_errors, do: [Exqlite.Error]
+
+  @impl true
+  def builtin_denies(repo) do
+    ms = repo.config()[:migration_source] || "schema_migrations"
+
+    [
+      {nil, ~r/^sqlite_/},
+      {nil, ms},
+      {nil, "lotus_queries"}
+    ]
+  end
 end
