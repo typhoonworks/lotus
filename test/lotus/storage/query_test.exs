@@ -203,7 +203,6 @@ defmodule Lotus.Storage.QueryTest do
       end
     end
 
-
     test "ignores unused query variables" do
       q = %Query{
         statement: "SELECT * FROM users",
@@ -246,7 +245,6 @@ defmodule Lotus.Storage.QueryTest do
       assert sql == "SELECT * FROM users WHERE name = ? OR nickname = ?"
       assert params == ["Jack", "Jack"]
     end
-
 
     test "overrides query variable defaults with provided supplied_vars" do
       q = %Query{
