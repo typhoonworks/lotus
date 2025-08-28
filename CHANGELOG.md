@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2025-08-28
+
+### Enhanced
+- Enhanced `Lotus.run_query/2` variable resolution to properly merge default variable values with runtime overrides via `vars` option
+- Improved `Lotus.run_query/2` documentation with comprehensive examples showing variable resolution order, type casting, and usage patterns
+
+### Fixed
+- Removed non-functional identifier variable substitution (e.g., `{{table}}` for table names) that would cause Ecto adapter crashes
+- Clarified documentation that variables are only safe for SQL values (WHERE clauses, ORDER BY values), never for identifiers like table or column names
+
 ## [0.5.1] - 2025-08-27
 
 ### Fixed
