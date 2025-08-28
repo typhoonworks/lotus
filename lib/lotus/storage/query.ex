@@ -3,8 +3,10 @@ defmodule Lotus.Storage.Query do
   Represents a saved Lotus query.
 
   Queries can be stored, updated, listed, and executed by the host app.
-  Supports `{{var}}` placeholders in the SQL `statement`, which are
-  bound at runtime using configured variables.
+  Supports `{{var}}` placeholders in the SQL `statement` for value substitution
+  only. Variables are bound at runtime using configured variables and are only
+  safe for SQL values (WHERE clauses, ORDER BY values, etc.), never for
+  identifiers like table names, column names, or schema names.
   """
 
   use Ecto.Schema

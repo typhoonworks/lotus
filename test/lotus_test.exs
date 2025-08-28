@@ -141,7 +141,7 @@ defmodule LotusTest do
       assert ["Jack Kerouac", "jack@ontheroad.com"] in rows
     end
 
-    test "runs query with smart variable and default" do
+    test "runs query using stored variable with default value" do
       query =
         query_fixture(%{
           name: "Users by Age Query",
@@ -184,6 +184,36 @@ defmodule LotusTest do
 
       assert {:error, msg} = Lotus.run_query(query)
       assert msg =~ "Missing required variable"
+    end
+
+    test "runs query using mixed stored defaults (number) and runtime values (text)" do
+      query =
+        query_fixture(%{
+          name: "Mixed defaults and overrides",
+          statement: """
+          SELECT name, age
+          FROM test_users
+          WHERE age > {{min_age}} AND name = {{name}}
+          """,
+          variables: [
+            %{name: "min_age", type: :number, default: "30"},
+            %{name: "name", type: :text, default: "Jack Kerouac"}
+          ]
+        })
+
+      # default min_age=30 & name=Jack Kerouac → 1 row
+      assert {:ok, r1} = Lotus.run_query(query)
+      assert r1.rows == [["Jack Kerouac", 47]]
+
+      # override only the text var
+      assert {:ok, r2} = Lotus.run_query(query, vars: %{"name" => "Hunter S. Thompson"})
+      assert r2.rows == [["Hunter S. Thompson", 37]]
+
+      # override the number too
+      assert {:ok, r3} =
+               Lotus.run_query(query, vars: %{"name" => "Hunter S. Thompson", "min_age" => 38})
+
+      assert r3.rows == []
     end
 
     test "passes options through" do

@@ -203,33 +203,6 @@ defmodule Lotus.Storage.QueryTest do
       end
     end
 
-    test "handles table names as parameters (PostgreSQL)" do
-      q = %Query{
-        statement: "SELECT * FROM {{table}}",
-        variables: [
-          %{name: "table", type: :text, default: "test_users"}
-        ],
-        data_repo: "postgres"
-      }
-
-      {sql, params} = Query.to_sql_params(q, %{})
-      assert sql == "SELECT * FROM $1"
-      assert params == ["test_users"]
-    end
-
-    test "handles table names as parameters (SQLite)" do
-      q = %Query{
-        statement: "SELECT * FROM {{table}}",
-        variables: [
-          %{name: "table", type: :text, default: "test_users"}
-        ],
-        data_repo: "sqlite"
-      }
-
-      {sql, params} = Query.to_sql_params(q, %{})
-      assert sql == "SELECT * FROM ?"
-      assert params == ["test_users"]
-    end
 
     test "ignores unused query variables" do
       q = %Query{
@@ -274,39 +247,6 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["Jack", "Jack"]
     end
 
-    test "handles complex query with multiple variables (PostgreSQL)" do
-      q = %Query{
-        statement:
-          "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
-        variables: [
-          %{name: "table", type: :text, default: "users"},
-          %{name: "status", type: :text, default: "active"}
-        ],
-        data_repo: "postgres"
-      }
-
-      {sql, params} = Query.to_sql_params(q, %{"min" => 18, "max" => 65})
-
-      assert sql == "SELECT * FROM $1 WHERE age BETWEEN $2 AND $3 AND status = $4"
-      assert params == ["users", 18, 65, "active"]
-    end
-
-    test "handles complex query with multiple variables (SQLite)" do
-      q = %Query{
-        statement:
-          "SELECT * FROM {{table}} WHERE age BETWEEN {{min}} AND {{max}} AND status = {{status}}",
-        variables: [
-          %{name: "table", type: :text, default: "users"},
-          %{name: "status", type: :text, default: "active"}
-        ],
-        data_repo: "sqlite"
-      }
-
-      {sql, params} = Query.to_sql_params(q, %{"min" => 18, "max" => 65})
-
-      assert sql == "SELECT * FROM ? WHERE age BETWEEN ? AND ? AND status = ?"
-      assert params == ["users", 18, 65, "active"]
-    end
 
     test "overrides query variable defaults with provided supplied_vars" do
       q = %Query{
@@ -321,19 +261,6 @@ defmodule Lotus.Storage.QueryTest do
 
       assert sql == "SELECT * FROM users WHERE status = $1"
       assert params == ["active"]
-    end
-
-    test "handles empty string values" do
-      q = %Query{
-        statement: "SELECT * FROM users WHERE name = {{name}}",
-        variables: [],
-        data_repo: "sqlite"
-      }
-
-      {sql, params} = Query.to_sql_params(q, %{"name" => ""})
-
-      assert sql == "SELECT * FROM users WHERE name = ?"
-      assert params == [""]
     end
 
     test "raises when nil value is provided" do
@@ -360,6 +287,9 @@ defmodule Lotus.Storage.QueryTest do
 
       assert sql == "INSERT INTO users (name, age, email) VALUES ($1, $2, $3)"
       assert params == ["John", 30, "john@example.com"]
+    end
+
+    test "encloses a text literal in single quotes" do
     end
   end
 

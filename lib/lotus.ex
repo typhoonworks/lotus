@@ -102,19 +102,51 @@ defmodule Lotus do
   @doc """
   Run a saved query (by struct or id).
 
+  Variables in the query statement (using `{{variable_name}}` syntax) are
+  substituted with values from the query's default variables and any runtime 
+  overrides provided via the `vars` option.
+
+  ## Variable Resolution
+
+  Variables are resolved in this order:
+  1. Runtime values from `vars` option (highest priority)
+  2. Default values from the query's variable definitions
+  3. If neither exists, raises an error for missing required variable
+
   ## Examples
 
+      # Run query with default variable values
       Lotus.run_query(query)
-      Lotus.run_query(query, timeout: 10_000)
-      Lotus.run_query(query_id)
-      Lotus.run_query(query_id, repo: MyApp.DataRepo)
+      
+      # Override variables at runtime
+      Lotus.run_query(query, vars: %{"min_age" => 25, "status" => "active"})
+      
+      # Run with timeout and repo options
+      Lotus.run_query(query, timeout: 10_000, repo: MyApp.DataRepo)
+      
+      # Run by query ID
+      Lotus.run_query(query_id, vars: %{"user_id" => 123})
+
+  ## Variable Types
+
+  Variables are automatically cast based on their type definition:
+  - `:text` - Used as-is (strings)
+  - `:number` - Cast from string to integer  
+  - `:date` - Cast from ISO8601 string to Date struct
 
   """
   @spec run_query(Query.t() | term(), opts()) :: {:ok, QueryResult.t()} | {:error, term()}
   def run_query(query_or_id, opts \\ [])
 
   def run_query(%Query{} = q, opts) do
-    vars = Keyword.get(opts, :vars, %{})
+    supplied_vars = Keyword.get(opts, :vars, %{}) || %{}
+
+    defaults =
+      q.variables
+      |> Enum.filter(& &1.default)
+      |> Map.new(fn v -> {v.name, v.default} end)
+
+    vars = Map.merge(defaults, supplied_vars)
 
     {sql, params} =
       try do
