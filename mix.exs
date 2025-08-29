@@ -2,7 +2,7 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.5.3"
+  @version "0.5.4"
 
   def project do
     [
@@ -13,6 +13,7 @@ defmodule Lotus.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
+      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error]],
       deps: deps(),
       docs: docs(),
       package: package(),

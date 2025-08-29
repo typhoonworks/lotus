@@ -42,7 +42,9 @@ defmodule Lotus do
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
           read_only: boolean(),
-          search_path: binary() | nil
+          search_path: binary() | nil,
+          repo: binary() | nil,
+          vars: map()
         ]
 
   @doc """

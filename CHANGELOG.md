@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2025-08-29
+
+### Fixed
+- Fixed incomplete `@type opts()` specification - added missing `:repo` and `:vars` options to eliminate Dialyzer type errors
+
 ## [0.5.3] - 2025-08-29
 
 ### Enhanced
