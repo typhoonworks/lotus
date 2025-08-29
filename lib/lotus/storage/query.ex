@@ -102,6 +102,23 @@ defmodule Lotus.Storage.Query do
     end)
   end
 
+  @doc """
+  Extracts unique variable names from an SQL statement in order of first occurrence.
+
+  Variables are identified by the `{{variable_name}}` syntax.
+
+  ## Examples
+
+      iex> Lotus.Storage.Query.extract_variables_from_statement("SELECT * FROM users WHERE id = {{user_id}} AND status = {{status}}")
+      ["user_id", "status"]
+
+      iex> Lotus.Storage.Query.extract_variables_from_statement("SELECT * FROM users WHERE id = {{user_id}} OR id = {{user_id}}")
+      ["user_id"]
+
+      iex> Lotus.Storage.Query.extract_variables_from_statement("SELECT * FROM users")
+      []
+
+  """
   @spec extract_variables_from_statement(String.t()) :: [String.t()]
   def extract_variables_from_statement(statement) do
     regex = ~r/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/

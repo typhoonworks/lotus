@@ -1,4 +1,4 @@
-defmodule Lotus.Storage.QueryTest do
+defmodule Lotus.Storage.QueryVariableTest do
   use Lotus.Case, async: true
 
   alias Lotus.Storage.QueryVariable
@@ -25,7 +25,7 @@ defmodule Lotus.Storage.QueryTest do
     end
   end
 
-  def build_var(applicant, attrs \\ %{}) do
+  def build_var(attrs \\ %{}) do
     attrs =
       Enum.into(attrs, %{
         name: "var",

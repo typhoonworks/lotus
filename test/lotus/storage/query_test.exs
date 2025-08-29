@@ -173,7 +173,7 @@ defmodule Lotus.Storage.QueryTest do
 
       {sql, params} = Query.to_sql_params(q, %{})
 
-      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert sql == "SELECT * FROM users WHERE age > $1::numeric"
       assert params == [40]
     end
 
@@ -452,7 +452,7 @@ defmodule Lotus.Storage.QueryTest do
 
       {sql, params} = Query.to_sql_params(q, %{})
 
-      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert sql == "SELECT * FROM users WHERE age > $1::numeric"
       assert params == [30]
     end
 
@@ -467,7 +467,7 @@ defmodule Lotus.Storage.QueryTest do
 
       {sql, params} = Query.to_sql_params(q, %{})
 
-      assert sql == "SELECT * FROM users WHERE created_at >= $1"
+      assert sql == "SELECT * FROM users WHERE created_at >= $1::date"
       assert params == [~D[2024-01-01]]
     end
 
@@ -498,7 +498,7 @@ defmodule Lotus.Storage.QueryTest do
 
       {sql, params} = Query.to_sql_params(q, %{"min_age" => "25", "since" => "2024-06-01"})
 
-      assert sql == "SELECT * FROM users WHERE age > $1 AND created_at >= $2"
+      assert sql == "SELECT * FROM users WHERE age > $1::numeric AND created_at >= $2::date"
       assert params == [25, ~D[2024-06-01]]
     end
 
@@ -513,7 +513,7 @@ defmodule Lotus.Storage.QueryTest do
 
       {sql, params} = Query.to_sql_params(q, %{"min_age" => "45"})
 
-      assert sql == "SELECT * FROM users WHERE age > $1"
+      assert sql == "SELECT * FROM users WHERE age > $1::numeric"
       assert params == [45]
     end
 
@@ -598,7 +598,7 @@ defmodule Lotus.Storage.QueryTest do
         })
 
       expected_sql =
-        "SELECT u.* FROM users u\nWHERE u.org_id = $1\n  AND u.created_at >= $2\n  AND u.status = $3\n  AND u.age > $4"
+        "SELECT u.* FROM users u\nWHERE u.org_id = $1::numeric\n  AND u.created_at >= $2::date\n  AND u.status = $3\n  AND u.age > $4::numeric"
 
       assert sql == expected_sql
       assert params == [5, ~D[2024-06-01], "pending", 25]
