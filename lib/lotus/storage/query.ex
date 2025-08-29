@@ -75,6 +75,7 @@ defmodule Lotus.Storage.Query do
     |> maybe_add_unique_constraint()
   end
 
+  @spec to_sql_params(t(), map()) :: {String.t(), [term()]}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
     regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
@@ -99,6 +100,15 @@ defmodule Lotus.Storage.Query do
         acc_params ++ [cast_value(value, type)]
       }
     end)
+  end
+
+  @spec extract_variables_from_statement(String.t()) :: [String.t()]
+  def extract_variables_from_statement(statement) do
+    regex = ~r/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/
+
+    Regex.scan(regex, statement, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.uniq()
   end
 
   defp cast_value(value, :number) when is_binary(value), do: String.to_integer(value)

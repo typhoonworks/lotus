@@ -641,4 +641,35 @@ defmodule Lotus.Storage.QueryTest do
              end)
     end
   end
+
+  describe "extract_variables_from_statement/1" do
+    test "extracts variables in first-seen order and deduplicates" do
+      sql = """
+      SELECT * FROM users
+      WHERE id = {{id}} AND status = {{status}} OR id = {{id}}
+      """
+
+      assert ["id", "status"] == Query.extract_variables_from_statement(sql)
+    end
+
+    test "returns [] when there are no variables" do
+      sql = "SELECT * FROM users WHERE active = TRUE"
+      assert [] == Query.extract_variables_from_statement(sql)
+    end
+
+    test "handles adjacent variables" do
+      sql = "SELECT {{a}},{{b}},{{a}} FROM t"
+      assert ["a", "b"] == Query.extract_variables_from_statement(sql)
+    end
+
+    test "trims whitespace around variable names" do
+      sql = "WHERE x = {{   foo  }} AND y = {{bar}}"
+      assert ["foo", "bar"] == Query.extract_variables_from_statement(sql)
+    end
+
+    test "allows underscores and digits (as content), keeps first occurrence" do
+      sql = "SELECT * FROM t WHERE k={{user_id_2}} AND k2={{user_id_2}}"
+      assert ["user_id_2"] == Query.extract_variables_from_statement(sql)
+    end
+  end
 end

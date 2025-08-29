@@ -45,6 +45,13 @@ defmodule Lotus.Adapter.Postgres do
   def format_error(other), do: Lotus.Adapter.Default.format_error(other)
 
   @impl true
+  def param_placeholder(idx, _var, :date), do: "$#{idx}::date"
+  def param_placeholder(idx, _var, :datetime), do: "$#{idx}::timestamp"
+  def param_placeholder(idx, _var, :time), do: "$#{idx}::time"
+  def param_placeholder(idx, _var, :number), do: "$#{idx}::numeric"
+  def param_placeholder(idx, _var, :integer), do: "$#{idx}::integer"
+  def param_placeholder(idx, _var, :boolean), do: "$#{idx}::boolean"
+  def param_placeholder(idx, _var, :json), do: "$#{idx}::jsonb"
   def param_placeholder(idx, _var, _type), do: "$#{idx}"
 
   @impl true

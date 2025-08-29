@@ -81,4 +81,15 @@ defmodule Lotus.Storage.QueryVariable do
       changeset
     end
   end
+
+  @spec get_option_source(t()) :: :query | :static
+  def get_option_source(%__MODULE__{options_query: q}) when is_binary(q) do
+    if String.trim(q) != "" do
+      :query
+    else
+      :static
+    end
+  end
+
+  def get_option_source(_), do: :static
 end
