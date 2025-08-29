@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2025-08-29
+
 ### Enhanced
 - Added type-specific SQL parameter placeholders for MySQL adapter supporting date, datetime, time, number, integer, boolean, and json types
 - Added type-specific SQL parameter placeholders for PostgreSQL adapter supporting date, datetime, time, number, integer, boolean, and json types
