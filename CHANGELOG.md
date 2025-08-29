@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2025-08-29
+
+### Enhanced
+- Added type-specific SQL parameter placeholders for MySQL adapter supporting date, datetime, time, number, integer, boolean, and json types
+- Added type-specific SQL parameter placeholders for PostgreSQL adapter supporting date, datetime, time, number, integer, boolean, and json types
+- Added `extract_variables_from_statement/1` function to extract unique variable names from SQL statements in order of first occurrence
+- Added `get_option_source/1` function to QueryVariable module to determine if options come from query or static sources
+
+### Fixed
+- Added proper type casting in parameter placeholders to ensure correct SQL data type handling across database adapters
+
 ## [0.5.2] - 2025-08-28
 
 ### Enhanced

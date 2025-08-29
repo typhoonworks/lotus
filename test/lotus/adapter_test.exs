@@ -127,8 +127,8 @@ defmodule Lotus.AdapterTest do
   describe "param_placeholder/4" do
     @tag :postgres
     test "returns postgres placeholders with $N" do
-      assert Adapter.param_placeholder(Lotus.Test.Repo, 1, "id", :integer) == "$1"
-      assert Adapter.param_placeholder(Lotus.Test.Repo, 2, "id", :integer) == "$2"
+      assert Adapter.param_placeholder(Lotus.Test.Repo, 1, "id", :integer) == "$1::integer"
+      assert Adapter.param_placeholder(Lotus.Test.Repo, 2, "id", :integer) == "$2::integer"
     end
 
     @tag :sqlite
@@ -139,12 +139,15 @@ defmodule Lotus.AdapterTest do
 
     @tag :mysql
     test "returns mysql placeholders with ?" do
-      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 1, "id", :integer) == "?"
-      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 2, "id", :integer) == "?"
+      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 1, "id", :integer) ==
+               "CAST(? AS SIGNED)"
+
+      assert Adapter.param_placeholder(Lotus.Test.MysqlRepo, 2, "id", :integer) ==
+               "CAST(? AS SIGNED)"
     end
 
     test "defaults to Postgres when repo is nil" do
-      assert Adapter.param_placeholder(nil, 1, "id", :integer) == "$1"
+      assert Adapter.param_placeholder(nil, 1, "id", :integer) == "$1::integer"
     end
   end
 end

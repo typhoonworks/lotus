@@ -39,6 +39,13 @@ defmodule Lotus.Adapter.MySQL do
   def format_error(other), do: Lotus.Adapter.Default.format_error(other)
 
   @impl true
+  def param_placeholder(_idx, _var, :date), do: "CAST(? AS DATE)"
+  def param_placeholder(_idx, _var, :datetime), do: "CAST(? AS DATETIME)"
+  def param_placeholder(_idx, _var, :time), do: "CAST(? AS TIME)"
+  def param_placeholder(_idx, _var, :number), do: "CAST(? AS DECIMAL)"
+  def param_placeholder(_idx, _var, :integer), do: "CAST(? AS SIGNED)"
+  def param_placeholder(_idx, _var, :boolean), do: "CAST(? AS UNSIGNED)"
+  def param_placeholder(_idx, _var, :json), do: "CAST(? AS JSON)"
   def param_placeholder(_idx, _var, _type), do: "?"
 
   @impl true

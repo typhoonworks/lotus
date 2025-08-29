@@ -29,9 +29,14 @@ defmodule Lotus.Adapter do
   @doc """
   Return the SQL parameter placeholder string for a variable at a given index.
 
+  The placeholder may include database-specific type casting based on the variable type.
+
   Examples of adapter-specific output:
-    * Postgres → `"$1"`, `"$2"`, ...
-    * SQLite   → `"?"`
+    * Postgres → `"$1"` (untyped), `"$1::integer"` (typed)
+    * MySQL    → `"?"` (untyped), `"CAST(? AS SIGNED)"` (typed)
+    * SQLite   → `"?"` (always untyped)
+
+  Supported types for casting: `:date`, `:datetime`, `:time`, `:number`, `:integer`, `:boolean`, `:json`
   """
   @callback param_placeholder(index :: pos_integer(), var :: String.t(), type :: atom() | nil) ::
               String.t()

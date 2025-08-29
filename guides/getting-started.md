@@ -507,9 +507,9 @@ The `options_query` should return two columns:
 
 ### Variable Features
 
-- **Safe substitution**: Variables are converted to database-specific placeholders (`$1, $2` for PostgreSQL, `?` for SQLite)
-- **Structured variables**: Define variables with type, label, and default values for better UI integration
-- **Type support**: Supports text, number, and date types
+- **Safe substitution**: Variables are converted to database-specific placeholders with automatic type casting (`$1::integer` for PostgreSQL, `CAST(? AS SIGNED)` for MySQL, `?` for SQLite)
+- **Structured variables**: Define variables with type, label, and default values for better UI integration  
+- **Type support**: Supports text, number, integer, date, datetime, time, boolean, and json types with automatic database casting
 - **Widget controls**: Specify input or select widgets for UI rendering
 - **Static options**: Use `static_options` for predefined dropdown choices
 - **Dynamic options**: Use `options_query` to populate dropdowns from database queries
@@ -517,6 +517,35 @@ The `options_query` should return two columns:
 - **Runtime override**: Pass `vars:` option to override defaults
 - **Multiple occurrences**: The same variable can appear multiple times and will be bound correctly
 - **Type safety**: Variables are passed as parameters, preventing SQL injection
+
+## Variable Type Casting
+
+Lotus automatically generates type-specific SQL placeholders based on your variable types, ensuring proper data handling across different databases:
+
+### PostgreSQL Type Casting
+- `:integer` → `$1::integer`
+- `:number` → `$1::numeric` 
+- `:date` → `$1::date`
+- `:datetime` → `$1::timestamp`
+- `:time` → `$1::time`
+- `:boolean` → `$1::boolean`
+- `:json` → `$1::jsonb`
+- `:text` (default) → `$1`
+
+### MySQL Type Casting  
+- `:integer` → `CAST(? AS SIGNED)`
+- `:number` → `CAST(? AS DECIMAL)`
+- `:date` → `CAST(? AS DATE)`
+- `:datetime` → `CAST(? AS DATETIME)`
+- `:time` → `CAST(? AS TIME)`
+- `:boolean` → `CAST(? AS UNSIGNED)`
+- `:json` → `CAST(? AS JSON)`
+- `:text` (default) → `?`
+
+### SQLite
+SQLite uses untyped `?` placeholders for all variable types, as it handles type conversion automatically.
+
+This type casting ensures that your data is properly handled by the database engine and can prevent runtime type errors.
 
 ## Error Handling
 

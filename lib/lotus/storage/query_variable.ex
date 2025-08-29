@@ -81,4 +81,36 @@ defmodule Lotus.Storage.QueryVariable do
       changeset
     end
   end
+
+  @doc """
+  Determines the source of options for a query variable.
+
+  Returns `:query` if the variable has a non-empty `options_query`, 
+  otherwise returns `:static`.
+
+  ## Examples
+
+      iex> var = %Lotus.Storage.QueryVariable{options_query: "SELECT id, name FROM users"}
+      iex> Lotus.Storage.QueryVariable.get_option_source(var)
+      :query
+
+      iex> var = %Lotus.Storage.QueryVariable{options_query: "   "}
+      iex> Lotus.Storage.QueryVariable.get_option_source(var)
+      :static
+
+      iex> var = %Lotus.Storage.QueryVariable{static_options: ["a", "b"]}
+      iex> Lotus.Storage.QueryVariable.get_option_source(var)
+      :static
+
+  """
+  @spec get_option_source(t()) :: :query | :static
+  def get_option_source(%__MODULE__{options_query: q}) when is_binary(q) do
+    if String.trim(q) != "" do
+      :query
+    else
+      :static
+    end
+  end
+
+  def get_option_source(_), do: :static
 end
