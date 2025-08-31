@@ -224,6 +224,74 @@ Lotus generates cache keys based on:
 
 This ensures that different queries, even with slight variations, get separate cache entries.
 
+## Schema Function Caching
+
+All Lotus schema introspection functions are automatically cached:
+
+- `Lotus.list_tables/2` - Lists tables and views in database
+- `Lotus.get_table_schema/3` - Gets column information for tables  
+- `Lotus.get_table_stats/3` - Gets row counts and table statistics
+- `Lotus.list_relations/2` - Lists tables with schema information
+
+### Default Cache Behavior
+
+Schema functions use different cache profiles by default:
+
+```elixir
+# Schema metadata - uses :schema profile (1 hour TTL)
+{:ok, tables} = Lotus.list_tables("postgres")
+{:ok, schema} = Lotus.get_table_schema("postgres", "users")
+{:ok, relations} = Lotus.list_relations("postgres")
+
+# Table statistics - uses :results profile (30 seconds TTL)  
+{:ok, stats} = Lotus.get_table_stats("postgres", "users")
+```
+
+**Why different profiles?**
+- **Schema metadata** (tables, columns) changes rarely, so longer caching (1 hour) is safe
+- **Table statistics** (row counts) change frequently, so shorter caching (30 seconds) keeps data fresh
+
+### Schema Cache Options
+
+Schema functions support all cache modes and options:
+
+```elixir
+# Bypass cache for fresh data
+{:ok, tables} = Lotus.list_tables("postgres", cache: :bypass)
+
+# Refresh cache with latest data  
+{:ok, schema} = Lotus.get_table_schema("postgres", "users", cache: :refresh)
+
+# Use custom profile
+{:ok, stats} = Lotus.get_table_stats("postgres", "users", 
+  cache: [profile: :options])  # 5 minute TTL
+
+# Override TTL
+{:ok, relations} = Lotus.list_relations("postgres",
+  cache: [ttl_ms: 600_000])  # 10 minutes
+
+# Add tags for invalidation
+{:ok, schema} = Lotus.get_table_schema("postgres", "products",
+  cache: [tags: ["schema:products", "metadata"]])
+```
+
+### Schema Cache Invalidation
+
+Schema information is automatically tagged for selective invalidation:
+
+```elixir
+# After schema changes (migrations, table creation, etc.)
+Lotus.Cache.invalidate_tags(["repo:postgres", "schema:list_tables"])
+
+# After specific table changes
+Lotus.Cache.invalidate_tags(["table:public.users"])
+```
+
+**Automatic tags added:**
+- `"repo:#{repo_name}"` - Repository-specific data
+- `"schema:#{function_name}"` - Function-specific data  
+- `"table:#{schema}.#{table}"` - Table-specific data (when applicable)
+
 ## Working with run_query
 
 Saved queries (`run_query`) support all the same cache options:
@@ -263,6 +331,8 @@ Lotus automatically adds these tags to cached entries:
 
 - `"query:#{query_id}"` - For run_query calls
 - `"repo:#{repo_name}"` - For the database repository used
+- `"schema:#{function_name}"` - For Schema function calls (list_tables, get_table_schema, etc.)
+- `"table:#{schema}.#{table}"` - For table-specific Schema operations
 
 You can add your own tags in addition to these automatic ones.
 
@@ -343,6 +413,16 @@ Lotus.Cache.invalidate_tags(["user:#{user.id}"])
 # After bulk data updates
 Products.bulk_update()
 Lotus.Cache.invalidate_tags(["products", "inventory"])
+
+# After schema changes (migrations, DDL operations)
+Ecto.Migrator.run(MyApp.Repo, :up, all: true)
+Lotus.Cache.invalidate_tags(["repo:postgres", "schema:list_tables"])
+
+# After table-specific changes
+alter table(:users) do
+  add :new_column, :string
+end
+Lotus.Cache.invalidate_tags(["table:public.users"])
 ```
 
 ## Troubleshooting

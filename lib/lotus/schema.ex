@@ -6,7 +6,7 @@ defmodule Lotus.Schema do
   different database adapters (PostgreSQL, SQLite, etc.).
   """
 
-  alias Lotus.Visibility
+  alias Lotus.{Visibility, Config}
 
   @doc """
   Lists all tables in the given repository.
@@ -40,40 +40,52 @@ defmodule Lotus.Schema do
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    try do
-      relations =
-        case repo.__adapter__() do
-          Ecto.Adapters.Postgres ->
-            list_postgres_tables(repo, schemas, include_views?)
+    # cache defaults
+    search_path = Keyword.get(opts, :search_path)
 
-          Ecto.Adapters.SQLite3 ->
-            list_sqlite_tables(repo)
+    key =
+      schema_key(:list_tables, repo_name, search_path || Enum.join(schemas, ","), include_views?)
 
-          adapter ->
-            {:error, "Unsupported adapter: #{inspect(adapter)}"}
-        end
+    tags = ["repo:#{repo_name}", "schema:list_tables"]
 
-      case relations do
-        {:error, _} = error ->
-          error
-
-        raw_relations ->
-          filtered_relations =
-            raw_relations
-            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
-
-          case repo.__adapter__() do
-            Ecto.Adapters.Postgres ->
-              {:ok, filtered_relations}
-
-            _ ->
-              table_names = Enum.map(filtered_relations, fn {nil, table} -> table end)
-              {:ok, table_names}
-          end
+    profile =
+      if is_list(opts[:cache]) do
+        Keyword.get(opts[:cache], :profile, :schema)
+      else
+        :schema
       end
-    rescue
-      e -> {:error, Exception.message(e)}
-    end
+
+    exec_with_cache(opts[:cache], profile, key, tags, fn ->
+      try do
+        relations =
+          case repo.__adapter__() do
+            Ecto.Adapters.Postgres -> list_postgres_tables(repo, schemas, include_views?)
+            Ecto.Adapters.SQLite3 -> list_sqlite_tables(repo)
+            adapter -> {:error, "Unsupported adapter: #{inspect(adapter)}"}
+          end
+
+        case relations do
+          {:error, _} = error ->
+            error
+
+          raw_relations ->
+            filtered =
+              raw_relations
+              |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+
+            case repo.__adapter__() do
+              Ecto.Adapters.Postgres ->
+                {:ok, filtered}
+
+              _ ->
+                # flatten {nil, table} -> "table"
+                {:ok, Enum.map(filtered, fn {nil, table} -> table end)}
+            end
+        end
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+    end)
   end
 
   @doc """
@@ -111,28 +123,58 @@ defmodule Lotus.Schema do
           nil ->
             {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
-          schema ->
-            if Visibility.allowed_relation?(repo_name, {schema, table_name}) do
-              try do
-                {:ok, get_postgres_schema(repo, schema, table_name)}
-              rescue
-                e -> {:error, Exception.message(e)}
+          resolved_schema ->
+            key = schema_key(:get_table_schema, repo_name, resolved_schema, table_name)
+
+            tags = [
+              "repo:#{repo_name}",
+              "schema:get_table_schema",
+              "table:#{resolved_schema}.#{table_name}"
+            ]
+
+            profile =
+              if is_list(opts[:cache]) do
+                Keyword.get(opts[:cache], :profile, :schema)
+              else
+                :schema
               end
-            else
-              {:error, "Table '#{schema}.#{table_name}' is not visible by Lotus policy"}
-            end
+
+            exec_with_cache(opts[:cache], profile, key, tags, fn ->
+              if Visibility.allowed_relation?(repo_name, {resolved_schema, table_name}) do
+                try do
+                  {:ok, get_postgres_schema(repo, resolved_schema, table_name)}
+                rescue
+                  e -> {:error, Exception.message(e)}
+                end
+              else
+                {:error,
+                 "Table '#{resolved_schema}.#{table_name}' is not visible by Lotus policy"}
+              end
+            end)
         end
 
       Ecto.Adapters.SQLite3 ->
-        if Visibility.allowed_relation?(repo_name, {nil, table_name}) do
-          try do
-            {:ok, get_sqlite_schema(repo, table_name)}
-          rescue
-            e -> {:error, Exception.message(e)}
+        key = schema_key(:get_table_schema, repo_name, nil, table_name)
+        tags = ["repo:#{repo_name}", "schema:get_table_schema", "table:#{table_name}"]
+
+        profile =
+          if is_list(opts[:cache]) do
+            Keyword.get(opts[:cache], :profile, :schema)
+          else
+            :schema
           end
-        else
-          {:error, "Table '#{table_name}' is not visible by Lotus policy"}
-        end
+
+        exec_with_cache(opts[:cache], profile, key, tags, fn ->
+          if Visibility.allowed_relation?(repo_name, {nil, table_name}) do
+            try do
+              {:ok, get_sqlite_schema(repo, table_name)}
+            rescue
+              e -> {:error, Exception.message(e)}
+            end
+          else
+            {:error, "Table '#{table_name}' is not visible by Lotus policy"}
+          end
+        end)
 
       adapter ->
         {:error, "Unsupported adapter: #{inspect(adapter)}"}
@@ -172,32 +214,62 @@ defmodule Lotus.Schema do
           nil ->
             {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
-          schema ->
-            if Visibility.allowed_relation?(repo_name, {schema, table_name}) do
-              try do
-                qt = ~s|"#{String.replace(table_name, ~s|"|, ~s|""|)}"|
-                qs = ~s|"#{String.replace(schema, ~s|"|, ~s|""|)}"|
-                %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{qs}.#{qt}")
-                {:ok, %{row_count: count}}
-              rescue
-                e -> {:error, Exception.message(e)}
+          resolved_schema ->
+            key = schema_key(:get_table_stats, repo_name, resolved_schema, table_name)
+
+            tags = [
+              "repo:#{repo_name}",
+              "schema:get_table_stats",
+              "table:#{resolved_schema}.#{table_name}"
+            ]
+
+            profile =
+              if is_list(opts[:cache]) do
+                Keyword.get(opts[:cache], :profile, :results)
+              else
+                :results
               end
-            else
-              {:error, "Table '#{schema}.#{table_name}' is not visible by Lotus policy"}
-            end
+
+            exec_with_cache(opts[:cache], profile, key, tags, fn ->
+              if Visibility.allowed_relation?(repo_name, {resolved_schema, table_name}) do
+                try do
+                  qt = ~s|"#{String.replace(table_name, ~s|"|, ~s|""|)}"|
+                  qs = ~s|"#{String.replace(resolved_schema, ~s|"|, ~s|""|)}"|
+                  %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{qs}.#{qt}")
+                  {:ok, %{row_count: count}}
+                rescue
+                  e -> {:error, Exception.message(e)}
+                end
+              else
+                {:error,
+                 "Table '#{resolved_schema}.#{table_name}' is not visible by Lotus policy"}
+              end
+            end)
         end
 
       Ecto.Adapters.SQLite3 ->
-        if Visibility.allowed_relation?(repo_name, {nil, table_name}) do
-          try do
-            %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{table_name}")
-            {:ok, %{row_count: count}}
-          rescue
-            e -> {:error, Exception.message(e)}
+        key = schema_key(:get_table_stats, repo_name, nil, table_name)
+        tags = ["repo:#{repo_name}", "schema:get_table_stats", "table:#{table_name}"]
+
+        profile =
+          if is_list(opts[:cache]) do
+            Keyword.get(opts[:cache], :profile, :results)
+          else
+            :results
           end
-        else
-          {:error, "Table '#{table_name}' is not visible by Lotus policy"}
-        end
+
+        exec_with_cache(opts[:cache], profile, key, tags, fn ->
+          if Visibility.allowed_relation?(repo_name, {nil, table_name}) do
+            try do
+              %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{table_name}")
+              {:ok, %{row_count: count}}
+            rescue
+              e -> {:error, Exception.message(e)}
+            end
+          else
+            {:error, "Table '#{table_name}' is not visible by Lotus policy"}
+          end
+        end)
 
       adapter ->
         {:error, "Unsupported adapter: #{inspect(adapter)}"}
@@ -223,33 +295,47 @@ defmodule Lotus.Schema do
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    try do
-      relations =
-        case repo.__adapter__() do
-          Ecto.Adapters.Postgres ->
-            list_postgres_tables(repo, schemas, include_views?)
+    search_path = Keyword.get(opts, :search_path)
 
-          Ecto.Adapters.SQLite3 ->
-            list_sqlite_tables(repo)
+    key =
+      schema_key(
+        :list_relations,
+        repo_name,
+        search_path || Enum.join(schemas, ","),
+        include_views?
+      )
 
-          adapter ->
-            {:error, "Unsupported adapter: #{inspect(adapter)}"}
-        end
+    tags = ["repo:#{repo_name}", "schema:list_relations"]
 
-      case relations do
-        {:error, _} = error ->
-          error
-
-        raw_relations ->
-          filtered_relations =
-            raw_relations
-            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
-
-          {:ok, filtered_relations}
+    profile =
+      if is_list(opts[:cache]) do
+        Keyword.get(opts[:cache], :profile, :schema)
+      else
+        :schema
       end
-    rescue
-      e -> {:error, Exception.message(e)}
-    end
+
+    exec_with_cache(opts[:cache], profile, key, tags, fn ->
+      try do
+        relations =
+          case repo.__adapter__() do
+            Ecto.Adapters.Postgres -> list_postgres_tables(repo, schemas, include_views?)
+            Ecto.Adapters.SQLite3 -> list_sqlite_tables(repo)
+            adapter -> {:error, "Unsupported adapter: #{inspect(adapter)}"}
+          end
+
+        case relations do
+          {:error, _} = error ->
+            error
+
+          raw_relations ->
+            {:ok,
+             raw_relations
+             |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))}
+        end
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+    end)
   end
 
   defp effective_schemas(repo, opts) do
@@ -412,5 +498,153 @@ defmodule Lotus.Schema do
       true ->
         type
     end
+  end
+
+  defp cache_mode(nil) do
+    case Config.cache_adapter() do
+      {:ok, _adapter} -> :use
+      :error -> :off
+    end
+  end
+
+  defp cache_mode(:bypass), do: :bypass
+  defp cache_mode(:refresh), do: :refresh
+
+  defp cache_mode(opts) when is_list(opts) do
+    cond do
+      :bypass in opts -> :bypass
+      :refresh in opts -> :refresh
+      true -> :use
+    end
+  end
+
+  defp choose_ttl(cache_opts, default_profile) do
+    cond do
+      is_list(cache_opts) and Keyword.has_key?(cache_opts, :ttl_ms) ->
+        Keyword.fetch!(cache_opts, :ttl_ms)
+
+      true ->
+        prof =
+          cond do
+            is_list(cache_opts) and Keyword.has_key?(cache_opts, :profile) ->
+              Keyword.fetch!(cache_opts, :profile)
+
+            not is_nil(default_profile) ->
+              default_profile
+
+            true ->
+              Config.default_cache_profile()
+          end
+
+        Config.cache_profile_settings(prof)[:ttl_ms] ||
+          (Config.cache_config() && Config.cache_config()[:default_ttl_ms]) ||
+          :timer.seconds(60)
+    end
+  end
+
+  defp exec_with_cache(cache_opts, ttl_default_profile, key, tags, fun) do
+    case cache_mode(cache_opts) do
+      :off ->
+        fun.()
+
+      :bypass ->
+        fun.()
+
+      :refresh ->
+        case fun.() do
+          {:ok, val} ->
+            ttl = choose_ttl(cache_opts, ttl_default_profile)
+            :ok = Lotus.Cache.put(key, val, ttl, build_cache_options(cache_opts, tags))
+            {:ok, val}
+
+          other ->
+            other
+        end
+
+      :use ->
+        ttl = choose_ttl(cache_opts, ttl_default_profile)
+        opts = build_cache_options(cache_opts, tags)
+
+        try do
+          case Lotus.Cache.get_or_store(
+                 key,
+                 ttl,
+                 fn ->
+                   case fun.() do
+                     {:ok, val} -> val
+                     {:error, e} -> throw({:lotus_cache_error, e})
+                   end
+                 end,
+                 opts
+               ) do
+            {:ok, val, _meta} -> {:ok, val}
+            {:error, _} -> fun.()
+          end
+        catch
+          {:lotus_cache_error, e} -> {:error, e}
+        end
+    end
+  end
+
+  defp build_cache_options(cache_opts, tags) do
+    base = [tags: tags]
+
+    if is_list(cache_opts) do
+      pass =
+        cache_opts
+        |> Enum.filter(fn
+          {_k, _v} -> true
+          _atom -> false
+        end)
+        |> Keyword.take([:max_bytes, :compress])
+
+      Keyword.merge(pass, base)
+    else
+      base
+    end
+  end
+
+  defp schema_key(:list_tables, repo_name, search_path, include_views) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({repo_name, search_path, include_views, Lotus.version()})
+      )
+      |> Base.encode16(case: :lower)
+
+    "schema:list_tables:#{repo_name}:#{digest}"
+  end
+
+  defp schema_key(:list_relations, repo_name, search_path, include_views) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({repo_name, search_path, include_views, Lotus.version()})
+      )
+      |> Base.encode16(case: :lower)
+
+    "schema:list_relations:#{repo_name}:#{digest}"
+  end
+
+  defp schema_key(:get_table_schema, repo_name, resolved_schema, table_name) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({repo_name, resolved_schema, table_name, Lotus.version()})
+      )
+      |> Base.encode16(case: :lower)
+
+    "schema:get_table_schema:#{repo_name}:#{digest}"
+  end
+
+  defp schema_key(:get_table_stats, repo_name, resolved_schema, table_name) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({repo_name, resolved_schema, table_name, Lotus.version()})
+      )
+      |> Base.encode16(case: :lower)
+
+    "schema:get_table_stats:#{repo_name}:#{digest}"
   end
 end
