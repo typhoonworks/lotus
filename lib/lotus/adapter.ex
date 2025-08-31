@@ -7,7 +7,7 @@ defmodule Lotus.Adapter do
 
   @type repo :: Ecto.Repo.t()
 
-  @callback set_read_only(repo) :: :ok | no_return()
+  @callback execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
   @callback set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
   @callback set_search_path(repo, String.t()) :: :ok | no_return()
   @callback format_error(any()) :: String.t()
@@ -53,11 +53,24 @@ defmodule Lotus.Adapter do
   }
 
   @doc """
-  Sets the current session/transaction into **read-only** mode for the
-  given repository, if supported by the underlying adapter.
+  Executes a function within a transaction with adapter-specific session management.
+
+  The adapter handles:
+  - Starting a transaction with appropriate timeout
+  - Setting read-only mode, statement timeout, and search path if specified in opts
+  - Running the provided function
+  - Properly cleaning up session state (important for MySQL/SQLite session persistence)
+
+  Options:
+  - `:read_only` - whether to run in read-only mode (default: true)
+  - `:statement_timeout_ms` - statement timeout in milliseconds (default: 5000)
+  - `:timeout` - transaction timeout in milliseconds (default: 15000) 
+  - `:search_path` - PostgreSQL search path (optional)
   """
-  @spec set_read_only(repo) :: :ok | no_return()
-  def set_read_only(repo), do: impl_for(repo).set_read_only(repo)
+  @spec execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
+  def execute_in_transaction(repo, fun, opts \\ []) do
+    impl_for(repo).execute_in_transaction(repo, fun, opts)
+  end
 
   @doc """
   Sets the **statement timeout** (in milliseconds) for the given repository,

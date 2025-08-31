@@ -160,6 +160,56 @@ config :my_app, MyApp.MySQLRepo,
   port: 3306
 ```
 
+## Session Management & Connection Pool Safety
+
+Lotus implements robust session management to ensure database connections remain in their original state after query execution. This is critical in production environments where connection pooling is used.
+
+### How It Works
+
+Each database adapter uses a **snapshot/restore pattern**:
+
+1. **Before execution**: Lotus snapshots the current session state
+2. **During execution**: Lotus applies read-only mode and statement timeouts
+3. **After execution**: Lotus automatically restores the original session state
+
+This prevents "connection pool pollution" where one operation's settings affect subsequent operations using the same pooled connection.
+
+### Database-Specific Behavior
+
+#### PostgreSQL
+- Uses `SET LOCAL` statements that automatically revert at transaction end
+- **No session leakage** - settings are transaction-scoped only
+- Minimal overhead with automatic cleanup
+
+#### MySQL
+- Snapshots and restores session-level settings:
+  - `@@session.transaction_read_only` (access mode)  
+  - `@@session.transaction_isolation` (isolation level)
+  - `@@session.max_execution_time` (statement timeout)
+- **Cross-version compatible** - handles MySQL 5.7 vs 8.0+ differences
+- Guaranteed restoration using `try/after` blocks
+
+#### SQLite  
+- Snapshots and restores `PRAGMA query_only` setting
+- **Graceful fallback** for SQLite versions < 3.8.0 that don't support the pragma
+- Preserves original read-only state if database was already configured as read-only
+
+### Why This Matters
+
+Without proper session management, Lotus queries could leave database connections in unexpected states:
+
+```elixir
+# Without session management (problematic):
+Lotus.run_sql("SELECT * FROM users")  # Sets read-only mode
+MyApp.create_user(%{name: "John"})    # FAILS - connection still read-only!
+
+# With Lotus session management (safe):
+Lotus.run_sql("SELECT * FROM users")  # Sets + restores session state  
+MyApp.create_user(%{name: "John"})    # ✅ Works normally
+```
+
+This automatic session management ensures Lotus plays nicely with other parts of your application that share the same database connection pool.
+
 ## Troubleshooting
 
 ### Common Issues

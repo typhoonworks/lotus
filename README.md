@@ -19,12 +19,15 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 >🚧 This library is in its infancy so you should treat all versions as early pre-release versions. We'll make the best effort to give heads up about breaking changes; however we can't guarantee backwards compatibility for every change.
 
 ## Current Features
-- 🔐 **Enhanced security** with read-only execution and table visibility controls
+- 🔐 **Enhanced security** with read-only execution, table visibility controls, and automatic session state management
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
 - 🏗️ **Multi-database support** - PostgreSQL, MySQL, and SQLite with flexible repository architecture
 - ⚡ **Configurable execution** with timeout controls and connection management
 - 🎯 **Type-safe results** with structured query result handling
 - 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
+
+### Production-Safe Connection Pooling
+Lotus automatically preserves your database session state to prevent connection pool pollution. When a query completes, all session settings (read-only mode, timeouts, isolation levels) are restored to their original values, ensuring Lotus doesn't interfere with other parts of your application. [Learn more about session management →](guides/installation.md#session-management--connection-pool-safety)
 
 ## What's planned?
 - [ ] Query versioning and change tracking

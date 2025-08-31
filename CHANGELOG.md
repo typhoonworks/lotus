@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- Added `Lotus.SQL.Transformer` for transforming SQL queries to ensure database-specific syntax compatibility when using lotus variables
+- Added `Lotus.SourceUtils` module providing utility functions for detecting data source types and feature support across adapters
+- Added comprehensive interval query transformation support for PostgreSQL (INTERVAL syntax, make_interval functions)
+- Added quoted wildcard pattern transformation for database-specific string concatenation (supports both PostgreSQL || and MySQL CONCAT)
+- Added quoted variable placeholder stripping for cleaner parameter binding
+- Added `reset_read_only/1` callback to adapter behaviour for resetting database sessions back to read-write mode after query execution
+
+### Enhanced
+- Enhanced query execution to automatically transform SQL statements based on target database adapter before parameter binding
+
+### Fixed
+- **CRITICAL:** Fixed database session persistence issue where session-level settings (`PRAGMA query_only` for SQLite, `SET SESSION TRANSACTION READ ONLY` and `max_execution_time` for MySQL) were not being properly restored after query execution, causing connection pool pollution that could break subsequent operations. Lotus now uses a robust snapshot/restore pattern to preserve and restore original session state for each database connection.
+
 ## [0.5.4] - 2025-08-29
 
 ### Fixed

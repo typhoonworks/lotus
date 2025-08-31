@@ -19,6 +19,7 @@ defmodule Lotus.Test.Repo.Migrations.CreateTestTables do
       add(:content, :text)
       add(:user_id, references(:test_users, on_delete: :delete_all), null: false)
       add(:published, :boolean, default: false)
+      add(:published_at, :utc_datetime)
       add(:view_count, :integer, default: 0)
       add(:tags, {:array, :string}, default: [])
       timestamps()

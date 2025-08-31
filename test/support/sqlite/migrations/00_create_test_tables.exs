@@ -19,6 +19,7 @@ defmodule Lotus.Test.SqliteRepo.Migrations.CreateTestTables do
       add(:content, :text)
       add(:user_id, references(:test_users, on_delete: :restrict), null: false)
       add(:published, :boolean, default: false)
+      add(:published_at, :utc_datetime)
       add(:view_count, :integer, default: 0)
       add(:tags, :text, default: "")
       timestamps()

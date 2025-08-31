@@ -10,6 +10,7 @@ defmodule Lotus.Preflight do
   """
 
   alias Lotus.Visibility
+  alias Lotus.SourceUtils
 
   @doc """
   Authorizes a SQL query by checking all relations it would access.
@@ -31,22 +32,12 @@ defmodule Lotus.Preflight do
     unless Map.has_key?(Lotus.Config.data_repos(), repo_name) do
       {:error, "Unknown data repo '#{repo_name}'"}
     else
-      case adapter(repo) do
+      case SourceUtils.source_type(repo) do
         :postgres -> authorize_pg(repo, repo_name, sql, params, search_path)
         :sqlite -> authorize_sqlite(repo, repo_name, sql, params, search_path)
         :mysql -> authorize_mysql(repo, repo_name, sql, params, search_path)
-        # fallback: allow if unknown adapter
         _ -> :ok
       end
-    end
-  end
-
-  defp adapter(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> :postgres
-      Ecto.Adapters.SQLite3 -> :sqlite
-      Ecto.Adapters.MyXQL -> :mysql
-      _ -> :other
     end
   end
 

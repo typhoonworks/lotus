@@ -14,6 +14,8 @@ defmodule Lotus.Storage.Query do
 
   alias Lotus.Config
   alias Lotus.Storage.QueryVariable
+  alias Lotus.SourceUtils
+  alias Lotus.SQL.Transformer
 
   @type t :: %__MODULE__{
           id: term(),
@@ -77,14 +79,17 @@ defmodule Lotus.Storage.Query do
 
   @spec to_sql_params(t(), map()) :: {String.t(), [term()]}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
+    source_type = get_source_type(q.data_repo)
+    transformed_sql = Transformer.transform(sql, source_type)
+
     regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
     vars_in_order =
-      Regex.scan(regex, sql)
+      Regex.scan(regex, transformed_sql)
       |> Enum.map(fn [_, var] -> var end)
 
-    Enum.reduce(Enum.with_index(vars_in_order, 1), {sql, []}, fn {var, idx},
-                                                                 {acc_sql, acc_params} ->
+    Enum.reduce(Enum.with_index(vars_in_order, 1), {transformed_sql, []}, fn {var, idx},
+                                                                             {acc_sql, acc_params} ->
       meta = Enum.find(vars, %{}, &(&1.name == var))
 
       value =
@@ -127,6 +132,13 @@ defmodule Lotus.Storage.Query do
     |> List.flatten()
     |> Enum.uniq()
   end
+
+  defp get_source_type(nil), do: SourceUtils.source_type(Config.default_data_repo())
+
+  defp get_source_type(repo_name) when is_binary(repo_name),
+    do: SourceUtils.source_type(repo_name)
+
+  defp get_source_type(repo) when is_atom(repo), do: SourceUtils.source_type(repo)
 
   defp cast_value(value, :number) when is_binary(value), do: String.to_integer(value)
   defp cast_value(value, :date) when is_binary(value), do: Date.from_iso8601!(value)

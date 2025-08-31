@@ -3,6 +3,7 @@ Application.ensure_all_started(:ecto_sqlite3)
 Application.ensure_all_started(:myxql)
 
 Enum.each([Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo], fn repo ->
+  _ = repo.__adapter__().storage_down(repo.config())
   _ = repo.__adapter__().storage_up(repo.config())
 end)
 
