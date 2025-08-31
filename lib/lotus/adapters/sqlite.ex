@@ -30,6 +30,24 @@ defmodule Lotus.Adapter.SQLite3 do
   end
 
   @impl true
+  def reset_read_only(repo) do
+    try do
+      repo.query!("PRAGMA query_only = OFF")
+      :ok
+    rescue
+      error in [Exqlite.Error] ->
+        msg = error.message || Exception.message(error)
+
+        if msg =~ "no such pragma" or msg =~ "unknown pragma" do
+          # SQLite version doesn't support PRAGMA query_only, so no reset needed
+          :ok
+        else
+          reraise error, __STACKTRACE__
+        end
+    end
+  end
+
+  @impl true
   # No-op: SQLite does not support statement timeouts
   def set_statement_timeout(_repo, _timeout_ms), do: :ok
 

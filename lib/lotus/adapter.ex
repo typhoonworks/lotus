@@ -8,6 +8,7 @@ defmodule Lotus.Adapter do
   @type repo :: Ecto.Repo.t()
 
   @callback set_read_only(repo) :: :ok | no_return()
+  @callback reset_read_only(repo) :: :ok | no_return()
   @callback set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
   @callback set_search_path(repo, String.t()) :: :ok | no_return()
   @callback format_error(any()) :: String.t()
@@ -58,6 +59,13 @@ defmodule Lotus.Adapter do
   """
   @spec set_read_only(repo) :: :ok | no_return()
   def set_read_only(repo), do: impl_for(repo).set_read_only(repo)
+
+  @doc """
+  Resets the current session/transaction back to **read-write** mode for the
+  given repository, if supported by the underlying adapter.
+  """
+  @spec reset_read_only(repo) :: :ok | no_return()
+  def reset_read_only(repo), do: impl_for(repo).reset_read_only(repo)
 
   @doc """
   Sets the **statement timeout** (in milliseconds) for the given repository,

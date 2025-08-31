@@ -13,6 +13,10 @@ defmodule Lotus.Adapter.Default do
   def set_read_only(_repo), do: :ok
 
   @impl true
+  @doc "No-op: unsupported adapters cannot reset read-only mode."
+  def reset_read_only(_repo), do: :ok
+
+  @impl true
   @doc "No-op: unsupported adapters do not implement statement timeouts."
   def set_statement_timeout(_repo, _ms), do: :ok
 

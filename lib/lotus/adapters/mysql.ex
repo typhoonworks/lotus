@@ -13,6 +13,12 @@ defmodule Lotus.Adapter.MySQL do
   end
 
   @impl true
+  def reset_read_only(repo) do
+    repo.query!("SET SESSION TRANSACTION READ WRITE")
+    :ok
+  end
+
+  @impl true
   def set_statement_timeout(repo, timeout_ms) do
     repo.query!("SET SESSION max_execution_time = #{timeout_ms}")
     :ok

@@ -8,9 +8,13 @@
 - Added comprehensive interval query transformation support for PostgreSQL (INTERVAL syntax, make_interval functions)
 - Added quoted wildcard pattern transformation for database-specific string concatenation (supports both PostgreSQL || and MySQL CONCAT)
 - Added quoted variable placeholder stripping for cleaner parameter binding
+- Added `reset_read_only/1` callback to adapter behaviour for resetting database sessions back to read-write mode after query execution
 
 ### Enhanced
 - Enhanced query execution to automatically transform SQL statements based on target database adapter before parameter binding
+
+### Fixed
+- **CRITICAL:** Fixed database session persistence issue where read-only mode (`PRAGMA query_only = ON` for SQLite, `SET SESSION TRANSACTION READ ONLY` for MySQL) was not being reset after query execution, leaving database connections unusable for subsequent write operations. Lotus now properly resets sessions to read-write mode after each query completes.
 
 ## [0.5.4] - 2025-08-29
 
