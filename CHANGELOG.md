@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Added `Lotus.can_run?/1` and `Lotus.can_run?/2` functions to check if a query has all required variables available before execution
 - Added `Lotus.SQL.Transformer` for transforming SQL queries to ensure database-specific syntax compatibility when using lotus variables
 - Added `Lotus.SourceUtils` module providing utility functions for detecting data source types and feature support across adapters
 - Added comprehensive interval query transformation support for PostgreSQL (INTERVAL syntax, make_interval functions)

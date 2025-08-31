@@ -126,12 +126,14 @@ defmodule LotusTest do
   end
 
   describe "run_query/2 with Query struct" do
+    alias Lotus.Storage.{Query, QueryVariable}
+
     test "runs query with SQL and no vars" do
-      query =
-        query_fixture(%{
-          name: "Active Users Query",
-          statement: "SELECT name, email FROM test_users WHERE active = true ORDER BY name"
-        })
+      query = %Query{
+        name: "Active Users Query",
+        statement: "SELECT name, email FROM test_users WHERE active = true ORDER BY name",
+        variables: []
+      }
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 2
@@ -142,14 +144,13 @@ defmodule LotusTest do
     end
 
     test "runs query using stored variable with default value" do
-      query =
-        query_fixture(%{
-          name: "Users by Age Query",
-          statement: "SELECT name, age FROM test_users WHERE age > {{min_age}} ORDER BY age DESC",
-          variables: [
-            %{name: "min_age", type: :number, default: "40"}
-          ]
-        })
+      query = %Query{
+        name: "Users by Age Query",
+        statement: "SELECT name, age FROM test_users WHERE age > {{min_age}} ORDER BY age DESC",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "40"}
+        ]
+      }
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 2
@@ -160,14 +161,13 @@ defmodule LotusTest do
     end
 
     test "runs query with runtime vars overriding defaults" do
-      query =
-        query_fixture(%{
-          name: "Override Vars Query",
-          statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
-          variables: [
-            %{name: "min_age", type: :number, default: "20"}
-          ]
-        })
+      query = %Query{
+        name: "Override Vars Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "20"}
+        ]
+      }
 
       # Override min_age = 50 at runtime
       assert {:ok, result} = Lotus.run_query(query, vars: %{"min_age" => 50})
@@ -176,30 +176,31 @@ defmodule LotusTest do
     end
 
     test "errors if required var is missing and no default" do
-      query =
-        query_fixture(%{
-          name: "Missing Var Query",
-          statement: "SELECT name FROM test_users WHERE age > {{min_age}}"
-        })
+      query = %Query{
+        name: "Missing Var Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number}
+        ]
+      }
 
       assert {:error, msg} = Lotus.run_query(query)
       assert msg =~ "Missing required variable"
     end
 
     test "runs query using mixed stored defaults (number) and runtime values (text)" do
-      query =
-        query_fixture(%{
-          name: "Mixed defaults and overrides",
-          statement: """
-          SELECT name, age
-          FROM test_users
-          WHERE age > {{min_age}} AND name = {{name}}
-          """,
-          variables: [
-            %{name: "min_age", type: :number, default: "30"},
-            %{name: "name", type: :text, default: "Jack Kerouac"}
-          ]
-        })
+      query = %Query{
+        name: "Mixed defaults and overrides",
+        statement: """
+        SELECT name, age
+        FROM test_users
+        WHERE age > {{min_age}} AND name = {{name}}
+        """,
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "30"},
+          %QueryVariable{name: "name", type: :text, default: "Jack Kerouac"}
+        ]
+      }
 
       # default min_age=30 & name=Jack Kerouac → 1 row
       assert {:ok, r1} = Lotus.run_query(query)
@@ -217,11 +218,11 @@ defmodule LotusTest do
     end
 
     test "passes options through" do
-      query =
-        query_fixture(%{
-          name: "Simple Query with Options",
-          statement: "SELECT 1 as result"
-        })
+      query = %Query{
+        name: "Simple Query with Options",
+        statement: "SELECT 1 as result",
+        variables: []
+      }
 
       opts = [timeout: 5000]
       assert {:ok, result} = Lotus.run_query(query, opts)
@@ -230,23 +231,23 @@ defmodule LotusTest do
     end
 
     test "handles SQL errors" do
-      query =
-        query_fixture(%{
-          name: "Error Query",
-          statement: "SELECT invalid_column FROM nonexistent_table"
-        })
+      query = %Query{
+        name: "Error Query",
+        statement: "SELECT invalid_column FROM nonexistent_table",
+        variables: []
+      }
 
       assert {:error, error} = Lotus.run_query(query)
       assert error =~ "relation \"nonexistent_table\" does not exist"
     end
 
     test "uses stored data_repo when specified" do
-      query =
-        query_fixture(%{
-          name: "Test Data Query",
-          statement: "SELECT 1 as result",
-          data_repo: "postgres"
-        })
+      query = %Query{
+        name: "Test Data Query",
+        statement: "SELECT 1 as result",
+        variables: [],
+        data_repo: "postgres"
+      }
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 1
@@ -254,12 +255,12 @@ defmodule LotusTest do
     end
 
     test "runtime repo option overrides stored data_repo" do
-      query =
-        query_fixture(%{
-          name: "Override Test Query",
-          statement: "SELECT 1 as result",
-          data_repo: "sqlite"
-        })
+      query = %Query{
+        name: "Override Test Query",
+        statement: "SELECT 1 as result",
+        variables: [],
+        data_repo: "sqlite"
+      }
 
       assert {:ok, result} = Lotus.run_query(query, repo: "postgres")
       assert result.num_rows == 1
@@ -267,11 +268,11 @@ defmodule LotusTest do
     end
 
     test "falls back to default repo when no data_repo specified" do
-      query =
-        query_fixture(%{
-          name: "Default Repo Query",
-          statement: "SELECT 1 as result"
-        })
+      query = %Query{
+        name: "Default Repo Query",
+        statement: "SELECT 1 as result",
+        variables: []
+      }
 
       assert {:ok, result} = Lotus.run_query(query)
       assert result.num_rows == 1
@@ -346,6 +347,96 @@ defmodule LotusTest do
 
       assert {:error, error} = Lotus.run_sql(sql)
       assert error =~ "relation \"nonexistent_table\" does not exist"
+    end
+  end
+
+  describe "can_run?/2" do
+    alias Lotus.Storage.{Query, QueryVariable}
+
+    test "returns true for query with no variables" do
+      query = %Query{
+        name: "No Vars Query",
+        statement: "SELECT name FROM test_users WHERE active = true",
+        variables: []
+      }
+
+      assert Lotus.can_run?(query) == true
+    end
+
+    test "returns true for query with variables that have defaults" do
+      query = %Query{
+        name: "Query with Defaults",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "30"}
+        ]
+      }
+
+      assert Lotus.can_run?(query) == true
+    end
+
+    test "returns false for query with required variables and no defaults" do
+      query = %Query{
+        name: "Query with Required Vars",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number}
+        ]
+      }
+
+      assert Lotus.can_run?(query) == false
+    end
+
+    test "returns true when runtime vars fill missing required variables" do
+      query = %Query{
+        name: "Query with Runtime Vars",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}} AND name = {{name}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "30"},
+          %QueryVariable{name: "name", type: :text}
+        ]
+      }
+
+      assert Lotus.can_run?(query) == false
+      assert Lotus.can_run?(query, vars: %{"name" => "Jack Kerouac"}) == true
+    end
+
+    test "returns false when some required variables are still missing" do
+      query = %Query{
+        name: "Query with Multiple Required Vars",
+        statement:
+          "SELECT name FROM test_users WHERE age > {{min_age}} AND name = {{name}} AND active = {{is_active}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number},
+          %QueryVariable{name: "name", type: :text},
+          %QueryVariable{name: "is_active", type: :text}
+        ]
+      }
+
+      # No variables provided
+      assert Lotus.can_run?(query) == false
+
+      # Only some variables provided
+      assert Lotus.can_run?(query, vars: %{"min_age" => 30}) == false
+      assert Lotus.can_run?(query, vars: %{"min_age" => 30, "name" => "Jack"}) == false
+
+      # All variables provided
+      assert Lotus.can_run?(query,
+               vars: %{"min_age" => 30, "name" => "Jack", "is_active" => "true"}
+             ) == true
+    end
+
+    test "returns true when runtime vars override defaults" do
+      query = %Query{
+        name: "Query with Overrides",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "30"}
+        ]
+      }
+
+      assert Lotus.can_run?(query) == true
+      assert Lotus.can_run?(query, vars: %{"min_age" => 50}) == true
     end
   end
 
