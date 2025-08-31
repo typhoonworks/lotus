@@ -10,6 +10,28 @@ defmodule LotusTest do
     :ok
   end
 
+  describe "child_spec/1" do
+    test "name is used as a default child id" do
+      assert Supervisor.child_spec(Lotus, []).id == Lotus
+      assert Supervisor.child_spec({Lotus, name: :foo}, []).id == :foo
+    end
+  end
+
+  describe "start_link/1" do
+    test "name can be an arbitrary term" do
+      opts = [name: make_ref(), cache: nil]
+      assert {:ok, _pid} = start_supervised({Lotus, opts})
+    end
+
+    test "supervisor_name must be unique" do
+      sup_name = :lotus_test_sup
+      opts = [supervisor_name: sup_name, cache: nil]
+
+      {:ok, pid} = Lotus.start_link(opts)
+      assert {:error, {:already_started, ^pid}} = Lotus.start_link(opts)
+    end
+  end
+
   describe "repo/0" do
     test "returns the configured repo" do
       assert Lotus.repo() == Lotus.Test.Repo

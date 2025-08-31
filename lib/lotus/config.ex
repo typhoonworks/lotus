@@ -35,7 +35,19 @@ defmodule Lotus.Config do
           unique_names: boolean(),
           data_repos: %{String.t() => module()},
           default_repo: String.t() | nil,
-          table_visibility: map()
+          table_visibility: map(),
+          cache: cache_config()
+        }
+
+  @type cache_config :: %{
+          adapter: module() | nil,
+          namespace: String.t(),
+          profiles: %{atom() => keyword()},
+          compress: boolean(),
+          max_bytes: non_neg_integer(),
+          lock_timeout: non_neg_integer(),
+          default_ttl_ms: non_neg_integer(),
+          default_profile: atom()
         }
 
   @schema [
@@ -66,6 +78,11 @@ defmodule Lotus.Config do
       default: %{},
       doc:
         "Configuration for table visibility rules. Controls which tables are accessible through Lotus queries and discovery."
+    ],
+    cache: [
+      type: {:or, [:map, nil]},
+      default: nil,
+      doc: "Cache configuration including adapter, profiles, and settings."
     ]
   ]
 
@@ -84,7 +101,14 @@ defmodule Lotus.Config do
 
   defp get_lotus_config do
     Application.get_all_env(:lotus)
-    |> Keyword.take([:ecto_repo, :unique_names, :data_repos, :default_repo, :table_visibility])
+    |> Keyword.take([
+      :ecto_repo,
+      :unique_names,
+      :data_repos,
+      :default_repo,
+      :table_visibility,
+      :cache
+    ])
   end
 
   @doc """
@@ -195,6 +219,83 @@ defmodule Lotus.Config do
       config = load!()
       visibility_config = config[:table_visibility] || %{}
       visibility_config[:default] || []
+  end
+
+  @doc """
+  Gets a configuration value by key.
+
+  Returns the configuration for the given key from the application environment.
+  """
+  @spec get(atom()) :: any()
+  def get(key) do
+    load!()[key]
+  end
+
+  @doc """
+  Returns the cache configuration.
+  """
+  @spec cache_config() :: cache_config() | nil
+  def cache_config, do: load!()[:cache]
+
+  @doc """
+  Returns cache settings for a specific profile.
+
+  Falls back to default settings if profile not found.
+  """
+  @spec cache_profile_settings(atom()) :: keyword()
+  def cache_profile_settings(profile_name) do
+    case cache_config() do
+      nil ->
+        []
+
+      config ->
+        profiles = config[:profiles] || %{}
+        profiles[profile_name] || []
+    end
+  end
+
+  @doc """
+  Returns cache adapter module if configured.
+  """
+  @spec cache_adapter() :: {:ok, module()} | :error
+  def cache_adapter do
+    case cache_config() do
+      nil ->
+        :error
+
+      config ->
+        case config[:adapter] do
+          nil -> :error
+          mod when is_atom(mod) -> {:ok, mod}
+        end
+    end
+  end
+
+  @doc """
+  Returns the cache namespace.
+  """
+  @spec cache_namespace() :: String.t()
+  def cache_namespace do
+    case cache_config() do
+      nil ->
+        "lotus:v0"
+
+      config ->
+        config[:namespace] || "lotus:v1"
+    end
+  end
+
+  @doc """
+  Returns the globally configured default cache profile.
+
+  Falls back to :results if none configured.
+  """
+  @spec default_cache_profile() :: atom()
+  def default_cache_profile do
+    case cache_config() do
+      nil -> :results
+      config -> config[:default_profile] || :results
+    end
   end
 
   @doc """

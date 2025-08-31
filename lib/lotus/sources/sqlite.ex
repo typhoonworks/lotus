@@ -1,6 +1,8 @@
-defmodule Lotus.Adapter.SQLite3 do
+defmodule Lotus.Sources.SQLite3 do
   @moduledoc false
-  @behaviour Lotus.Adapter
+
+  @behaviour Lotus.Source
+
   require Logger
 
   @exlite_error Module.concat([:Exqlite, :Error])
@@ -67,7 +69,7 @@ defmodule Lotus.Adapter.SQLite3 do
     "SQLite Error: " <> (Map.get(e, :message) || Exception.message(e))
   end
 
-  def format_error(other), do: Lotus.Adapter.Default.format_error(other)
+  def format_error(other), do: Lotus.Sources.Default.format_error(other)
 
   @impl true
   def param_placeholder(_idx, _var, _type), do: "?"

@@ -35,8 +35,12 @@ defmodule Lotus do
       {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
   """
 
-  alias Lotus.{Config, Storage, Runner, QueryResult, Schema}
-  alias Lotus.Storage.Query
+  @type cache_opt ::
+          :bypass
+          | :refresh
+          | {:ttl_ms, non_neg_integer()}
+          | {:profile, atom()}
+          | {:tags, [binary()]}
 
   @type opts :: [
           timeout: non_neg_integer(),
@@ -44,8 +48,23 @@ defmodule Lotus do
           read_only: boolean(),
           search_path: binary() | nil,
           repo: binary() | nil,
-          vars: map()
+          vars: map(),
+          cache: [cache_opt] | :bypass | :refresh | nil
         ]
+
+  alias Lotus.{Config, Storage, Runner, QueryResult, Schema, Sources}
+  alias Lotus.Storage.Query
+
+  def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
+  def start_link(opts \\ []), do: Lotus.Supervisor.start_link(opts)
+
+  @doc """
+  Returns the current version of Lotus.
+  """
+  def version do
+    Application.spec(:lotus, :vsn)
+    |> to_string()
+  end
 
   @doc """
   Returns the configured Ecto repository where Lotus stores query definitions.
@@ -105,7 +124,7 @@ defmodule Lotus do
   Run a saved query (by struct or id).
 
   Variables in the query statement (using `{{variable_name}}` syntax) are
-  substituted with values from the query's default variables and any runtime 
+  substituted with values from the query's default variables and any runtime
   overrides provided via the `vars` option.
 
   ## Variable Resolution
@@ -119,13 +138,13 @@ defmodule Lotus do
 
       # Run query with default variable values
       Lotus.run_query(query)
-      
+
       # Override variables at runtime
       Lotus.run_query(query, vars: %{"min_age" => 25, "status" => "active"})
-      
+
       # Run with timeout and repo options
       Lotus.run_query(query, timeout: 10_000, repo: MyApp.DataRepo)
-      
+
       # Run by query ID
       Lotus.run_query(query_id, vars: %{"user_id" => 123})
 
@@ -133,7 +152,7 @@ defmodule Lotus do
 
   Variables are automatically cast based on their type definition:
   - `:text` - Used as-is (strings)
-  - `:number` - Cast from string to integer  
+  - `:number` - Cast from string to integer
   - `:date` - Cast from ISO8601 string to Date struct
 
   """
@@ -163,21 +182,27 @@ defmodule Lotus do
         {:error, msg}
 
       {sql, params} ->
-        repo_from_opts = Keyword.get(opts, :repo)
-        repo_from_query = q.data_repo
+        {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
 
-        search_path_from_opts = Keyword.get(opts, :search_path)
-        search_path = search_path_from_opts || q.search_path
+        search_path = Keyword.get(opts, :search_path) || q.search_path
+        final_opts = if search_path, do: Keyword.put(opts, :search_path, search_path), else: opts
 
-        final_opts =
-          if search_path do
-            Keyword.put(opts, :search_path, search_path)
+        key = result_key(sql, vars, repo_name, search_path)
+
+        tags =
+          ["query:#{q.id}", "repo:#{repo_name}"] ++
+            if is_list(opts[:cache]), do: Keyword.get(opts[:cache], :tags, []), else: []
+
+        profile =
+          if is_list(opts[:cache]) do
+            Keyword.get(opts[:cache], :profile, Config.default_cache_profile())
           else
-            opts
+            Config.default_cache_profile()
           end
 
-        execution_repo = resolve_execution_repo(repo_from_opts || repo_from_query)
-        Runner.run_sql(execution_repo, sql, params, final_opts)
+        exec_with_cache(opts[:cache], profile, key, tags, fn ->
+          Runner.run_sql(repo_mod, sql, params, final_opts)
+        end)
     end
   end
 
@@ -189,7 +214,7 @@ defmodule Lotus do
   @doc """
   Checks if a query can be run with the provided variables.
 
-  Returns true if all required variables have values (either from defaults 
+  Returns true if all required variables have values (either from defaults
   or supplied vars), false otherwise.
 
   ## Examples
@@ -198,7 +223,7 @@ defmodule Lotus do
       Lotus.can_run?(query)
       # => true
 
-      # Query missing required variables  
+      # Query missing required variables
       Lotus.can_run?(query)
       # => false
 
@@ -256,9 +281,26 @@ defmodule Lotus do
         ]) ::
           {:ok, QueryResult.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
-    execution_repo = resolve_execution_repo(Keyword.get(opts, :repo))
+    {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), nil)
     runner_opts = Keyword.delete(opts, :repo)
-    Runner.run_sql(execution_repo, sql, params, runner_opts)
+    search_path = Keyword.get(runner_opts, :search_path)
+
+    key = result_key(sql, params, repo_name, search_path)
+
+    tags =
+      ["repo:#{repo_name}"] ++
+        if is_list(opts[:cache]), do: Keyword.get(opts[:cache], :tags, []), else: []
+
+    profile =
+      if is_list(opts[:cache]) do
+        Keyword.get(opts[:cache], :profile, Config.default_cache_profile())
+      else
+        Config.default_cache_profile()
+      end
+
+    exec_with_cache(opts[:cache], profile, key, tags, fn ->
+      Runner.run_sql(repo_mod, sql, params, runner_opts)
+    end)
   end
 
   @doc """
@@ -319,15 +361,122 @@ defmodule Lotus do
   """
   def list_relations(repo_or_name, opts \\ []), do: Schema.list_relations(repo_or_name, opts)
 
-  defp resolve_execution_repo(nil) do
-    Config.default_data_repo()
+  defp cache_mode(nil) do
+    case Config.cache_adapter() do
+      {:ok, _adapter} -> :use
+      :error -> :off
+    end
   end
 
-  defp resolve_execution_repo(repo_name) when is_binary(repo_name) do
-    get_data_repo!(repo_name)
+  defp cache_mode(:bypass), do: :bypass
+  defp cache_mode(:refresh), do: :refresh
+
+  defp cache_mode(opts) when is_list(opts) do
+    cond do
+      :bypass in opts -> :bypass
+      :refresh in opts -> :refresh
+      true -> :use
+    end
   end
 
-  defp resolve_execution_repo(repo_module) when is_atom(repo_module) do
-    repo_module
+  defp choose_ttl(cache_opts, default_profile) do
+    cond do
+      # caller explicitly passed a ttl override
+      is_list(cache_opts) and Keyword.has_key?(cache_opts, :ttl_ms) ->
+        Keyword.fetch!(cache_opts, :ttl_ms)
+
+      true ->
+        # resolve profile in this order:
+        # 1. caller passed `:profile`
+        # 2. fallback from caller (e.g. :results / :schema)
+        # 3. globally configured default profile
+        prof =
+          cond do
+            is_list(cache_opts) and Keyword.has_key?(cache_opts, :profile) ->
+              Keyword.fetch!(cache_opts, :profile)
+
+            not is_nil(default_profile) ->
+              default_profile
+
+            true ->
+              Config.default_cache_profile()
+          end
+
+        Config.cache_profile_settings(prof)[:ttl_ms] ||
+          (Config.cache_config() && Config.cache_config()[:default_ttl_ms]) ||
+          :timer.seconds(60)
+    end
+  end
+
+  defp exec_with_cache(cache_opts, ttl_default_profile, key, tags, fun) do
+    case cache_mode(cache_opts) do
+      :off ->
+        fun.()
+
+      :bypass ->
+        fun.()
+
+      :refresh ->
+        case fun.() do
+          {:ok, val} ->
+            ttl = choose_ttl(cache_opts, ttl_default_profile)
+            cache_options = build_cache_options(cache_opts, tags)
+            :ok = Lotus.Cache.put(key, val, ttl, cache_options)
+            {:ok, val}
+
+          error ->
+            error
+        end
+
+      :use ->
+        ttl = choose_ttl(cache_opts, ttl_default_profile)
+
+        try do
+          cache_options = build_cache_options(cache_opts, tags)
+
+          case Lotus.Cache.get_or_store(
+                 key,
+                 ttl,
+                 fn ->
+                   case fun.() do
+                     {:ok, val} -> val
+                     {:error, e} -> throw({:lotus_cache_error, e})
+                   end
+                 end,
+                 cache_options
+               ) do
+            {:ok, val, _} -> {:ok, val}
+            {:error, _} -> fun.()
+          end
+        catch
+          {:lotus_cache_error, e} -> {:error, e}
+        end
+    end
+  end
+
+  defp build_cache_options(cache_opts, tags) do
+    base_options = [tags: tags]
+
+    if is_list(cache_opts) do
+      cache_options =
+        cache_opts
+        |> Enum.filter(fn
+          {_key, _value} -> true
+          _atom -> false
+        end)
+        |> Keyword.take([:max_bytes, :compress])
+
+      Keyword.merge(cache_options, base_options)
+    else
+      base_options
+    end
+  end
+
+  defp result_key(sql, bound_vars_map, repo_name, search_path) do
+    Lotus.Cache.Key.result(sql, bound_vars_map,
+      data_repo: repo_name,
+      search_path: search_path,
+      lotus_version: Lotus.version()
+    )
   end
 end
