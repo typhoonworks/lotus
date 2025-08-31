@@ -288,4 +288,72 @@ defmodule Lotus.Integration.CachingTest do
                )
     end
   end
+
+  describe "Schema caching scenarios" do
+    test "get_table_stats uses results profile by default" do
+      expect(Cache, :get_or_store, fn key, ttl, fun, opts ->
+        # Should use :results profile TTL (30 seconds)
+        assert ttl == 30_000
+        assert Keyword.get(opts, :tags) |> Enum.any?(&String.contains?(&1, "get_table_stats"))
+        Cache.ETS.get_or_store(key, ttl, fun, opts)
+      end)
+
+      assert {:ok, result} = Lotus.get_table_stats("postgres", "test_users")
+      assert %{row_count: _count} = result
+    end
+
+    test "get_table_stats caching works with real data changes" do
+      user = Fixtures.insert_user(%{name: "Stats Test User", email: "stats@test.com"})
+
+      assert {:ok, result1} = Lotus.get_table_stats("postgres", "test_users")
+      assert %{row_count: count1} = result1
+      assert count1 >= 1
+
+      Lotus.Test.Repo.delete!(user)
+
+      assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users")
+      assert result1.row_count == result2.row_count
+      # Still cached value
+      assert result2.row_count == count1
+    end
+
+    test "get_table_stats bypass mode skips cache" do
+      user = Fixtures.insert_user(%{name: "Bypass Test User", email: "bypass@test.com"})
+
+      assert {:ok, result1} = Lotus.get_table_stats("postgres", "test_users")
+      assert %{row_count: count1} = result1
+
+      Lotus.Test.Repo.delete!(user)
+
+      assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users", cache: :bypass)
+      assert result2.row_count == count1 - 1
+
+      assert {:ok, result3} = Lotus.get_table_stats("postgres", "test_users")
+      assert result3.row_count == count1
+    end
+
+    test "get_table_stats refresh mode updates cache with fresh data" do
+      user = Fixtures.insert_user(%{name: "Refresh Test User", email: "refresh@test.com"})
+
+      assert {:ok, result1} = Lotus.get_table_stats("postgres", "test_users")
+      assert %{row_count: count1} = result1
+
+      Lotus.Test.Repo.delete!(user)
+
+      assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users", cache: :refresh)
+      assert result2.row_count == count1 - 1
+
+      assert {:ok, result3} = Lotus.get_table_stats("postgres", "test_users")
+      assert result3.row_count == count1 - 1
+    end
+
+    test "schema functions respect cache profile override" do
+      expect(Cache, :get_or_store, fn key, ttl, fun, opts ->
+        assert ttl == 300_000
+        Cache.ETS.get_or_store(key, ttl, fun, opts)
+      end)
+
+      assert {:ok, _result} = Lotus.list_tables("postgres", cache: [profile: :options])
+    end
+  end
 end

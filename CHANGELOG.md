@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- **NEW:** Comprehensive caching system with pluggable adapters and ETS backend
+- **NEW:** Comprehensive caching system with adapter behaviour and ETS backend
 - **NEW:** OTP application and supervisor support for production deployment
 - Added `Lotus.Application` and `Lotus.Supervisor` for managed cache backend lifecycle
 - Added `Lotus.child_spec/1` and `Lotus.start_link/1` for supervision tree integration
@@ -15,11 +15,12 @@
 - Added cache modes: default caching, `:bypass` (skip cache), `:refresh` (update cache)
 - Added cache key generation based on SQL, parameters, repository, search path, and Lotus version
 - Added cache integration for both `run_sql/3` and `run_query/2` functions
+- Added cache integration for all Schema functions (`list_tables/2`, `get_table_schema/3`, `get_table_stats/3`, `list_relations/2`)
 - Added cache options passing (`max_bytes`, `compress`) through the API layer
-- Added comprehensive cache integration tests demonstrating all cache behaviors
 
-### Enhanced  
+### Enhanced
 - Enhanced `run_sql/3` and `run_query/2` to automatically use configured cache when available
+- Enhanced all Schema functions with read-through caching using appropriate profiles (`:schema` for metadata, `:results` for statistics)
 - Enhanced cache system with automatic adapter detection and graceful fallback when no adapter configured
 - Enhanced cache configuration with profile-specific TTL settings and runtime overrides
 
