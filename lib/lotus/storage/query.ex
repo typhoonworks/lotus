@@ -14,7 +14,7 @@ defmodule Lotus.Storage.Query do
 
   alias Lotus.Config
   alias Lotus.Storage.QueryVariable
-  alias Lotus.SourceUtils
+  alias Lotus.Sources
   alias Lotus.SQL.Transformer
 
   @type t :: %__MODULE__{
@@ -133,12 +133,12 @@ defmodule Lotus.Storage.Query do
     |> Enum.uniq()
   end
 
-  defp get_source_type(nil), do: SourceUtils.source_type(Config.default_data_repo())
+  defp get_source_type(nil), do: Sources.source_type(Config.default_data_repo())
 
   defp get_source_type(repo_name) when is_binary(repo_name),
-    do: SourceUtils.source_type(repo_name)
+    do: Sources.source_type(repo_name)
 
-  defp get_source_type(repo) when is_atom(repo), do: SourceUtils.source_type(repo)
+  defp get_source_type(repo) when is_atom(repo), do: Sources.source_type(repo)
 
   defp cast_value(value, :number) when is_binary(value), do: String.to_integer(value)
   defp cast_value(value, :date) when is_binary(value), do: Date.from_iso8601!(value)

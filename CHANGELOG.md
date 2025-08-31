@@ -5,6 +5,7 @@
 ### Changed
 - **BREAKING:** Renamed `Lotus.Adapter` behaviour to `Lotus.Source` in preparation for caching functionality and to support future non-SQL data sources
 - **BREAKING:** Renamed adapter modules from `Lotus.Adapters.*` to `Lotus.Sources.*` (`Lotus.Sources.Postgres`, `Lotus.Sources.MySQL`, `Lotus.Sources.SQLite3`, `Lotus.Sources.Default`)
+- **BREAKING:** Renamed `Lotus.SourceUtils` module to `Lotus.Sources` and expanded its functionality to include data source registration, dynamic module resolution, and comprehensive source management utilities
 
 ## [0.6.0] - 2025-08-31
 
