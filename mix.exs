@@ -42,11 +42,11 @@ defmodule Lotus.MixProject do
     [
       {:ecto, "~> 3.10"},
       {:ecto_sql, "~> 3.10"},
-      {:postgrex, "~> 0.20", optional: true},
-      {:myxql, "~> 0.8", optional: true},
       {:ecto_sqlite3, "~> 0.21", optional: true},
-      {:nimble_options, "~> 1.0"},
       {:jason, "~> 1.4"},
+      {:myxql, "~> 0.8", optional: true},
+      {:nimble_options, "~> 1.0"},
+      {:postgrex, "~> 0.20", optional: true},
 
       # Development and testing dependencies
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

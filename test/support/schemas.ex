@@ -34,6 +34,7 @@ defmodule Lotus.Test.Schemas do
       field(:title, :string)
       field(:content, :string)
       field(:published, :boolean, default: false)
+      field(:published_at, :utc_datetime)
       field(:view_count, :integer, default: 0)
       field(:tags, {:array, :string}, default: [])
 

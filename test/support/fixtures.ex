@@ -7,7 +7,7 @@ defmodule Lotus.Fixtures do
   alias Lotus.Test.Schemas
   alias Lotus.Storage
 
-  def insert_user(attrs \\ %{}) do
+  def insert_user(attrs \\ %{}, repo \\ Repo) do
     defaults = %{
       name: "User #{System.unique_integer([:positive])}",
       email: "user#{System.unique_integer([:positive])}@example.com",
@@ -20,17 +20,18 @@ defmodule Lotus.Fixtures do
 
     {:ok, user} =
       struct(Schemas.User, attrs)
-      |> Repo.insert()
+      |> repo.insert()
 
     user
   end
 
-  def insert_post(user_id, attrs \\ %{}) do
+  def insert_post(user_id, attrs \\ %{}, repo \\ Repo) do
     defaults = %{
       title: "Post #{System.unique_integer([:positive])}",
       content: "This is test content.",
       user_id: user_id,
       published: false,
+      published_at: nil,
       view_count: 0,
       tags: ["test"]
     }
@@ -39,7 +40,7 @@ defmodule Lotus.Fixtures do
 
     {:ok, post} =
       struct(Schemas.Post, attrs)
-      |> Repo.insert()
+      |> repo.insert()
 
     post
   end

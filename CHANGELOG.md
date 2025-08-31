@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- Added `Lotus.SQL.Transformer` for transforming SQL queries to ensure database-specific syntax compatibility when using lotus variables
+- Added `Lotus.SourceUtils` module providing utility functions for detecting data source types and feature support across adapters
+- Added comprehensive interval query transformation support for PostgreSQL (INTERVAL syntax, make_interval functions)
+- Added quoted wildcard pattern transformation for database-specific string concatenation (supports both PostgreSQL || and MySQL CONCAT)
+- Added quoted variable placeholder stripping for cleaner parameter binding
+
+### Enhanced
+- Enhanced query execution to automatically transform SQL statements based on target database adapter before parameter binding
+
 ## [0.5.4] - 2025-08-29
 
 ### Fixed
