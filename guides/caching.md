@@ -17,7 +17,7 @@ Lotus provides a flexible caching system with the following features:
 
 ### Basic Configuration
 
-Add caching to your Lotus configuration:
+Lotus ships with built-in cache profiles (`:results`, `:schema`, `:options`) that work without any configuration. To enable caching, just add the cache adapter to your Lotus configuration:
 
 ```elixir
 # config/config.exs
@@ -26,11 +26,16 @@ config :lotus,
   data_repos: %{
     "main" => MyApp.Repo
   },
-  cache: [
+  cache: %{
     adapter: Lotus.Cache.ETS,
     namespace: "myapp_lotus"
-  ]
+  }
 ```
+
+**Note**: Even with minimal configuration, you get sensible caching defaults:
+- Query results cached for 60 seconds (`:results` profile)
+- Schema information cached for 1 hour (`:schema` profile)  
+- Options/reference data cached for 5 minutes (`:options` profile)
 
 ### OTP Application Setup
 
@@ -79,12 +84,12 @@ The `Lotus.Cache.ETS` adapter provides in-memory caching using Erlang Term Stora
 
 ```elixir
 config :lotus,
-  cache: [
+  cache: %{
     adapter: Lotus.Cache.ETS,
     namespace: "myapp_lotus",    # Optional namespace
     max_bytes: 5_000_000,       # Max entry size: 5MB (default)
     compress: true              # Compress cache entries (default: true)
-  ]
+  }
 ```
 
 **Characteristics:**
@@ -96,22 +101,46 @@ config :lotus,
 
 ### Cache Profiles
 
-Profiles allow you to configure different TTL strategies for different types of queries:
+Profiles allow you to configure different TTL strategies for different types of queries. Lotus comes with three predefined profiles that are always available:
+
+#### Predefined Profiles
+
+Lotus ships with these built-in cache profiles:
+
+- **`:results`** - 60 seconds TTL - For query results and fast-changing data
+- **`:schema`** - 1 hour TTL - For database schema information that changes rarely  
+- **`:options`** - 5 minutes TTL - For dropdown options and reference data
+
+These profiles are always available, even without any cache configuration. You can override their settings or add custom profiles:
 
 ```elixir
 config :lotus,
   cache: [
     adapter: Lotus.Cache.ETS,
     profiles: %{
-      results: [ttl_ms: 30_000],      # 30 seconds - fast-changing data
-      options: [ttl_ms: 300_000],     # 5 minutes - dropdown options
-      schema: [ttl_ms: 3_600_000],    # 1 hour - table schemas
+      # Override built-in profiles
+      results: [ttl_ms: 30_000],      # Override default 60s to 30s
+      schema: [ttl_ms: 7_200_000],    # Override default 1h to 2h
+      options: [ttl_ms: 600_000],     # Override default 5m to 10m
+      
+      # Add custom profiles
       reports: [ttl_ms: 1_800_000]    # 30 minutes - business reports
     },
     default_profile: :results,        # Used when no profile specified
     default_ttl_ms: 60_000           # 1 minute - fallback TTL
   ]
 ```
+
+#### Profile Fallback Behavior
+
+When you don't configure cache profiles:
+- `:results` uses 60 seconds TTL
+- `:schema` uses 1 hour TTL  
+- `:options` uses 5 minutes TTL
+
+When you configure `default_ttl_ms` but don't specify `:results` profile:
+- `:results` uses your `default_ttl_ms` value
+- `:schema` and `:options` keep their built-in defaults
 
 ### Namespace Support
 
@@ -365,24 +394,27 @@ Pre-populate cache with commonly used queries:
 
 ### Profile Strategy
 
+Lotus provides sensible defaults for the built-in profiles, but you can customize them based on your needs:
+
 ```elixir
 config :lotus,
   cache: [
     profiles: %{
-      # Fast-changing transactional data
-      results: [ttl_ms: 30_000],      # 30 seconds
+      # Built-in profiles (customize as needed)
+      results: [ttl_ms: 30_000],      # Default: 60s - Fast-changing data
+      options: [ttl_ms: 300_000],     # Default: 5m - Reference data  
+      schema: [ttl_ms: 3_600_000],    # Default: 1h - Schema information
 
-      # Reference data that changes occasionally
-      options: [ttl_ms: 300_000],     # 5 minutes
-
-      # Schema information that rarely changes
-      schema: [ttl_ms: 3_600_000],    # 1 hour
-
-      # Business reports with longer acceptable staleness
-      reports: [ttl_ms: 1_800_000]    # 30 minutes
+      # Add custom profiles for specific use cases
+      reports: [ttl_ms: 1_800_000]    # 30 minutes - Business reports
     }
   ]
 ```
+
+**Default TTL Guidelines:**
+- **`:results` (60s)** - Query results, user data, transactional information
+- **`:options` (5m)** - Dropdown options, lookup tables, reference data  
+- **`:schema` (1h)** - Database schema, table structure, metadata
 
 ### Tagging Strategy
 

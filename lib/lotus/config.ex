@@ -240,17 +240,31 @@ defmodule Lotus.Config do
   @doc """
   Returns cache settings for a specific profile.
 
-  Falls back to default settings if profile not found.
+  Falls back to built-in defaults for :results, :schema, and :options profiles.
+  Users can override these defaults in their configuration.
   """
   @spec cache_profile_settings(atom()) :: keyword()
   def cache_profile_settings(profile_name) do
     case cache_config() do
       nil ->
-        []
+        # built-in defaults
+        case profile_name do
+          :results -> [ttl_ms: :timer.seconds(60)]
+          :schema -> [ttl_ms: :timer.hours(1)]
+          :options -> [ttl_ms: :timer.minutes(5)]
+          _ -> []
+        end
 
       config ->
         profiles = config[:profiles] || %{}
-        profiles[profile_name] || []
+
+        profiles[profile_name] ||
+          case profile_name do
+            :results -> [ttl_ms: config[:default_ttl_ms] || :timer.seconds(60)]
+            :schema -> [ttl_ms: :timer.hours(1)]
+            :options -> [ttl_ms: :timer.minutes(5)]
+            _ -> []
+          end
     end
   end
 

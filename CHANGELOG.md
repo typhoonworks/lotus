@@ -9,7 +9,7 @@
 - Added `Lotus.child_spec/1` and `Lotus.start_link/1` for supervision tree integration
 - Added `Lotus.Cache` behaviour for implementing custom cache adapters
 - Added `Lotus.Cache.ETS` adapter providing in-memory caching with TTL support
-- Added cache configuration with profiles (`:results`, `:options`, `:schema`) for different TTL strategies
+- Added cache configuration with predefined profiles (`:results`, `:options`, `:schema`) that ship with built-in defaults and support custom TTL strategies
 - Added cache namespace support for multi-tenant applications
 - Added tag-based cache invalidation for targeted cache clearing
 - Added cache modes: default caching, `:bypass` (skip cache), `:refresh` (update cache)
@@ -17,6 +17,7 @@
 - Added cache integration for both `run_sql/3` and `run_query/2` functions
 - Added cache integration for all Schema functions (`list_tables/2`, `get_table_schema/3`, `get_table_stats/3`, `list_relations/2`)
 - Added cache options passing (`max_bytes`, `compress`) through the API layer
+- Added built-in cache profile defaults: `:results` (60s TTL), `:schema` (1h TTL), `:options` (5m TTL) - available without any configuration
 
 ### Enhanced
 - Enhanced `run_sql/3` and `run_query/2` to automatically use configured cache when available
