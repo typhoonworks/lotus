@@ -3,7 +3,7 @@ defmodule Lotus.Runner do
   Read-only SQL execution with safety checks, param binding, and result shaping.
   """
 
-  alias Lotus.{Adapter, QueryResult, Preflight}
+  alias Lotus.{Source, QueryResult, Preflight}
 
   @type repo :: module()
   @type sql :: String.t()
@@ -31,7 +31,7 @@ defmodule Lotus.Runner do
   end
 
   defp exec_read_only(repo, sql, params, opts) do
-    Adapter.execute_in_transaction(
+    Source.execute_in_transaction(
       repo,
       fn ->
         case repo.query(sql, params, timeout: Keyword.get(opts, :timeout, 15_000)) do
@@ -39,7 +39,7 @@ defmodule Lotus.Runner do
             {:ok, QueryResult.new(cols, rows)}
 
           {:error, err} ->
-            repo.rollback(Adapter.format_error(err))
+            repo.rollback(Source.format_error(err))
 
           other ->
             other
@@ -52,7 +52,7 @@ defmodule Lotus.Runner do
       {:error, reason} -> {:error, reason}
     end
   rescue
-    e -> {:error, Adapter.format_error(e)}
+    e -> {:error, Source.format_error(e)}
   end
 
   # Allow a single statement with an optional trailing semicolon.

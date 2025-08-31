@@ -225,7 +225,6 @@ We welcome contributions of all sizes! Here are some areas where help is especia
 
 #### Advanced Features
 
-- New database adapter support (MySQL)
 - Query result caching
 - Query performance monitoring
 - Advanced security features

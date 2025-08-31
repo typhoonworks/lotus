@@ -98,7 +98,7 @@ defmodule Lotus.Storage.Query do
           raise ArgumentError, "Missing required variable: #{var}"
 
       type = Map.get(meta, :type)
-      placeholder = Lotus.Adapter.param_placeholder(q.data_repo, idx, var, type)
+      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, type)
 
       {
         String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),

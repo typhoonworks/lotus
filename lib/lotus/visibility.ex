@@ -34,9 +34,9 @@ defmodule Lotus.Visibility do
     repo = Config.data_repos() |> Map.get(repo_name)
 
     if is_nil(repo) do
-      Lotus.Adapter.Default.builtin_denies(nil)
+      Lotus.Sources.Default.builtin_denies(nil)
     else
-      Lotus.Adapter.builtin_denies(repo)
+      Lotus.Source.builtin_denies(repo)
     end
   end
 

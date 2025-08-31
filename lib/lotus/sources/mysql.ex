@@ -1,7 +1,7 @@
-defmodule Lotus.Adapter.MySQL do
+defmodule Lotus.Sources.MySQL do
   @moduledoc false
 
-  @behaviour Lotus.Adapter
+  @behaviour Lotus.Source
   require Logger
 
   @myxql_error Module.concat([:MyXQL, :Error])
@@ -118,7 +118,7 @@ defmodule Lotus.Adapter.MySQL do
     end
   end
 
-  def format_error(other), do: Lotus.Adapter.Default.format_error(other)
+  def format_error(other), do: Lotus.Sources.Default.format_error(other)
 
   @impl true
   def param_placeholder(_idx, _var, :date), do: "CAST(? AS DATE)"

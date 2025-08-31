@@ -316,7 +316,7 @@ defmodule Lotus.Preflight do
 
   defp normalize_preflight_error(e) do
     e
-    |> Lotus.Adapter.format_error()
+    |> Lotus.Source.format_error()
     |> strip_explain_query_tail()
   end
 

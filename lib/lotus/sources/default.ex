@@ -1,15 +1,15 @@
-defmodule Lotus.Adapter.Default do
+defmodule Lotus.Sources.Default do
   @moduledoc """
-  Default adapter implementation for unsupported or unknown database adapters.
+  Default source adapter implementation for unsupported or unknown database sources.
 
-  Provides safe no-op implementations for adapter-specific functions and
+  Provides safe no-op implementations for source-specific functions and
   generic error formatting for database errors.
   """
 
-  @behaviour Lotus.Adapter
+  @behaviour Lotus.Source
 
   @impl true
-  @doc "Simple transaction wrapper for unsupported adapters."
+  @doc "Simple transaction wrapper for unsupported sources."
   def execute_in_transaction(repo, fun, opts) do
     timeout = Keyword.get(opts, :timeout, 15_000)
 
@@ -19,11 +19,11 @@ defmodule Lotus.Adapter.Default do
   end
 
   @impl true
-  @doc "No-op: unsupported adapters do not implement statement timeouts."
+  @doc "No-op: unsupported sources do not implement statement timeouts."
   def set_statement_timeout(_repo, _ms), do: :ok
 
   @impl true
-  @doc "No-op: unsupported adapters do not implement search_path."
+  @doc "No-op: unsupported sources do not implement search_path."
   def set_search_path(_repo, _path), do: :ok
 
   @impl true
@@ -41,20 +41,20 @@ defmodule Lotus.Adapter.Default do
   @doc """
   Returns a generic SQL parameter placeholder (`"?"`).
 
-  This keeps the query builder working even for unknown adapters,
+  This keeps the query builder working even for unknown sources,
   though actual binding semantics may differ.
   """
   def param_placeholder(_idx, _var, _type), do: "?"
 
   @impl true
-  @doc "The default adapter does not handle any specific exceptions."
+  @doc "The default source does not handle any specific exceptions."
   def handled_errors, do: []
 
   @impl true
   @doc """
   Returns conservative deny rules covering common system tables from various databases.
 
-  Since we don't know the specific adapter, we include deny rules for all known
+  Since we don't know the specific source, we include deny rules for all known
   system tables to be safe.
   """
   def builtin_denies(_repo) do
