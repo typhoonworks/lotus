@@ -38,7 +38,6 @@ config :lotus, Lotus.Test.SqliteRepo,
       Path.dirname(__ENV__.file)
     ),
   pool: Ecto.Adapters.SQL.Sandbox,
-  # Increase pool size for test reliability
   pool_size: 5,
   journal_mode: :delete,
   busy_timeout: 10000,

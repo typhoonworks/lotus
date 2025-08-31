@@ -1,6 +1,6 @@
 defmodule Lotus.Integration.Postgres.IntervalQueryTest do
   use Lotus.Case, async: false
-  
+
   @moduletag :postgres
 
   alias Lotus.Storage.Query
