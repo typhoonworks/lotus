@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.6.0] - 2025-08-31
 
 ### Added
 - Added `Lotus.can_run?/1` and `Lotus.can_run?/2` functions to check if a query has all required variables available before execution
