@@ -14,6 +14,9 @@ defmodule Lotus.Adapter.MySQL do
 
   @impl true
   def reset_read_only(repo) do
+    # MySQL requires comprehensive reset to fully clear read-only state
+    repo.query!("SET autocommit = 1")
+    repo.query!("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
     repo.query!("SET SESSION TRANSACTION READ WRITE")
     :ok
   end
