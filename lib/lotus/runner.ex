@@ -31,35 +31,23 @@ defmodule Lotus.Runner do
   end
 
   defp exec_read_only(repo, sql, params, opts) do
-    read_only? = Keyword.get(opts, :read_only, true)
-    stmt_ms = Keyword.get(opts, :statement_timeout_ms, 5_000)
-    db_timeout = Keyword.get(opts, :timeout, 15_000)
-    search_path = Keyword.get(opts, :search_path)
+    Adapter.execute_in_transaction(
+      repo,
+      fn ->
+        case repo.query(sql, params, timeout: Keyword.get(opts, :timeout, 15_000)) do
+          {:ok, %{columns: cols, rows: rows}} ->
+            {:ok, QueryResult.new(cols, rows)}
 
-    result =
-      repo.transaction(
-        fn ->
-          if read_only?, do: Adapter.set_read_only(repo)
-          Adapter.set_statement_timeout(repo, stmt_ms)
-          if search_path, do: Adapter.set_search_path(repo, search_path)
+          {:error, err} ->
+            repo.rollback(Adapter.format_error(err))
 
-          case repo.query(sql, params, timeout: db_timeout) do
-            {:ok, %{columns: cols, rows: rows}} ->
-              {:ok, QueryResult.new(cols, rows)}
-
-            {:error, err} ->
-              repo.rollback(Adapter.format_error(err))
-
-            other ->
-              other
-          end
-        end,
-        timeout: db_timeout
-      )
-
-    if read_only?, do: Adapter.reset_read_only(repo)
-
-    case result do
+          other ->
+            other
+        end
+      end,
+      opts
+    )
+    |> case do
       {:ok, result} -> result
       {:error, reason} -> {:error, reason}
     end

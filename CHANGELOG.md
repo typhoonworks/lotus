@@ -14,7 +14,7 @@
 - Enhanced query execution to automatically transform SQL statements based on target database adapter before parameter binding
 
 ### Fixed
-- **CRITICAL:** Fixed database session persistence issue where read-only mode (`PRAGMA query_only = ON` for SQLite, `SET SESSION TRANSACTION READ ONLY` for MySQL) was not being reset after query execution, leaving database connections unusable for subsequent write operations. Lotus now properly resets sessions to read-write mode after each query completes.
+- **CRITICAL:** Fixed database session persistence issue where session-level settings (`PRAGMA query_only` for SQLite, `SET SESSION TRANSACTION READ ONLY` and `max_execution_time` for MySQL) were not being properly restored after query execution, causing connection pool pollution that could break subsequent operations. Lotus now uses a robust snapshot/restore pattern to preserve and restore original session state for each database connection.
 
 ## [0.5.4] - 2025-08-29
 

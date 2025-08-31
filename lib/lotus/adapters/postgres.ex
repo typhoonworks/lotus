@@ -6,15 +6,24 @@ defmodule Lotus.Adapter.Postgres do
   @postgrex_error Module.concat([:Postgrex, :Error])
 
   @impl true
-  def set_read_only(repo) do
-    repo.query!("SET LOCAL transaction_read_only = on")
-    :ok
-  end
+  def execute_in_transaction(repo, fun, opts) do
+    read_only? = Keyword.get(opts, :read_only, true)
+    stmt_ms = Keyword.get(opts, :statement_timeout_ms, 5_000)
+    timeout = Keyword.get(opts, :timeout, 15_000)
+    search_path = Keyword.get(opts, :search_path)
 
-  @impl true
-  def reset_read_only(repo) do
-    repo.query!("SET LOCAL transaction_read_only = off")
-    :ok
+    repo.transaction(
+      fn ->
+        if read_only?, do: repo.query!("SET LOCAL transaction_read_only = on")
+        repo.query!("SET LOCAL statement_timeout = #{stmt_ms}")
+        if search_path, do: repo.query!("SET LOCAL search_path = #{search_path}")
+
+        fun.()
+      end,
+      timeout: timeout
+    )
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   @impl true

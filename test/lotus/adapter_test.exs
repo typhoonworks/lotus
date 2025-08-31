@@ -3,22 +3,47 @@ defmodule Lotus.AdapterTest do
 
   alias Lotus.Adapter
 
-  describe "set_read_only/1" do
+  describe "execute_in_transaction/3" do
     @tag :postgres
-    test "sets PostgreSQL transaction to read-only" do
-      assert :ok = Adapter.set_read_only(Lotus.Test.Repo)
+    test "executes PostgreSQL transaction with read-only mode" do
+      result =
+        Adapter.execute_in_transaction(
+          Lotus.Test.Repo,
+          fn ->
+            Lotus.Test.Repo.query!("SELECT 1 as test_value")
+          end,
+          read_only: true
+        )
+
+      assert {:ok, %{rows: [[1]]}} = result
     end
 
     @tag :sqlite
-    test "sets PRAGMA query_only for SQLite" do
-      assert :ok = Adapter.set_read_only(Lotus.Test.SqliteRepo)
-      # reset it so other tests don't inherit read-only
-      Lotus.Test.SqliteRepo.query!("PRAGMA query_only = OFF")
+    test "executes SQLite transaction with read-only mode" do
+      result =
+        Adapter.execute_in_transaction(
+          Lotus.Test.SqliteRepo,
+          fn ->
+            Lotus.Test.SqliteRepo.query!("SELECT 1 as test_value")
+          end,
+          read_only: true
+        )
+
+      assert {:ok, %{rows: [[1]]}} = result
     end
 
     @tag :mysql
-    test "sets MySQL transaction to read-only" do
-      assert :ok = Adapter.set_read_only(Lotus.Test.MysqlRepo)
+    test "executes MySQL transaction with read-only mode" do
+      result =
+        Adapter.execute_in_transaction(
+          Lotus.Test.MysqlRepo,
+          fn ->
+            Lotus.Test.MysqlRepo.query!("SELECT 1 as test_value")
+          end,
+          read_only: true
+        )
+
+      assert {:ok, %{rows: [[1]]}} = result
     end
   end
 

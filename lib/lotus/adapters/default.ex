@@ -9,12 +9,14 @@ defmodule Lotus.Adapter.Default do
   @behaviour Lotus.Adapter
 
   @impl true
-  @doc "No-op: unsupported adapters cannot enforce read-only mode."
-  def set_read_only(_repo), do: :ok
+  @doc "Simple transaction wrapper for unsupported adapters."
+  def execute_in_transaction(repo, fun, opts) do
+    timeout = Keyword.get(opts, :timeout, 15_000)
 
-  @impl true
-  @doc "No-op: unsupported adapters cannot reset read-only mode."
-  def reset_read_only(_repo), do: :ok
+    repo.transaction(fun, timeout: timeout)
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
 
   @impl true
   @doc "No-op: unsupported adapters do not implement statement timeouts."
