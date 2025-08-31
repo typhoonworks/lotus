@@ -187,6 +187,50 @@ defmodule Lotus do
   end
 
   @doc """
+  Checks if a query can be run with the provided variables.
+
+  Returns true if all required variables have values (either from defaults 
+  or supplied vars), false otherwise.
+
+  ## Examples
+
+      # Query with all required variables having defaults
+      Lotus.can_run?(query)
+      # => true
+
+      # Query missing required variables  
+      Lotus.can_run?(query)
+      # => false
+
+      # Query with runtime variable overrides
+      Lotus.can_run?(query, vars: %{"user_id" => 123})
+      # => true (if user_id was the missing variable)
+
+  """
+  @spec can_run?(Query.t()) :: boolean()
+  @spec can_run?(Query.t(), opts()) :: boolean()
+  def can_run?(query, opts \\ [])
+
+  def can_run?(%Query{} = q, opts) do
+    supplied_vars = Keyword.get(opts, :vars, %{}) || %{}
+
+    defaults =
+      q.variables
+      |> Enum.filter(& &1.default)
+      |> Map.new(fn v -> {v.name, v.default} end)
+
+    vars = Map.merge(defaults, supplied_vars)
+
+    try do
+      Query.to_sql_params(q, vars)
+      true
+    rescue
+      ArgumentError ->
+        false
+    end
+  end
+
+  @doc """
   Run ad-hoc SQL (bypassing storage), still read-only and sandboxed.
 
   ## Examples
