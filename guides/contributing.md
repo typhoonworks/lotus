@@ -225,8 +225,9 @@ We welcome contributions of all sizes! Here are some areas where help is especia
 
 #### Advanced Features
 
-- Query result caching
-- Query performance monitoring
+- Additional cache backends (Redis, Memcached, distributed caching)
+- Cache statistics and telemetry integration (`Lotus.Cache.stats()`)
+- Query performance monitoring and metrics
 - Advanced security features
 - Table visibility rule enhancements
 
@@ -302,6 +303,39 @@ mix test test/lotus/visibility_test.exs
 # Test data repo functionality
 mix test test/lotus/data_repo_test.exs
 ```
+
+### Caching Features
+
+When working on caching-related features:
+
+```bash
+# Test cache functionality
+mix test test/lotus/cache_test.exs
+
+# Test cache integration
+mix test test/integration/caching_test.exs
+
+# Test ETS adapter specifically
+mix test test/lotus/cache/ets_test.exs
+```
+
+**Contributing New Cache Backends:**
+
+To implement a new cache backend (Redis, Memcached, etc.):
+
+1. **Implement the behaviour**: Create a module that implements `Lotus.Cache`
+2. **Required callbacks**: `get_or_store/4`, `put/4`, `invalidate_tags/1`
+3. **Add tests**: Create comprehensive tests following the ETS adapter pattern
+4. **Add to documentation**: Update configuration guides and examples
+5. **Consider dependencies**: Keep external dependencies optional when possible
+
+**Cache Telemetry and Statistics:**
+
+The caching system would benefit from:
+- Cache hit/miss ratios
+- Memory usage tracking
+- TTL effectiveness metrics
+- Tag invalidation statistics
 
 ### API Changes
 

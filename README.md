@@ -25,15 +25,19 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 - ⚡ **Configurable execution** with timeout controls and connection management
 - 🎯 **Type-safe results** with structured query result handling
 - 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
+- 💾 **Result caching** with TTL-based expiration, cache profiles, and tag-based invalidation
 
 ### Production-Safe Connection Pooling
 Lotus automatically preserves your database session state to prevent connection pool pollution. When a query completes, all session settings (read-only mode, timeouts, isolation levels) are restored to their original values, ensuring Lotus doesn't interfere with other parts of your application. [Learn more about session management →](guides/installation.md#session-management--connection-pool-safety)
 
 ## What's planned?
 - [ ] Query versioning and change tracking
-- [ ] Query result caching mechanisms
 - [ ] Export functionality for query results (CSV, JSON)
 - [ ] Column-level visibility and access control
+- [ ] Cache statistics and monitoring (`Lotus.Cache.stats()`)
+- [ ] Additional cache backends (Redis, Memcached)
+- [ ] Telemetry integration for cache metrics and query performance
+- [x] Query result caching with ETS backend
 - [x] MySQL support
 - [x] Multi-database support (PostgreSQL, MySQL, SQLite)
 - [x] Table visibility and access controls

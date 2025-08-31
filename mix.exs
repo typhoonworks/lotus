@@ -30,6 +30,7 @@ defmodule Lotus.MixProject do
 
   def application do
     [
+      mod: {Lotus.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -106,6 +107,7 @@ defmodule Lotus.MixProject do
       "guides/getting-started.md",
       "guides/advanced-variables.md",
       "guides/configuration.md",
+      "guides/caching.md",
       "guides/contributing.md"
     ]
   end

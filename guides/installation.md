@@ -75,7 +75,30 @@ Run the migration:
 mix ecto.migrate
 ```
 
-## Step 4: Verify Installation
+## Step 4: Add to Supervision Tree (Optional)
+
+If you plan to use caching features, add Lotus to your application's supervision tree:
+
+```elixir
+# lib/my_app/application.ex
+def start(_type, _args) do
+  children = [
+    MyApp.Repo,
+    # Add Lotus for caching support
+    Lotus,
+    # Or with specific options:
+    # {Lotus, cache: [adapter: Lotus.Cache.ETS, namespace: "prod"]},
+    MyAppWeb.Endpoint
+  ]
+  
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
+
+**Note**: This step is required only if you want to use caching. Without it, all Lotus query functions work normally, but caching will be disabled.
+
+## Step 5: Verify Installation
 
 Test that Lotus is working correctly:
 

@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+- **NEW:** Comprehensive caching system with pluggable adapters and ETS backend
+- **NEW:** OTP application and supervisor support for production deployment
+- Added `Lotus.Application` and `Lotus.Supervisor` for managed cache backend lifecycle
+- Added `Lotus.child_spec/1` and `Lotus.start_link/1` for supervision tree integration
+- Added `Lotus.Cache` behaviour for implementing custom cache adapters
+- Added `Lotus.Cache.ETS` adapter providing in-memory caching with TTL support
+- Added cache configuration with profiles (`:results`, `:options`, `:schema`) for different TTL strategies
+- Added cache namespace support for multi-tenant applications
+- Added tag-based cache invalidation for targeted cache clearing
+- Added cache modes: default caching, `:bypass` (skip cache), `:refresh` (update cache)
+- Added cache key generation based on SQL, parameters, repository, search path, and Lotus version
+- Added cache integration for both `run_sql/3` and `run_query/2` functions
+- Added cache options passing (`max_bytes`, `compress`) through the API layer
+- Added comprehensive cache integration tests demonstrating all cache behaviors
+
+### Enhanced  
+- Enhanced `run_sql/3` and `run_query/2` to automatically use configured cache when available
+- Enhanced cache system with automatic adapter detection and graceful fallback when no adapter configured
+- Enhanced cache configuration with profile-specific TTL settings and runtime overrides
+
 ### Changed
 - **BREAKING:** Renamed `Lotus.Adapter` behaviour to `Lotus.Source` in preparation for caching functionality and to support future non-SQL data sources
 - **BREAKING:** Renamed adapter modules from `Lotus.Adapters.*` to `Lotus.Sources.*` (`Lotus.Sources.Postgres`, `Lotus.Sources.MySQL`, `Lotus.Sources.SQLite3`, `Lotus.Sources.Default`)

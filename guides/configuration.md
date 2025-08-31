@@ -13,7 +13,11 @@ config :lotus,
   data_repos: %{                # Repositories for executing queries
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
-  }
+  },
+  cache: [                      # Optional caching configuration
+    adapter: Lotus.Cache.ETS,   # Cache adapter (currently only ETS supported)
+    namespace: "myapp_cache"    # Cache namespace (optional)
+  ]
 ```
 
 ## Configuration Options
@@ -101,6 +105,42 @@ repo = Lotus.get_data_repo!("analytics")
 ```
 
 > **Note**: The `ecto_repo` can also be included in `data_repos` if you want to run queries against the same database where Lotus stores its data. This is common in single-database applications.
+
+### Optional Features
+
+#### `cache`
+
+Configures result caching to improve query performance. When enabled, Lotus automatically caches query results and reuses them for identical queries.
+
+```elixir
+config :lotus,
+  cache: [
+    adapter: Lotus.Cache.ETS,         # Cache adapter (required)
+    namespace: "myapp_cache",         # Cache namespace (optional)
+    max_bytes: 5_000_000,            # Max cache entry size: 5MB (default)
+    compress: true,                   # Compress cache entries (default)
+    profiles: %{                      # Cache profiles with different TTL strategies
+      results: [ttl_ms: 30_000],     # Short-term results (30 seconds)
+      options: [ttl_ms: 300_000],    # Medium-term data (5 minutes)  
+      schema: [ttl_ms: 3_600_000]    # Long-term schema info (1 hour)
+    },
+    default_profile: :results,        # Default profile when none specified
+    default_ttl_ms: 60_000           # Fallback TTL (1 minute)
+  ]
+```
+
+**Type**: `keyword()`  
+**Default**: `nil` (no caching)
+
+**Available Adapters:**
+- `Lotus.Cache.ETS` - In-memory caching using ETS tables
+
+**Cache Modes:**
+- **Default**: Automatic caching when cache is configured
+- **`:bypass`**: Skip cache entirely, always query database
+- **`:refresh`**: Execute query and update cache with fresh results
+
+For detailed caching configuration and usage, see the [Caching Guide](caching.md).
 
 ### Behavior Options
 
