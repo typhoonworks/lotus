@@ -213,7 +213,7 @@ defmodule Lotus do
 
   def can_run?(%Query{} = q, opts) do
     supplied_vars = Keyword.get(opts, :vars, %{}) || %{}
-    
+
     defaults =
       q.variables
       |> Enum.filter(& &1.default)
