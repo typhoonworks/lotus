@@ -19,6 +19,7 @@ Lotus addresses these challenges by providing:
 - **Read-only execution**: Built-in protections prevent destructive operations
 - **Statement validation**: Queries are checked before execution
 - **Database-level guards**: PostgreSQL (`transaction_read_only`), MySQL (`transaction_read_only`), and SQLite 3.8.0+ (`PRAGMA query_only`)
+- **Session state preservation**: Automatically snapshots and restores original database session settings to prevent connection pool pollution
 - **Table visibility controls**: Configurable rules block access to sensitive tables
 - **Multi-layered security**: Defense-in-depth with preflight authorization
 - **Timeout controls**: Configurable timeouts prevent runaway queries
