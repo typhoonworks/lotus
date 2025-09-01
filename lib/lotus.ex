@@ -328,6 +328,22 @@ defmodule Lotus do
   def list_tables(repo_or_name, opts \\ []), do: Schema.list_tables(repo_or_name, opts)
 
   @doc """
+  Lists all schemas in the given repository.
+
+  Returns a list of schema names. For databases without schemas (like SQLite),
+  returns an empty list.
+
+  ## Examples
+
+      {:ok, schemas} = Lotus.list_schemas("postgres")
+      # Returns ["public", "reporting", ...]
+
+      {:ok, schemas} = Lotus.list_schemas("sqlite")
+      # Returns []
+  """
+  def list_schemas(repo_or_name, opts \\ []), do: Schema.list_schemas(repo_or_name, opts)
+
+  @doc """
   Gets the schema for a specific table.
 
   ## Examples

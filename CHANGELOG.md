@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- Added implementation of `list_schemas` for all database adapters:
+  - PostgreSQL: Returns actual schema names from `information_schema.schemata`
+  - MySQL: Returns database names as schemas
+  - SQLite: Returns empty list (no schema support)
+- Added comprehensive MySQL adapter tests in `Lotus.SchemaTest` covering all schema introspection functions
+
+### Fixed
+- Fixed SQL quoting in `get_table_stats` to use adapter-specific quote characters (backticks for MySQL, double quotes for PostgreSQL)
+- Fixed MySQL builtin_denies to properly filter system tables with database-specific schema names
+- Fixed PostgreSQL and MySQL schema tests to correctly expect errors (not empty results) for non-existent tables
+
 ## [0.7.0] - 2025-09-01
 
 ### Added

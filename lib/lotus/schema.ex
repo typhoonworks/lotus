@@ -9,6 +9,48 @@ defmodule Lotus.Schema do
   alias Lotus.{Visibility, Config, Source, Sources}
 
   @doc """
+  Lists all schemas in the given PostgreSQL repository.
+
+  Returns a list of schema names. For databases without schemas (like SQLite),
+  returns an empty list.
+
+  ## Options
+
+  - `:cache` - Cache options (profile, ttl_ms, etc.)
+
+  ## Examples
+
+      {:ok, schemas} = Lotus.Schema.list_schemas(MyApp.Repo)
+      # PostgreSQL: ["public", "reporting", ...]
+
+      {:ok, schemas} = Lotus.Schema.list_schemas("postgres")
+      # PostgreSQL: ["public", "reporting", ...]
+  """
+  @spec list_schemas(module() | String.t(), keyword()) ::
+          {:ok, [String.t()]} | {:error, term()}
+  def list_schemas(repo_or_name, opts \\ []) do
+    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+
+    key = schema_key(:list_schemas, repo_name)
+    tags = ["repo:#{repo_name}", "schema:list_schemas"]
+
+    profile =
+      if is_list(opts[:cache]) do
+        Keyword.get(opts[:cache], :profile, :schema)
+      else
+        :schema
+      end
+
+    exec_with_cache(opts[:cache], profile, key, tags, fn ->
+      try do
+        {:ok, Source.list_schemas(repo)}
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+    end)
+  end
+
+  @doc """
   Lists all tables in the given repository.
 
   For databases with schemas (like PostgreSQL), returns {schema, table} tuples.
@@ -223,9 +265,14 @@ defmodule Lotus.Schema do
         try do
           count =
             if resolved_schema do
-              # Schema-aware database
-              qt = ~s|"#{String.replace(table_name, ~s|"|, ~s|""|)}"|
-              qs = ~s|"#{String.replace(resolved_schema, ~s|"|, ~s|""|)}"|
+              {open_quote, close_quote} = get_quote_chars(repo)
+
+              qt =
+                "#{open_quote}#{String.replace(table_name, close_quote, close_quote <> close_quote)}#{close_quote}"
+
+              qs =
+                "#{open_quote}#{String.replace(resolved_schema, close_quote, close_quote <> close_quote)}#{close_quote}"
+
               %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{qs}.#{qt}")
               count
             else
@@ -508,5 +555,24 @@ defmodule Lotus.Schema do
       |> Base.encode16(case: :lower)
 
     "schema:resolve_table_schema:#{repo_name}:#{digest}"
+  end
+
+  defp schema_key(:list_schemas, repo_name) do
+    digest =
+      :crypto.hash(
+        :sha256,
+        :erlang.term_to_binary({repo_name, Lotus.version()})
+      )
+      |> Base.encode16(case: :lower)
+
+    "schema:list_schemas:#{repo_name}:#{digest}"
+  end
+
+  defp get_quote_chars(repo) do
+    case repo.__adapter__() do
+      Ecto.Adapters.MyXQL -> {"`", "`"}
+      Ecto.Adapters.Postgres -> {"\"", "\""}
+      _ -> {"\"", "\""}
+    end
   end
 end

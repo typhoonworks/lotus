@@ -136,8 +136,9 @@ defmodule Lotus.Sources.MySQL do
   @impl true
   def builtin_denies(repo) do
     ms = repo.config()[:migration_source] || "schema_migrations"
+    database = repo.config()[:database]
 
-    [
+    base_denies = [
       {"information_schema", ~r/.*/},
       {"mysql", ~r/.*/},
       {"performance_schema", ~r/.*/},
@@ -145,12 +146,36 @@ defmodule Lotus.Sources.MySQL do
       {nil, ms},
       {nil, "lotus_queries"}
     ]
+
+    # Also deny these tables in the current database
+    if database do
+      base_denies ++
+        [
+          {database, ms},
+          {database, "lotus_queries"}
+        ]
+    else
+      base_denies
+    end
   end
 
   @impl true
   def default_schemas(repo) do
     database = repo.config()[:database] || "public"
     [database]
+  end
+
+  @impl true
+  def list_schemas(repo) do
+    sql = """
+    SELECT schema_name
+    FROM information_schema.schemata
+    WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+    ORDER BY schema_name
+    """
+
+    %{rows: rows} = repo.query!(sql)
+    Enum.map(rows, fn [schema] -> schema end)
   end
 
   @impl true
