@@ -57,6 +57,18 @@ defmodule Lotus.Source do
   @callback handled_errors() :: [module()]
 
   @doc """
+  Lists all schemas in the given repository.
+
+  Returns a list of schema names. For databases without schema support
+  (like SQLite), returns an empty list.
+
+  ## Return format
+  - PostgreSQL/MySQL: `["public", "reporting", "analytics", ...]`
+  - SQLite: `[]`
+  """
+  @callback list_schemas(repo) :: [String.t()]
+
+  @doc """
   Lists all tables in the given repository for the specified schemas.
 
   Returns a list of {schema, table} tuples. For databases without schema support
@@ -242,6 +254,16 @@ defmodule Lotus.Source do
   end
 
   defp impl_for_error(_), do: Lotus.Sources.Default
+
+  @doc """
+  Lists all schemas in the given repository.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec list_schemas(repo) :: [String.t()]
+  def list_schemas(repo) do
+    impl_for(repo).list_schemas(repo)
+  end
 
   @doc """
   Lists all tables in the given repository for the specified schemas.

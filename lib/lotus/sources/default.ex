@@ -77,6 +77,15 @@ defmodule Lotus.Sources.Default do
 
   @impl true
   @doc """
+  Generic list_schemas implementation that returns an empty list.
+  Unknown sources should implement their own version if they support schema introspection.
+  """
+  def list_schemas(_repo) do
+    []
+  end
+
+  @impl true
+  @doc """
   Generic list_tables implementation that returns an empty list.
   Unknown sources should implement their own version if they support schema introspection.
   """
