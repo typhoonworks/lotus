@@ -78,6 +78,17 @@ config :lotus,
     "analytics" => MyApp.AnalyticsRepo,
     "mysql" => MyApp.MySQLRepo
   }
+
+# Optional: Configure caching (ETS adapter included)
+config :lotus,
+  cache: [
+    adapter: Lotus.Cache.ETS,
+    profiles: %{
+      results: [ttl: 60_000],      # Cache query results for 1 minute
+      schema: [ttl: 3_600_000],    # Cache table schemas for 1 hour  
+      options: [ttl: 300_000]      # Cache query options for 5 minutes
+    }
+  ]
 ```
 
 ### Creating and Running Queries
