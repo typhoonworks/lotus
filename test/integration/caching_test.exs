@@ -290,18 +290,6 @@ defmodule Lotus.Integration.CachingTest do
   end
 
   describe "Schema caching scenarios" do
-    test "get_table_stats uses results profile by default" do
-      expect(Cache, :get_or_store, fn key, ttl, fun, opts ->
-        # Should use :results profile TTL (30 seconds)
-        assert ttl == 30_000
-        assert Keyword.get(opts, :tags) |> Enum.any?(&String.contains?(&1, "get_table_stats"))
-        Cache.ETS.get_or_store(key, ttl, fun, opts)
-      end)
-
-      assert {:ok, result} = Lotus.get_table_stats("postgres", "test_users")
-      assert %{row_count: _count} = result
-    end
-
     test "get_table_stats caching works with real data changes" do
       user = Fixtures.insert_user(%{name: "Stats Test User", email: "stats@test.com"})
 

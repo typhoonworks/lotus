@@ -146,4 +146,103 @@ defmodule Lotus.Sources.MySQL do
       {nil, "lotus_queries"}
     ]
   end
+
+  @impl true
+  def default_schemas(repo) do
+    database = repo.config()[:database] || "public"
+    [database]
+  end
+
+  @impl true
+  def list_tables(repo, schemas, include_views?) do
+    if schemas == [] do
+      []
+    else
+      types_sql =
+        if include_views?, do: "'BASE TABLE','VIEW'", else: "'BASE TABLE'"
+
+      placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
+
+      sql = """
+      SELECT table_schema, table_name
+      FROM information_schema.tables
+      WHERE table_type IN (#{types_sql})
+        AND table_schema IN (#{placeholders})
+      ORDER BY table_schema, table_name
+      """
+
+      %{rows: rows} = repo.query!(sql, schemas)
+      Enum.map(rows, fn [schema, table] -> {schema, table} end)
+    end
+  end
+
+  @impl true
+  def get_table_schema(repo, schema, table) do
+    sql = """
+    SELECT
+      c.column_name,
+      c.data_type,
+      c.character_maximum_length,
+      c.numeric_precision,
+      c.numeric_scale,
+      c.is_nullable,
+      c.column_default,
+      IF(c.column_key = 'PRI', 1, 0) as is_primary_key
+    FROM information_schema.columns c
+    WHERE c.table_schema = ? AND c.table_name = ?
+    ORDER BY c.ordinal_position
+    """
+
+    %{rows: rows} = repo.query!(sql, [schema, table])
+
+    Enum.map(rows, fn [name, type, char_len, num_prec, num_scale, nullable, default, is_pk] ->
+      %{
+        name: name,
+        type: format_mysql_type(type, char_len, num_prec, num_scale),
+        nullable: nullable == "YES",
+        default: default,
+        primary_key: is_pk == 1
+      }
+    end)
+  end
+
+  @impl true
+  def resolve_table_schema(repo, table, schemas) do
+    placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
+
+    sql = """
+    SELECT table_schema
+    FROM information_schema.tables
+    WHERE table_name = ? AND table_schema IN (#{placeholders})
+    ORDER BY FIELD(table_schema, #{placeholders})
+    LIMIT 1
+    """
+
+    # Need to pass schemas twice - once for IN clause, once for FIELD ordering
+    params = [table] ++ schemas ++ schemas
+
+    case repo.query(sql, params) do
+      {:ok, %{rows: [[schema]]}} -> schema
+      _ -> nil
+    end
+  end
+
+  defp format_mysql_type(type, char_len, num_prec, num_scale) do
+    cond do
+      type == "varchar" && char_len ->
+        "varchar(#{char_len})"
+
+      type == "char" && char_len ->
+        "char(#{char_len})"
+
+      type == "decimal" && num_prec && num_scale ->
+        "decimal(#{num_prec},#{num_scale})"
+
+      type == "decimal" && num_prec ->
+        "decimal(#{num_prec})"
+
+      true ->
+        type
+    end
+  end
 end

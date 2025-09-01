@@ -24,11 +24,18 @@
 - Enhanced all Schema functions with read-through caching using appropriate profiles (`:schema` for metadata, `:results` for statistics)
 - Enhanced cache system with automatic adapter detection and graceful fallback when no adapter configured
 - Enhanced cache configuration with profile-specific TTL settings and runtime overrides
+- **MAJOR:** Refactored schema introspection system to be completely database-agnostic with proper caching of table schema resolution queries
 
 ### Changed
 - **BREAKING:** Renamed `Lotus.Adapter` behaviour to `Lotus.Source` in preparation for caching functionality and to support future non-SQL data sources
 - **BREAKING:** Renamed adapter modules from `Lotus.Adapters.*` to `Lotus.Sources.*` (`Lotus.Sources.Postgres`, `Lotus.Sources.MySQL`, `Lotus.Sources.SQLite3`, `Lotus.Sources.Default`)
 - **BREAKING:** Renamed `Lotus.SourceUtils` module to `Lotus.Sources` and expanded its functionality to include data source registration, dynamic module resolution, and comprehensive source management utilities
+- **INTERNAL:** Moved all database-specific schema operations (`list_tables`, `get_table_schema`, `resolve_table_schema`) from `Lotus.Schema` to respective source modules for better separation of concerns
+- **INTERNAL:** `Lotus.Schema` is now completely database-agnostic and delegates all DB-specific operations to source modules
+- **PERFORMANCE:** Added caching to `resolve_table_schema` queries to eliminate the expensive "which schema is this table in?" database lookups that were being repeatedly executed
+
+### Fixed
+- Fixed schema introspection for SQLite databases by properly handling schema-less database architecture (empty schemas list instead of `["public"]`)
 
 ## [0.6.0] - 2025-08-31
 
