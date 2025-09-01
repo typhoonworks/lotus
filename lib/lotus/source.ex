@@ -27,6 +27,16 @@ defmodule Lotus.Source do
               [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
 
   @doc """
+  Return the default schemas for this source when no schema options are provided.
+
+  Each database source defines its own appropriate default:
+    * PostgreSQL → `["public"]`
+    * MySQL      → `[database_name]` (uses database name as schema)
+    * SQLite     → `[]` (schema-less)
+  """
+  @callback default_schemas(repo) :: [String.t()]
+
+  @doc """
   Return the SQL parameter placeholder string for a variable at a given index.
 
   The placeholder may include database-specific type casting based on the variable type.
@@ -45,6 +55,74 @@ defmodule Lotus.Source do
   List the exception modules that this source formats specially in `format_error/1`.
   """
   @callback handled_errors() :: [module()]
+
+  @doc """
+  Lists all tables in the given repository for the specified schemas.
+
+  Returns a list of {schema, table} tuples. For databases without schema support
+  (like SQLite), schema will always be nil.
+
+  ## Return format
+  - PostgreSQL/MySQL: `[{"public", "users"}, {"reporting", "orders"}, ...]`
+  - SQLite: `[{nil, "users"}, {nil, "orders"}, ...]`
+
+  Options:
+  - `:include_views` - Include views in results (default: false)
+  """
+  @callback list_tables(repo, schemas :: [String.t()], include_views? :: boolean()) ::
+              [{schema :: String.t() | nil, table :: String.t()}]
+
+  @doc """
+  Gets the schema information for a specific table.
+
+  Returns a list of column definitions. Each column is a map with exactly these keys:
+  - `:name` - Column name (String.t())
+  - `:type` - SQL type as string (e.g., "varchar(255)", "integer", "text")
+  - `:nullable` - Whether column allows NULL (boolean)
+  - `:default` - Default value as string or nil
+  - `:primary_key` - Whether column is part of primary key (boolean)
+
+  ## Example return value
+  ```elixir
+  [
+    %{
+      name: "id",
+      type: "integer",
+      nullable: false,
+      default: nil,
+      primary_key: true
+    },
+    %{
+      name: "email",
+      type: "varchar(255)",
+      nullable: false,
+      default: nil,
+      primary_key: false
+    }
+  ]
+  ```
+  """
+  @callback get_table_schema(repo, schema :: String.t() | nil, table :: String.t()) ::
+              [
+                %{
+                  name: String.t(),
+                  type: String.t(),
+                  nullable: boolean(),
+                  default: String.t() | nil,
+                  primary_key: boolean()
+                }
+              ]
+
+  @doc """
+  Resolves which schema contains a table given a list of schemas to search.
+
+  Returns the schema name if found, nil otherwise. For databases without schema
+  support (SQLite), this should always return nil.
+
+  The search should respect the order of schemas provided (first match wins).
+  """
+  @callback resolve_table_schema(repo, table :: String.t(), schemas :: [String.t()]) ::
+              String.t() | nil
 
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
@@ -100,6 +178,16 @@ defmodule Lotus.Source do
   def builtin_denies(repo), do: impl_for(repo).builtin_denies(repo)
 
   @doc """
+  Returns the default schemas for the given repository's source.
+
+  Each database source defines its own appropriate default:
+    * PostgreSQL → `["public"]`
+    * MySQL      → `[database_name]` (uses database name as schema)
+    * SQLite     → `[]` (schema-less)
+  """
+  def default_schemas(repo), do: impl_for(repo).default_schemas(repo)
+
+  @doc """
   Formats a database error into a consistent, human-readable string.
 
   Dispatches to the correct source if the error type is recognized,
@@ -121,17 +209,21 @@ defmodule Lotus.Source do
   @spec param_placeholder(repo | String.t() | nil, pos_integer(), String.t(), atom() | nil) ::
           String.t()
   def param_placeholder(repo_or_name, index, var, type) when is_integer(index) and index > 0 do
-    case resolve_repo(repo_or_name) do
+    case resolve_repo_safe(repo_or_name) do
       nil -> Lotus.Sources.Postgres.param_placeholder(index, var, type)
       repo -> impl_for(repo).param_placeholder(index, var, type)
     end
   end
 
-  defp resolve_repo(nil), do: nil
-  defp resolve_repo(repo) when is_atom(repo), do: repo
+  defp resolve_repo_safe(nil), do: nil
+  defp resolve_repo_safe(repo) when is_atom(repo), do: repo
 
-  defp resolve_repo(repo_name) when is_binary(repo_name) do
-    Lotus.Config.get_data_repo!(repo_name)
+  defp resolve_repo_safe(repo_name) when is_binary(repo_name) do
+    try do
+      Lotus.Config.get_data_repo!(repo_name)
+    rescue
+      _ -> nil
+    end
   end
 
   defp impl_for(repo) do
@@ -150,4 +242,45 @@ defmodule Lotus.Source do
   end
 
   defp impl_for_error(_), do: Lotus.Sources.Default
+
+  @doc """
+  Lists all tables in the given repository for the specified schemas.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec list_tables(repo, [String.t()], boolean()) ::
+          [{String.t() | nil, String.t()}]
+  def list_tables(repo, schemas, include_views? \\ false) do
+    impl_for(repo).list_tables(repo, schemas, include_views?)
+  end
+
+  @doc """
+  Gets the schema information for a specific table.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec get_table_schema(repo, String.t() | nil, String.t()) ::
+          [
+            %{
+              name: String.t(),
+              type: String.t(),
+              nullable: boolean(),
+              default: String.t() | nil,
+              primary_key: boolean()
+            }
+          ]
+  def get_table_schema(repo, schema, table) do
+    impl_for(repo).get_table_schema(repo, schema, table)
+  end
+
+  @doc """
+  Resolves which schema contains a table given a list of schemas to search.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec resolve_table_schema(repo, String.t(), [String.t()]) ::
+          String.t() | nil
+  def resolve_table_schema(repo, table, schemas) do
+    impl_for(repo).resolve_table_schema(repo, table, schemas)
+  end
 end

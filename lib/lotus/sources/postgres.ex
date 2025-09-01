@@ -84,4 +84,99 @@ defmodule Lotus.Sources.Postgres do
       {prefix, "lotus_queries"}
     ]
   end
+
+  @impl true
+  def default_schemas(_repo) do
+    ["public"]
+  end
+
+  @impl true
+  def list_tables(repo, schemas, include_views?) do
+    types_sql =
+      if include_views?, do: "'BASE TABLE','VIEW'", else: "'BASE TABLE'"
+
+    sql = """
+    SELECT table_schema, table_name
+    FROM information_schema.tables
+    WHERE table_type IN (#{types_sql})
+      AND table_schema = ANY($1::text[])
+    ORDER BY table_schema, table_name
+    """
+
+    %{rows: rows} = repo.query!(sql, [schemas])
+    Enum.map(rows, fn [schema, table] -> {schema, table} end)
+  end
+
+  @impl true
+  def get_table_schema(repo, schema, table) do
+    sql = """
+    SELECT
+      c.column_name,
+      c.data_type,
+      c.character_maximum_length,
+      c.numeric_precision,
+      c.numeric_scale,
+      c.is_nullable,
+      c.column_default,
+      CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary_key
+    FROM information_schema.columns c
+    LEFT JOIN information_schema.key_column_usage kcu
+      ON c.table_name = kcu.table_name
+     AND c.column_name = kcu.column_name
+     AND c.table_schema = kcu.table_schema
+    LEFT JOIN information_schema.table_constraints tc
+      ON kcu.constraint_name = tc.constraint_name
+     AND kcu.table_schema = tc.table_schema
+     AND tc.constraint_type = 'PRIMARY KEY'
+    WHERE c.table_schema = $1 AND c.table_name = $2
+    ORDER BY c.ordinal_position
+    """
+
+    %{rows: rows} = repo.query!(sql, [schema, table])
+
+    Enum.map(rows, fn [name, type, char_len, num_prec, num_scale, nullable, default, is_pk] ->
+      %{
+        name: name,
+        type: format_postgres_type(type, char_len, num_prec, num_scale),
+        nullable: nullable == "YES",
+        default: default,
+        primary_key: is_pk || false
+      }
+    end)
+  end
+
+  @impl true
+  def resolve_table_schema(repo, table, schemas) do
+    sql = """
+    SELECT table_schema
+    FROM information_schema.tables
+    WHERE table_name = $1 AND table_schema = ANY($2::text[])
+    ORDER BY array_position($2::text[], table_schema) NULLS LAST
+    LIMIT 1
+    """
+
+    case repo.query(sql, [table, schemas]) do
+      {:ok, %{rows: [[schema]]}} -> schema
+      _ -> nil
+    end
+  end
+
+  defp format_postgres_type(type, char_len, num_prec, num_scale) do
+    cond do
+      type in ["character varying", "varchar"] && char_len ->
+        "varchar(#{char_len})"
+
+      type == "character" && char_len ->
+        "char(#{char_len})"
+
+      type == "numeric" && num_prec && num_scale ->
+        "numeric(#{num_prec},#{num_scale})"
+
+      type == "numeric" && num_prec ->
+        "numeric(#{num_prec})"
+
+      true ->
+        type
+    end
+  end
 end

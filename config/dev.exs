@@ -10,7 +10,6 @@ config :lotus,
   },
   table_visibility: %{
     default: [
-      allow: [],
       deny: [
         {"pg_catalog", ~r/.*/},
         {"information_schema", ~r/.*/},
@@ -69,7 +68,7 @@ config :lotus, Lotus.Test.MysqlRepo,
   hostname: "localhost",
   # Docker Compose MySQL port
   port: 3307,
-  database: "lotus_dev",
+  database: "lotus_test",
   pool_size: 10,
   priv: "priv/mysql_repo",
   show_sensitive_data_on_connection_error: true,

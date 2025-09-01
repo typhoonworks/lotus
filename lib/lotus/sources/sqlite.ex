@@ -87,4 +87,52 @@ defmodule Lotus.Sources.SQLite3 do
       {nil, "lotus_queries"}
     ]
   end
+
+  @impl true
+  def default_schemas(_repo) do
+    # SQLite is schema-less
+    []
+  end
+
+  @impl true
+  def list_tables(repo, _schemas, _include_views?) do
+    # SQLite doesn't have schemas, so we ignore the schemas parameter
+    query = """
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+    ORDER BY name
+    """
+
+    result = repo.query!(query)
+    # Return consistent format: {nil, table_name} for SQLite
+    Enum.map(result.rows, fn [table_name] -> {nil, table_name} end)
+  end
+
+  @impl true
+  def get_table_schema(repo, _schema, table_name) do
+    # SQLite doesn't use schemas, ignore the schema parameter
+    query = "PRAGMA table_info(#{table_name})"
+
+    result = repo.query!(query)
+
+    Enum.map(result.rows, fn row ->
+      [_cid, name, type, notnull, default, pk] = row
+
+      %{
+        name: name,
+        type: type,
+        nullable: notnull == 0,
+        default: default,
+        primary_key: pk == 1
+      }
+    end)
+  end
+
+  @impl true
+  def resolve_table_schema(_repo, _table, _schemas) do
+    # SQLite doesn't have schemas, always return nil
+    nil
+  end
 end

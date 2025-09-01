@@ -68,4 +68,37 @@ defmodule Lotus.Sources.Default do
       {nil, "lotus_queries"}
     ]
   end
+
+  @impl true
+  def default_schemas(_repo) do
+    # Conservative default for unknown sources
+    ["public"]
+  end
+
+  @impl true
+  @doc """
+  Generic list_tables implementation that returns an empty list.
+  Unknown sources should implement their own version if they support schema introspection.
+  """
+  def list_tables(_repo, _schemas, _include_views?) do
+    []
+  end
+
+  @impl true
+  @doc """
+  Generic get_table_schema implementation that returns an empty schema.
+  Unknown sources should implement their own version if they support schema introspection.
+  """
+  def get_table_schema(_repo, _schema, _table) do
+    []
+  end
+
+  @impl true
+  @doc """
+  Generic resolve_table_schema that always returns nil.
+  This is appropriate for databases without schema support or unknown sources.
+  """
+  def resolve_table_schema(_repo, _table, _schemas) do
+    nil
+  end
 end
