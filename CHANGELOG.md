@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-09-01
+
 ### Added
 - **NEW:** Comprehensive caching system with adapter behaviour and ETS backend
 - **NEW:** OTP application and supervisor support for production deployment
