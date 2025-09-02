@@ -29,8 +29,8 @@ defmodule Lotus.Sources do
         {q_repo, name_from_module!(q_repo)}
 
       true ->
-        mod = Config.default_data_repo()
-        {mod, name_from_module!(mod)}
+        {name, mod} = Config.default_data_repo()
+        {mod, name}
     end
   end
 

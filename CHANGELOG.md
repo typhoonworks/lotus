@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-09-03
+
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
 - **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.Result structs
@@ -29,7 +31,7 @@
 - Added NimbleCSV integration for robust CSV generation with proper escaping
 - Added central `Lotus.Value` module providing unified interface for value normalization across JSON/CSV/UI contexts
 
-### Changed  
+### Changed
 - **BREAKING:** Renamed `Lotus.QueryResult` to `Lotus.Result` for cleaner API naming with the introduction of `Lotus.Value`
 
 ### Fixed

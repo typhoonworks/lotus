@@ -91,6 +91,16 @@ defmodule Lotus do
   def list_data_repo_names, do: Config.list_data_repo_names()
 
   @doc """
+  Returns the default data repository as a {name, module} tuple.
+
+  - If there's only one data repo configured, returns it
+  - If multiple repos are configured and default_repo is set, returns that repo
+  - If multiple repos are configured without default_repo, raises an error
+  - If no data repos are configured, raises an error
+  """
+  def default_data_repo, do: Config.default_data_repo()
+
+  @doc """
   Lists all saved queries.
   """
   defdelegate list_queries(), to: Storage

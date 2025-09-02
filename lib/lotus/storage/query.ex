@@ -133,7 +133,10 @@ defmodule Lotus.Storage.Query do
     |> Enum.uniq()
   end
 
-  defp get_source_type(nil), do: Sources.source_type(Config.default_data_repo())
+  defp get_source_type(nil) do
+    {_name, repo} = Config.default_data_repo()
+    Sources.source_type(repo)
+  end
 
   defp get_source_type(repo_name) when is_binary(repo_name),
     do: Sources.source_type(repo_name)
