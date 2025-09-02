@@ -46,6 +46,7 @@ defmodule Lotus.MixProject do
       {:ecto_sqlite3, "~> 0.21", optional: true},
       {:jason, "~> 1.4"},
       {:myxql, "~> 0.8", optional: true},
+      {:nimble_csv, "~> 1.2"},
       {:nimble_options, "~> 1.0"},
       {:postgrex, "~> 0.20", optional: true},
 
