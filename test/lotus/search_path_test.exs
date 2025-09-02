@@ -18,7 +18,7 @@ defmodule Lotus.SearchPathTest do
 
       # The query should execute successfully using the search_path to find reporting.customers
       assert {:ok, result} = Lotus.run_query(query)
-      assert %Lotus.QueryResult{columns: ["count"], rows: [[0]]} = result
+      assert %Lotus.Result{columns: ["count"], rows: [[0]]} = result
     end
 
     test "runtime search_path override resolves unqualified table names" do
@@ -28,7 +28,7 @@ defmodule Lotus.SearchPathTest do
       assert {:ok, result} =
                Lotus.run_sql(sql, [], repo: "postgres", search_path: "reporting, public")
 
-      assert %Lotus.QueryResult{columns: ["count"], rows: [[0]]} = result
+      assert %Lotus.Result{columns: ["count"], rows: [[0]]} = result
     end
 
     test "runtime search_path overrides stored query search_path" do
@@ -40,7 +40,7 @@ defmodule Lotus.SearchPathTest do
         })
 
       assert {:ok, result} = Lotus.run_query(query, search_path: "reporting, public")
-      assert %Lotus.QueryResult{columns: ["count"], rows: [[0]]} = result
+      assert %Lotus.Result{columns: ["count"], rows: [[0]]} = result
     end
 
     test "query fails without search_path when table is in non-default schema" do
@@ -69,7 +69,7 @@ defmodule Lotus.SearchPathTest do
       assert {:ok, result} =
                Lotus.run_sql(sql, [], repo: "sqlite", search_path: "ignored_schema")
 
-      assert %Lotus.QueryResult{columns: ["COUNT(*)"], rows: [[0]]} = result
+      assert %Lotus.Result{columns: ["COUNT(*)"], rows: [[0]]} = result
     end
   end
 end

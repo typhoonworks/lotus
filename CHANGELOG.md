@@ -4,6 +4,7 @@
 
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
+- **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.Result structs
 - Added `schema_visibility` configuration for controlling which schemas are accessible through Lotus
 - Added schema visibility functions to `Lotus.Visibility` module:
   - `allowed_schema?/2` - Check if a schema is visible
@@ -16,6 +17,20 @@
   - MySQL: Returns database names as schemas
   - SQLite: Returns empty list (no schema support)
 - Added comprehensive MySQL adapter tests in `Lotus.SchemaTest` covering all schema introspection functions
+- Added `Lotus.Export` module with `to_csv/1`, `to_json/1`, and `to_jsonl/1` functions for exporting query results
+- Added protocol-based `Lotus.Export.Normalizer` system for database value normalization with support for:
+  - All basic Elixir types (atoms, numbers, strings, booleans, dates/times)
+  - Database-specific types (PostgreSQL ranges, intervals, INET, geometric types)
+  - Binary data handling (UUIDs, Base64 encoding for non-UTF-8 data)
+  - Collections (maps preserved for JSON, stringified for CSV)
+  - Decimal types with proper NaN/Infinity handling
+- Added battle-tested UUID binary handling using `Ecto.UUID.load/1`
+- Added comprehensive test coverage for all export functionality and edge cases
+- Added NimbleCSV integration for robust CSV generation with proper escaping
+- Added central `Lotus.Value` module providing unified interface for value normalization across JSON/CSV/UI contexts
+
+### Changed  
+- **BREAKING:** Renamed `Lotus.QueryResult` to `Lotus.Result` for cleaner API naming with the introduction of `Lotus.Value`
 
 ### Fixed
 - Fixed SQL quoting in `get_table_stats` to use adapter-specific quote characters (backticks for MySQL, double quotes for PostgreSQL)

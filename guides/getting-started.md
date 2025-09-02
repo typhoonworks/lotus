@@ -44,7 +44,7 @@ Now let's execute our saved query:
 {:ok, result} = Lotus.run_query(query)
 
 IO.inspect(result)
-# %Lotus.QueryResult{
+# %Lotus.Result{
 #   columns: ["user_count"],
 #   rows: [[42]],
 #   num_rows: 1
@@ -53,7 +53,7 @@ IO.inspect(result)
 
 ### Accessing Results
 
-The `QueryResult` struct contains all the information about your query execution:
+The `Result` struct contains all the information about your query execution:
 
 ```elixir
 # Get the column names
@@ -68,7 +68,7 @@ result.rows
 result.num_rows
 # 1
 
-# The QueryResult struct contains:
+# The Result struct contains:
 # - columns: list of column names
 # - rows: list of result rows
 # - num_rows: total count of returned rows

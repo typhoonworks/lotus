@@ -3,12 +3,12 @@ defmodule Lotus.Runner do
   Read-only SQL execution with safety checks, param binding, and result shaping.
   """
 
-  alias Lotus.{Source, QueryResult, Preflight}
+  alias Lotus.{Source, Result, Preflight}
 
   @type repo :: module()
   @type sql :: String.t()
   @type params :: list()
-  @type query_result :: QueryResult.t()
+  @type query_result :: Result.t()
   @type opts :: [
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
@@ -36,7 +36,7 @@ defmodule Lotus.Runner do
       fn ->
         case repo.query(sql, params, timeout: Keyword.get(opts, :timeout, 15_000)) do
           {:ok, %{columns: cols, rows: rows}} ->
-            {:ok, QueryResult.new(cols, rows)}
+            {:ok, Result.new(cols, rows)}
 
           {:error, err} ->
             repo.rollback(Source.format_error(err))

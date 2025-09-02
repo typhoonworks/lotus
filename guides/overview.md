@@ -50,7 +50,7 @@ A query in Lotus is a saved SQL statement with metadata like name and creation t
 All SQL execution happens through Lotus's runner, which enforces read-only restrictions and provides consistent error handling and timeout management.
 
 ### Results
-Query results are returned in a structured format (`QueryResult`) that includes the data and column information.
+Query results are returned in a structured format (`Result`) that includes the data and column information.
 
 ### Schema Introspection
 Lotus provides comprehensive schema discovery tools to explore database structure, list tables across schemas, inspect column definitions, and gather table statistics.

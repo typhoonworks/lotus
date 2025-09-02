@@ -7,7 +7,7 @@ defmodule Lotus.Storage do
 
   import Ecto.Query
   alias Lotus.Storage.Query
-  alias Lotus.QueryResult
+  alias Lotus.Result
 
   @type id :: integer() | binary()
   @type attrs :: map()
@@ -132,6 +132,6 @@ defmodule Lotus.Storage do
       {:ok, result} = run(query, statement_timeout_ms: 3_000)
 
   """
-  @spec run(Query.t(), keyword()) :: {:ok, QueryResult.t()} | {:error, term()}
+  @spec run(Query.t(), keyword()) :: {:ok, Result.t()} | {:error, term()}
   def run(%Query{} = q, opts \\ []), do: Lotus.run_query(q, opts)
 end

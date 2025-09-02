@@ -46,6 +46,7 @@ defmodule Lotus.MixProject do
       {:ecto_sqlite3, "~> 0.21", optional: true},
       {:jason, "~> 1.4"},
       {:myxql, "~> 0.8", optional: true},
+      {:nimble_csv, "~> 1.2"},
       {:nimble_options, "~> 1.0"},
       {:postgrex, "~> 0.20", optional: true},
 
@@ -90,11 +91,17 @@ defmodule Lotus.MixProject do
       source_ref: "v#{@version}",
       extras: docs_guides(),
       groups_for_modules: [
-        Core: [Lotus, Lotus.Config],
-        Storage: [Lotus.Storage, Lotus.Storage.Query],
-        Execution: [Lotus.Runner, Lotus.QueryResult],
-        Migrations: [Lotus.Migrations, ~r/Lotus\.Migrations\..+/],
-        Utilities: [Lotus.Json]
+        "Core API": [Lotus, Lotus.Config, Lotus.Value],
+        "Query Storage": [Lotus.Storage, Lotus.Storage.Query, Lotus.Storage.QueryVariable],
+        "Query Execution": [Lotus.Runner, Lotus.Result, Lotus.Preflight],
+        "Data Export": [Lotus.Export, ~r/Lotus\.Export\..+/],
+        "Data Sources": [Lotus.Source, Lotus.Sources, ~r/Lotus\.Sources\..+/],
+        "Schema Introspection": [Lotus.Schema, Lotus.Visibility],
+        Caching: [Lotus.Cache, ~r/Lotus\.Cache\..+/],
+        "Database Migrations": [Lotus.Migration, Lotus.Migrations, ~r/Lotus\.Migrations\..+/],
+        "OTP Application": [Lotus.Application, Lotus.Supervisor],
+        "SQL Processing": [Lotus.SQL.Transformer],
+        Utilities: [Lotus.JSON]
       ]
     ]
   end
