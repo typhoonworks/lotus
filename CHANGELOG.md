@@ -4,7 +4,7 @@
 
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
-- **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.Result structs
+- **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.QueryResult structs
 - Added `schema_visibility` configuration for controlling which schemas are accessible through Lotus
 - Added schema visibility functions to `Lotus.Visibility` module:
   - `allowed_schema?/2` - Check if a schema is visible
