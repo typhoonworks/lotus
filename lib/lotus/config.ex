@@ -23,6 +23,48 @@ defmodule Lotus.Config do
           "warehouse" => MyApp.WarehouseRepo
         }
 
+  ## Visibility Configuration
+
+  Control which schemas and tables are accessible through Lotus with visibility rules:
+
+      config :lotus,
+        # Schema-level rules (higher precedence)
+        schema_visibility: %{
+          postgres: [
+            allow: ["public", ~r/^tenant_/],  # Only public + tenant schemas
+            deny: ["legacy"]                  # Block legacy schema
+          ],
+          mysql: [
+            # In MySQL, schemas = databases
+            allow: ["app_db", "analytics_db"],
+            deny: ["staging_db"]
+          ]
+        },
+        
+        # Table-level rules (lower precedence)
+        table_visibility: %{
+          default: [
+            deny: ["user_passwords", "api_keys", ~r/^audit_/]
+          ],
+          postgres: [
+            allow: [
+              {"public", ~r/^dim_/},      # Dimension tables only
+              {"analytics", ~r/.*/}       # All analytics tables
+            ]
+          ]
+        }
+
+  **Key Principle**: Schema visibility gates table visibility. If a schema is denied,
+  all tables within it are blocked regardless of table-level rules.
+
+  **Database-Specific Schema Behavior**:
+
+  - **PostgreSQL**: True namespaced schemas within a database (`public`, `reporting`, etc.)
+  - **MySQL**: Schemas = Databases (when you connect to MySQL, you can access multiple databases)
+  - **SQLite**: Schema-less (visibility rules don't apply)
+
+  See the [Visibility Guide](guides/visibility.html) for detailed configuration examples.
+
   ## Optional Configuration
 
       config :lotus,
@@ -36,6 +78,7 @@ defmodule Lotus.Config do
           data_repos: %{String.t() => module()},
           default_repo: String.t() | nil,
           table_visibility: map(),
+          schema_visibility: map(),
           cache: cache_config()
         }
 
@@ -79,6 +122,18 @@ defmodule Lotus.Config do
       doc:
         "Configuration for table visibility rules. Controls which tables are accessible through Lotus queries and discovery."
     ],
+    schema_visibility: [
+      type: :map,
+      default: %{},
+      doc: """
+      Configuration for schema visibility rules. Controls which schemas are accessible through Lotus.
+      Schema rules take precedence over table rules - if a schema is denied, all tables within it are blocked.
+
+      Format: %{repo_key => [allow: [...], deny: [...]], default: [...]}
+
+      Rules support strings, regexes, and :all for allow rules. In MySQL, schemas = databases.
+      """
+    ],
     cache: [
       type: {:or, [:map, nil]},
       default: nil,
@@ -107,6 +162,7 @@ defmodule Lotus.Config do
       :data_repos,
       :default_repo,
       :table_visibility,
+      :schema_visibility,
       :cache
     ])
   end
@@ -218,6 +274,26 @@ defmodule Lotus.Config do
       # If repo_name can't be converted to existing atom, use default
       config = load!()
       visibility_config = config[:table_visibility] || %{}
+      visibility_config[:default] || []
+  end
+
+  @doc """
+  Returns schema visibility rules for a specific repository.
+
+  Falls back to default rules if repo-specific rules are not configured.
+  """
+  @spec schema_rules_for_repo_name(String.t()) :: keyword()
+  def schema_rules_for_repo_name(repo_name) do
+    config = load!()
+    visibility_config = config[:schema_visibility] || %{}
+
+    repo_key = String.to_existing_atom(repo_name)
+
+    visibility_config[repo_key] || visibility_config[:default] || []
+  rescue
+    ArgumentError ->
+      config = load!()
+      visibility_config = config[:schema_visibility] || %{}
       visibility_config[:default] || []
   end
 

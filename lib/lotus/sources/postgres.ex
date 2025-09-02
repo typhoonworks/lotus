@@ -91,6 +91,11 @@ defmodule Lotus.Sources.Postgres do
   end
 
   @impl true
+  def builtin_schema_denies(_repo) do
+    ["pg_catalog", "information_schema", "pg_toast", ~r/^pg_temp/, ~r/^pg_toast/]
+  end
+
+  @impl true
   def list_schemas(repo) do
     sql = """
     SELECT schema_name

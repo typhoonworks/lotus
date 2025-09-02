@@ -107,6 +107,7 @@ defmodule Lotus.MixProject do
       "guides/getting-started.md",
       "guides/advanced-variables.md",
       "guides/configuration.md",
+      "guides/visibility.md",
       "guides/caching.md",
       "guides/contributing.md"
     ]

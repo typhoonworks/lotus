@@ -166,6 +166,11 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
+  def builtin_schema_denies(_repo) do
+    ["information_schema", "mysql", "performance_schema", "sys"]
+  end
+
+  @impl true
   def list_schemas(repo) do
     sql = """
     SELECT schema_name
