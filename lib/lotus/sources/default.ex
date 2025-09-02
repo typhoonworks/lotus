@@ -76,6 +76,12 @@ defmodule Lotus.Sources.Default do
   end
 
   @impl true
+  def builtin_schema_denies(_repo) do
+    # Conservative denies covering common system schemas from various databases
+    ["pg_catalog", "information_schema", "mysql", "performance_schema", "sys"]
+  end
+
+  @impl true
   @doc """
   Generic list_schemas implementation that returns an empty list.
   Unknown sources should implement their own version if they support schema introspection.

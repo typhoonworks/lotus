@@ -1,36 +1,317 @@
 defmodule Lotus.Visibility do
   @moduledoc """
-  Table visibility filtering for Lotus.
+  Schema and table visibility filtering for Lotus.
 
-  Built-ins deny common metadata/system relations; user config can add allow/deny.
+  Implements a two-level visibility system where **schema visibility takes precedence**:
+  1. **Schema visibility** is checked first - if a schema is denied, all its tables are blocked
+  2. **Table visibility** is only checked if the schema is allowed
+
+  This ensures security by default while providing fine-grained control.
+
+  ## Understanding Schemas Across Database Systems
+
+  **Important**: "Schema" means different things in different databases:
+
+  ### PostgreSQL
+  - **True namespaced schemas** within a single database
+  - Examples: `public`, `reporting`, `tenant_123`
+  - System schemas: `pg_catalog`, `information_schema`, `pg_toast`
+
+  ### MySQL
+  - **Schemas = Databases** (synonymous terms)
+  - Examples: `lotus_production`, `analytics_db`, `warehouse`
+  - System schemas: `mysql`, `information_schema`, `performance_schema`, `sys`
+
+  ### SQLite
+  - **No schema support** (schema-less database)
+  - Schema visibility rules don't apply
+
+  ## Quick Start
+
+  ```elixir
+  config :lotus,
+    # Schema-level rules (higher precedence)
+    schema_visibility: %{
+      postgres: [
+        allow: ["public", ~r/^tenant_/],    # Only public + tenant schemas
+        deny: ["legacy"]                    # Block legacy schema
+      ],
+      mysql: [
+        allow: ["app_db", "analytics_db"],  # Only these databases
+        deny: ["staging_db"]                # Block staging database
+      ]
+    },
+
+    # Table-level rules (lower precedence)
+    table_visibility: %{
+      default: [
+        deny: ["user_passwords", "api_keys", ~r/^audit_/]
+      ],
+      postgres: [
+        allow: [
+          {"public", ~r/^dim_/},           # Dimension tables only
+          {"analytics", ~r/.*/}            # All analytics tables
+        ]
+      ]
+    }
+  ```
+
+  ## Rule Evaluation
+
+  ### 1. Schema Gating (First Check)
+  ```elixir
+  if not allowed_schema?(repo_name, schema) do
+    false  # Schema denied → all tables blocked
+  else
+    # Schema allowed → check table rules
+  end
+  ```
+
+  ### 2. Schema-Scoped Allow Posture
+  Allow rules are **scoped to specific schemas**, not global:
+
+  ```elixir
+  # Rules: allow: [{"restricted", "allowed_table"}]
+
+  {"restricted", "any_table"} → denied (has allow posture, must match)
+  {"public", "any_table"} → allowed (no allow posture for public)
+  ```
+
+  ### 3. Deny Always Wins
+  Any deny rule (builtin or user-defined) blocks access immediately.
 
   ## Rule Formats
 
-  - `{"schema", "table"}` - Matches specific schema.table
-  - `"table"` - Matches table name in any schema (convenience for blocking across all schemas)
-  - `{~r/pattern/, "table"}` - Matches table in schemas matching the regex
-  - `{"schema", ~r/pattern/}` - Matches tables matching regex in specific schema
+  ### Schema Rules
+  - `"exact_name"` - Matches exact schema name
+  - `~r/pattern/` - Regex pattern for dynamic matching
+  - `:all` - Special allow value (permits all schemas)
+
+  ### Table Rules
+  - `{"schema", "table"}` - Exact schema.table match
+  - `{"schema", ~r/pattern/}` - Tables matching regex in specific schema
+  - `{~r/schema_pattern/, "table"}` - Table in schemas matching pattern
+  - `"table"` - Table name in any schema (global rule)
+
+  ## Built-in Security
+
+  System schemas are automatically denied:
+
+  - **PostgreSQL**: `pg_catalog`, `information_schema`, `pg_toast`, `pg_temp_*`
+  - **MySQL**: `mysql`, `information_schema`, `performance_schema`, `sys`
+  - **All databases**: `schema_migrations`, `lotus_queries`
+
+  ## Examples
+
+  ### Multi-tenant Application
+  ```elixir
+  config :lotus,
+    schema_visibility: %{
+      postgres: [
+        allow: ["public", ~r/^tenant_\\d+$/],  # tenant_123, etc.
+        deny: ["admin"]
+      ]
+    },
+    table_visibility: %{
+      postgres: [
+        allow: [
+          {"public", ~r/^shared_/},        # Shared lookup tables
+          {~r/^tenant_/, "users"},         # Users in each tenant
+          {~r/^tenant_/, "orders"}         # Orders in each tenant
+        ],
+        deny: [
+          {~r/^tenant_/, "audit_logs"}     # Hide audit logs
+        ]
+      ]
+    }
+  ```
+
+  ### Data Warehouse
+  ```elixir
+  config :lotus,
+    schema_visibility: %{
+      postgres: [
+        allow: ["public", "warehouse", "analytics"]
+      ]
+    },
+    table_visibility: %{
+      postgres: [
+        allow: [
+          {"public", ~r/^dim_/},         # Dimension tables
+          {"public", ~r/^fact_/},        # Fact tables
+          {"warehouse", ~r/.*/},         # All warehouse
+          {"analytics", ~r/^report_/}    # Only reports
+        ],
+        deny: [
+          {"public", ~r/^raw_/}          # Hide raw data
+        ]
+      ]
+    }
+  ```
+
+  ### MySQL Multi-Database
+  ```elixir
+  config :lotus,
+    schema_visibility: %{
+      mysql: [
+        # Remember: schemas = databases in MySQL
+        allow: ["app_production", "analytics_warehouse"],
+        deny: ["staging_db", "backup_db"]
+      ]
+    }
+  ```
+
+  ## API
+
+  Direct visibility checking:
+  ```elixir
+  # Check schema visibility
+  Lotus.Visibility.allowed_schema?("postgres", "public")  # true/false
+
+  # Check table visibility
+  Lotus.Visibility.allowed_relation?("postgres", {"public", "users"})  # true/false
+
+  # Filter lists
+  Lotus.Visibility.filter_schemas(["public", "pg_catalog"], "postgres")  # ["public"]
+
+  # Validate requested schemas
+  Lotus.Visibility.validate_schemas(["public", "restricted"], "postgres")
+  # :ok | {:error, :schema_not_visible, denied: [...]}
+  ```
+
+  Schema-aware Lotus functions automatically apply visibility:
+  ```elixir
+  {:ok, schemas} = Lotus.list_schemas("postgres")        # Filtered list
+  {:ok, tables} = Lotus.list_tables("postgres")          # Filtered list
+  {:error, msg} = Lotus.list_tables("postgres", schemas: ["denied"])  # Error
+  ```
+
+  For more detailed examples and configuration patterns, see the
+  [Visibility Guide](guides/visibility.html).
   """
 
   alias Lotus.Config
 
   @doc """
-  Checks if a relation (schema, table) is allowed for the given data repo name.
+  Checks if a schema is visible for the given data repo.
+
+  Returns:
+  - `true` if the schema is allowed
+  - `false` if the schema is denied
+  """
+  @spec allowed_schema?(String.t(), String.t() | nil) :: boolean()
+  def allowed_schema?(repo_name, schema) do
+    rules = Config.schema_rules_for_repo_name(repo_name)
+    builtin = builtin_schema_denies(repo_name)
+
+    builtin_denied = schema_deny_hit?(builtin, schema)
+
+    allowed = schema_allow_pass?(rules[:allow], schema)
+    user_denied = schema_deny_hit?(rules[:deny], schema)
+
+    # Schema is visible if:
+    # - It passes allow rules (or no allow rules exist) AND
+    # - It's not denied by builtin or user rules
+    (allowed || rules[:allow] in [nil, [], :all]) and not (builtin_denied or user_denied)
+  end
+
+  @doc """
+  Checks if a relation (schema, table) is allowed for the given data repo.
+
+  This now checks schema visibility first, then table visibility.
   """
   @spec allowed_relation?(String.t(), {String.t() | nil, String.t()}) :: boolean()
   def allowed_relation?(repo_name, {schema, table}) do
-    rules = Config.rules_for_repo_name(repo_name)
+    if not allowed_schema?(repo_name, schema) do
+      false
+    else
+      table_rules = Config.rules_for_repo_name(repo_name)
+      builtin = builtin_table_denies(repo_name)
 
-    builtin = builtin_denies(repo_name)
+      builtin_denied = deny_hit?(builtin, schema, table)
+      allowed = allow_pass?(table_rules[:allow], schema, table)
+      user_denied = deny_hit?(table_rules[:deny], schema, table)
 
-    builtin_denied = deny_hit?(builtin, schema, table)
-    allowed = allow_pass?(rules[:allow], schema, table)
-    user_denied = deny_hit?(rules[:deny], schema, table)
-
-    (allowed || rules[:allow] in [nil, []]) and not (builtin_denied or user_denied)
+      (allowed || table_rules[:allow] in [nil, []]) and not (builtin_denied or user_denied)
+    end
   end
 
-  defp builtin_denies(repo_name) do
+  @doc """
+  Filters a list of schemas to only those that are visible.
+  """
+  @spec filter_schemas([String.t()], String.t()) :: [String.t()]
+  def filter_schemas(schemas, repo_name) do
+    Enum.filter(schemas, &allowed_schema?(repo_name, &1))
+  end
+
+  @doc """
+  Filters a list of relations to only those that are visible.
+  """
+  @spec filter_relations([{String.t() | nil, String.t()}], String.t()) ::
+          [{String.t() | nil, String.t()}]
+  def filter_relations(relations, repo_name) do
+    Enum.filter(relations, &allowed_relation?(repo_name, &1))
+  end
+
+  @doc """
+  Validates that all requested schemas are visible.
+
+  Returns:
+  - `:ok` if all schemas are visible
+  - `{:error, :schema_not_visible, denied: [schemas]}` if any are denied
+  """
+  @spec validate_schemas([String.t()], String.t()) ::
+          :ok | {:error, :schema_not_visible, denied: [String.t()]}
+  def validate_schemas(schemas, repo_name) do
+    denied = Enum.reject(schemas, &allowed_schema?(repo_name, &1))
+
+    if denied == [] do
+      :ok
+    else
+      {:error, :schema_not_visible, denied: denied}
+    end
+  end
+
+  defp builtin_schema_denies(repo_name) do
+    repo = Config.data_repos() |> Map.get(repo_name)
+
+    if is_nil(repo) do
+      Lotus.Sources.Default.builtin_schema_denies(nil)
+    else
+      Lotus.Source.builtin_schema_denies(repo)
+    end
+  end
+
+  defp schema_allow_pass?(nil, _schema), do: true
+  defp schema_allow_pass?([], _schema), do: true
+  defp schema_allow_pass?(:all, _schema), do: true
+
+  defp schema_allow_pass?(rules, schema) do
+    Enum.any?(rules, fn
+      %Regex{} = rx -> schema_pattern_match?(rx, schema)
+      str when is_binary(str) -> str == schema
+      _ -> false
+    end)
+  end
+
+  defp schema_deny_hit?(nil, _schema), do: false
+  defp schema_deny_hit?([], _schema), do: false
+
+  defp schema_deny_hit?(rules, schema) do
+    Enum.any?(rules, fn
+      %Regex{} = rx -> schema_pattern_match?(rx, schema)
+      str when is_binary(str) -> str == schema
+      _ -> false
+    end)
+  end
+
+  defp schema_pattern_match?(%Regex{} = rx, val) when is_binary(val), do: Regex.match?(rx, val)
+  defp schema_pattern_match?(%Regex{}, nil), do: false
+  defp schema_pattern_match?(_, _), do: false
+
+  # Table-level helpers (existing code)
+
+  defp builtin_table_denies(repo_name) do
     repo = Config.data_repos() |> Map.get(repo_name)
 
     if is_nil(repo) do
@@ -42,7 +323,26 @@ defmodule Lotus.Visibility do
 
   defp allow_pass?(nil, _s, _t), do: true
   defp allow_pass?([], _s, _t), do: true
-  defp allow_pass?(rules, s, t), do: any_match?(rules, s, t)
+
+  defp allow_pass?(rules, s, t) do
+    schema_specific_rules =
+      Enum.filter(rules, fn
+        {rule_schema, _} when is_binary(rule_schema) or is_nil(rule_schema) ->
+          pattern_match?(rule_schema, s)
+
+        {%Regex{} = rule_schema, _} ->
+          pattern_match?(rule_schema, s)
+
+        _bare_string ->
+          true
+      end)
+
+    if schema_specific_rules == [] do
+      true
+    else
+      any_match?(schema_specific_rules, s, t)
+    end
+  end
 
   defp deny_hit?(nil, _s, _t), do: false
   defp deny_hit?([], _s, _t), do: false

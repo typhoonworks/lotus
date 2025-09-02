@@ -27,6 +27,18 @@ defmodule Lotus.Source do
               [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
 
   @doc """
+  Return the list of built-in schema denies that should be hidden from schema listing.
+
+  Returns a list of schema patterns (strings or regexes) that should be denied.
+
+  Examples:
+    * PostgreSQL: `["pg_catalog", "information_schema", ~r/^pg_temp/]`
+    * MySQL: `["mysql", "information_schema", "performance_schema", "sys"]`
+    * SQLite: `[]` (no schemas)
+  """
+  @callback builtin_schema_denies(repo) :: [String.t() | Regex.t()]
+
+  @doc """
   Return the default schemas for this source when no schema options are provided.
 
   Each database source defines its own appropriate default:
@@ -188,6 +200,14 @@ defmodule Lotus.Source do
   """
   @spec builtin_denies(repo) :: [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
   def builtin_denies(repo), do: impl_for(repo).builtin_denies(repo)
+
+  @doc """
+  Returns the list of built-in schema denies that should be hidden from schema listing.
+
+  These rules are used by the visibility module to filter out system schemas.
+  """
+  @spec builtin_schema_denies(repo) :: [String.t() | Regex.t()]
+  def builtin_schema_denies(repo), do: impl_for(repo).builtin_schema_denies(repo)
 
   @doc """
   Returns the default schemas for the given repository's source.

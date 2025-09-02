@@ -95,6 +95,12 @@ defmodule Lotus.Sources.SQLite3 do
   end
 
   @impl true
+  def builtin_schema_denies(_repo) do
+    # SQLite doesn't have schemas
+    []
+  end
+
+  @impl true
   def list_schemas(_repo) do
     # SQLite doesn't have schemas
     []

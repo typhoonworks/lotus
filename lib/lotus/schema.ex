@@ -2,17 +2,38 @@ defmodule Lotus.Schema do
   @moduledoc """
   Schema introspection functionality for Lotus.
 
-  Provides functions to list tables and inspect table schemas across
-  different database adapters (PostgreSQL, SQLite, etc.).
+  Provides functions to list schemas, tables and inspect table schemas across
+  different database adapters (PostgreSQL, MySQL, SQLite, etc.).
+
+  ## Visibility Filtering
+
+  All schema and table listing functions automatically apply visibility rules
+  configured in your application:
+
+  - **Schema visibility** filters which schemas are accessible
+  - **Table visibility** filters which tables within allowed schemas are accessible
+  - **Built-in security** automatically blocks system schemas and tables
+
+  Schema visibility takes precedence - if a schema is denied, all tables within it
+  are blocked regardless of table-level rules.
+
+  ## Database-Specific Behavior
+
+  - **PostgreSQL**: Returns namespaced `{schema, table}` tuples
+  - **MySQL**: Returns `{database, table}` tuples (schemas = databases in MySQL)
+  - **SQLite**: Returns table names as strings (schema-less)
   """
 
   alias Lotus.{Visibility, Config, Source, Sources}
 
   @doc """
-  Lists all schemas in the given PostgreSQL repository.
+  Lists all visible schemas in the given repository.
 
-  Returns a list of schema names. For databases without schemas (like SQLite),
-  returns an empty list.
+  Returns a list of schema names filtered by visibility rules. For databases
+  without schemas (like SQLite), returns an empty list.
+
+  **Note**: Results are automatically filtered by schema visibility rules.
+  System schemas (like `pg_catalog`) are always blocked for security.
 
   ## Options
 
@@ -21,10 +42,13 @@ defmodule Lotus.Schema do
   ## Examples
 
       {:ok, schemas} = Lotus.Schema.list_schemas(MyApp.Repo)
-      # PostgreSQL: ["public", "reporting", ...]
+      # PostgreSQL: ["public", "reporting", ...]  (filtered by visibility)
 
-      {:ok, schemas} = Lotus.Schema.list_schemas("postgres")
-      # PostgreSQL: ["public", "reporting", ...]
+      {:ok, schemas} = Lotus.Schema.list_schemas("mysql")
+      # MySQL: ["app_production", "analytics_db", ...]  (databases = schemas)
+
+      {:ok, schemas} = Lotus.Schema.list_schemas("sqlite")
+      # SQLite: []  (schema-less database)
   """
   @spec list_schemas(module() | String.t(), keyword()) ::
           {:ok, [String.t()]} | {:error, term()}
@@ -43,7 +67,9 @@ defmodule Lotus.Schema do
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
       try do
-        {:ok, Source.list_schemas(repo)}
+        raw_schemas = Source.list_schemas(repo)
+        filtered_schemas = Visibility.filter_schemas(raw_schemas, repo_name)
+        {:ok, filtered_schemas}
       rescue
         e -> {:error, Exception.message(e)}
       end
@@ -51,10 +77,16 @@ defmodule Lotus.Schema do
   end
 
   @doc """
-  Lists all tables in the given repository.
+  Lists all visible tables in the given repository.
 
   For databases with schemas (like PostgreSQL), returns {schema, table} tuples.
   For databases without schemas (like SQLite), returns just table names as strings.
+
+  **Note**: Results are automatically filtered by visibility rules:
+
+  1. Schema visibility is checked first - denied schemas block all their tables
+  2. Table visibility is then applied to tables in allowed schemas
+  3. System tables are always blocked for security
 
   ## Options
 
@@ -66,13 +98,16 @@ defmodule Lotus.Schema do
   ## Examples
 
       {:ok, tables} = Lotus.Schema.list_tables(MyApp.Repo)
-      # PostgreSQL: [{"public", "users"}, {"public", "posts"}, ...]
+      # PostgreSQL: [{"public", "users"}, {"public", "posts"}, ...]  (filtered by visibility)
 
       {:ok, tables} = Lotus.Schema.list_tables("postgres", search_path: "reporting, public")
       # PostgreSQL: [{"reporting", "customers"}, {"reporting", "orders"}, {"public", "users"}, ...]
 
+      {:ok, tables} = Lotus.Schema.list_tables("mysql")
+      # MySQL: [{"app_db", "users"}, {"analytics_db", "reports"}, ...]  (databases = schemas)
+
       {:ok, tables} = Lotus.Schema.list_tables("sqlite")
-      # SQLite: ["products", "orders", "order_items"]
+      # SQLite: ["products", "orders", "order_items"]  (schema-less)
   """
   @spec list_tables(module() | String.t(), keyword()) ::
           {:ok, [{String.t(), String.t()}] | [String.t()]} | {:error, term()}
@@ -81,42 +116,52 @@ defmodule Lotus.Schema do
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    search_path = Keyword.get(opts, :search_path)
+    with :ok <- Visibility.validate_schemas(schemas, repo_name) do
+      search_path = Keyword.get(opts, :search_path)
 
-    key =
-      schema_key(:list_tables, repo_name, search_path || Enum.join(schemas, ","), include_views?)
+      key =
+        schema_key(
+          :list_tables,
+          repo_name,
+          search_path || Enum.join(schemas, ","),
+          include_views?
+        )
 
-    tags = ["repo:#{repo_name}", "schema:list_tables"]
+      tags = ["repo:#{repo_name}", "schema:list_tables"]
 
-    profile =
-      if is_list(opts[:cache]) do
-        Keyword.get(opts[:cache], :profile, :schema)
-      else
-        :schema
-      end
+      profile =
+        if is_list(opts[:cache]) do
+          Keyword.get(opts[:cache], :profile, :schema)
+        else
+          :schema
+        end
 
-    exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      try do
-        raw_relations = Source.list_tables(repo, schemas, include_views?)
+      exec_with_cache(opts[:cache], profile, key, tags, fn ->
+        try do
+          raw_relations = Source.list_tables(repo, schemas, include_views?)
 
-        filtered =
-          raw_relations
-          |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+          filtered =
+            raw_relations
+            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
 
-        result =
-          if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
-            # Schema-less database - return just table names
-            Enum.map(filtered, fn {nil, table} -> table end)
-          else
-            # Schema-aware database - return {schema, table} tuples
-            filtered
-          end
+          result =
+            if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
+              # Schema-less database - return just table names
+              Enum.map(filtered, fn {nil, table} -> table end)
+            else
+              # Schema-aware database - return {schema, table} tuples
+              filtered
+            end
 
-        {:ok, result}
-      rescue
-        e -> {:error, Exception.message(e)}
-      end
-    end)
+          {:ok, result}
+        rescue
+          e -> {:error, Exception.message(e)}
+        end
+      end)
+    else
+      {:error, :schema_not_visible, denied: denied} ->
+        {:error, "Schema(s) not visible: #{Enum.join(denied, ", ")}"}
+    end
   end
 
   @doc """

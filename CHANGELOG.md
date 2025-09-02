@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
+- Added `schema_visibility` configuration for controlling which schemas are accessible through Lotus
+- Added schema visibility functions to `Lotus.Visibility` module:
+  - `allowed_schema?/2` - Check if a schema is visible
+  - `filter_schemas/2` - Filter a list of schemas by visibility rules
+  - `validate_schemas/2` - Validate that all requested schemas are visible
+- Added `builtin_schema_denies/1` callback to Source behaviour for adapter-specific system schema filtering
+- Added automatic schema visibility filtering to `list_schemas` and `list_tables` functions
 - Added implementation of `list_schemas` for all database adapters:
   - PostgreSQL: Returns actual schema names from `information_schema.schemata`
   - MySQL: Returns database names as schemas

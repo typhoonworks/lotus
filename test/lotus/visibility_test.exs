@@ -321,4 +321,138 @@ defmodule Lotus.VisibilityTest do
       refute Visibility.allowed_relation?("postgres", {"public", "access_log"})
     end
   end
+
+  describe "schema visibility" do
+    setup do
+      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> [] end)
+      :ok
+    end
+
+    test "allows all schemas when no config present" do
+      assert Visibility.allowed_schema?("postgres", "public")
+      assert Visibility.allowed_schema?("postgres", "reporting")
+      assert Visibility.allowed_schema?("postgres", "analytics")
+    end
+
+    test "filters schemas based on built-in denies" do
+      refute Visibility.allowed_schema?("postgres", "pg_catalog")
+      refute Visibility.allowed_schema?("postgres", "information_schema")
+      refute Visibility.allowed_schema?("postgres", "pg_toast")
+    end
+
+    test "filters schemas with regex patterns" do
+      refute Visibility.allowed_schema?("postgres", "pg_temp_123")
+      refute Visibility.allowed_schema?("postgres", "pg_toast_456")
+    end
+
+    test "filter_schemas/2 removes denied schemas" do
+      schemas = ["public", "reporting", "pg_catalog", "information_schema"]
+      filtered = Visibility.filter_schemas(schemas, "postgres")
+
+      assert "public" in filtered
+      assert "reporting" in filtered
+      refute "pg_catalog" in filtered
+      refute "information_schema" in filtered
+    end
+
+    test "validate_schemas/2 returns error for denied schemas" do
+      assert Visibility.validate_schemas(["public", "reporting"], "postgres") == :ok
+
+      {:error, :schema_not_visible, denied: denied} =
+        Visibility.validate_schemas(["public", "pg_catalog"], "postgres")
+
+      assert "pg_catalog" in denied
+    end
+  end
+
+  describe "schema visibility with custom rules" do
+    setup do
+      schema_config = [
+        allow: ["public", "analytics", ~r/^tenant_/],
+        deny: ["restricted"]
+      ]
+
+      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_config end)
+      :ok
+    end
+
+    test "allows only specified schemas when allow rules present" do
+      assert Visibility.allowed_schema?("postgres", "public")
+      assert Visibility.allowed_schema?("postgres", "analytics")
+      assert Visibility.allowed_schema?("postgres", "tenant_123")
+      assert Visibility.allowed_schema?("postgres", "tenant_abc")
+
+      refute Visibility.allowed_schema?("postgres", "reporting")
+      refute Visibility.allowed_schema?("postgres", "warehouse")
+    end
+
+    test "deny rules override allow rules" do
+      refute Visibility.allowed_schema?("postgres", "restricted")
+    end
+
+    test "built-in denies still apply with custom rules" do
+      refute Visibility.allowed_schema?("postgres", "pg_catalog")
+      refute Visibility.allowed_schema?("postgres", "information_schema")
+    end
+  end
+
+  describe "schema visibility overrides table visibility" do
+    setup do
+      # Schema rules deny "restricted" schema
+      schema_config = [
+        allow: ["public"],
+        deny: ["restricted"]
+      ]
+
+      # Table rules would allow tables in "restricted" schema
+      table_config = [
+        allow: [{"restricted", "allowed_table"}],
+        deny: []
+      ]
+
+      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_config end)
+      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> table_config end)
+      :ok
+    end
+
+    test "denied schema blocks all tables within it" do
+      refute Visibility.allowed_relation?("postgres", {"restricted", "allowed_table"})
+      refute Visibility.allowed_relation?("postgres", {"restricted", "any_table"})
+    end
+
+    test "allowed schema permits table-level filtering" do
+      assert Visibility.allowed_relation?("postgres", {"public", "users"})
+    end
+  end
+
+  describe "MySQL schema visibility" do
+    setup do
+      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> [] end)
+      :ok
+    end
+
+    test "filters MySQL system schemas" do
+      refute Visibility.allowed_schema?("mysql", "mysql")
+      refute Visibility.allowed_schema?("mysql", "information_schema")
+      refute Visibility.allowed_schema?("mysql", "performance_schema")
+      refute Visibility.allowed_schema?("mysql", "sys")
+    end
+
+    test "allows user databases in MySQL" do
+      assert Visibility.allowed_schema?("mysql", "lotus_test")
+      assert Visibility.allowed_schema?("mysql", "my_app_db")
+    end
+  end
+
+  describe "SQLite schema visibility" do
+    setup do
+      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> [] end)
+      :ok
+    end
+
+    test "SQLite has no schemas so rules don't apply" do
+      assert Visibility.allowed_schema?("sqlite", nil)
+      assert Visibility.allowed_schema?("sqlite", "")
+    end
+  end
 end
