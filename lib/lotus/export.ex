@@ -12,7 +12,7 @@ defmodule Lotus.Export do
   """
   NimbleCSV.define(CSVParser, separator: ",", escape: "\"")
 
-  @spec to_csv(Result.t()) :: iodata()
+  @spec to_csv(Result.t()) :: [binary() | iodata()]
   def to_csv(%Result{columns: columns, rows: rows}) do
     header = CSVParser.dump_to_iodata([columns])
 
