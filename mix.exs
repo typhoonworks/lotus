@@ -97,11 +97,11 @@ defmodule Lotus.MixProject do
         "Data Export": [Lotus.Export, ~r/Lotus\.Export\..+/],
         "Data Sources": [Lotus.Source, Lotus.Sources, ~r/Lotus\.Sources\..+/],
         "Schema Introspection": [Lotus.Schema, Lotus.Visibility],
-        "Caching": [Lotus.Cache, ~r/Lotus\.Cache\..+/],
+        Caching: [Lotus.Cache, ~r/Lotus\.Cache\..+/],
         "Database Migrations": [Lotus.Migration, Lotus.Migrations, ~r/Lotus\.Migrations\..+/],
         "OTP Application": [Lotus.Application, Lotus.Supervisor],
         "SQL Processing": [Lotus.SQL.Transformer],
-        "Utilities": [Lotus.JSON]
+        Utilities: [Lotus.JSON]
       ]
     ]
   end
