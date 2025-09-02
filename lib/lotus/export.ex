@@ -1,19 +1,19 @@
 defmodule Lotus.Export do
   @moduledoc """
-  Export functionality for Lotus.QueryResult to various formats.
+  Export functionality for Lotus.Result to various formats.
   """
 
-  alias Lotus.QueryResult
-  alias Lotus.Export.Value
+  alias Lotus.Result
+  alias Lotus.Value
 
   @doc """
-  Converts a QueryResult struct to CSV format using NimbleCSV.
+  Converts a Result struct to CSV format using NimbleCSV.
   Returns iodata for efficient streaming.
   """
   NimbleCSV.define(CSVParser, separator: ",", escape: "\"")
 
-  @spec to_csv(QueryResult.t()) :: iodata()
-  def to_csv(%QueryResult{columns: columns, rows: rows}) do
+  @spec to_csv(Result.t()) :: iodata()
+  def to_csv(%Result{columns: columns, rows: rows}) do
     header = CSVParser.dump_to_iodata([columns])
 
     body =
@@ -26,11 +26,11 @@ defmodule Lotus.Export do
   end
 
   @doc """
-  Converts a QueryResult struct to JSON format.
+  Converts a Result struct to JSON format.
   Returns a binary string containing a JSON array of objects.
   """
-  @spec to_json(QueryResult.t()) :: binary()
-  def to_json(%QueryResult{columns: columns, rows: rows}) do
+  @spec to_json(Result.t()) :: binary()
+  def to_json(%Result{columns: columns, rows: rows}) do
     rows
     |> Stream.map(&row_to_map_for_json(columns, &1))
     |> Enum.to_list()
@@ -38,11 +38,11 @@ defmodule Lotus.Export do
   end
 
   @doc """
-  Converts a QueryResult struct to JSONL (JSON Lines) format.
+  Converts a Result struct to JSONL (JSON Lines) format.
   Returns a binary string with one JSON object per line.
   """
-  @spec to_jsonl(QueryResult.t()) :: binary()
-  def to_jsonl(%QueryResult{columns: columns, rows: rows}) do
+  @spec to_jsonl(Result.t()) :: binary()
+  def to_jsonl(%Result{columns: columns, rows: rows}) do
     rows
     |> Stream.map(&row_to_map_for_json(columns, &1))
     |> Stream.map(&Lotus.JSON.encode!/1)

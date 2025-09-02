@@ -52,7 +52,7 @@ defmodule Lotus do
           cache: [cache_opt] | :bypass | :refresh | nil
         ]
 
-  alias Lotus.{Config, Storage, Runner, QueryResult, Schema, Sources}
+  alias Lotus.{Config, Storage, Runner, Result, Schema, Sources}
   alias Lotus.Storage.Query
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
@@ -156,7 +156,7 @@ defmodule Lotus do
   - `:date` - Cast from ISO8601 string to Date struct
 
   """
-  @spec run_query(Query.t() | term(), opts()) :: {:ok, QueryResult.t()} | {:error, term()}
+  @spec run_query(Query.t() | term(), opts()) :: {:ok, Result.t()} | {:error, term()}
   def run_query(query_or_id, opts \\ [])
 
   def run_query(%Query{} = q, opts) do
@@ -279,7 +279,7 @@ defmodule Lotus do
           | {:search_path, binary() | nil}
           | {:repo, atom() | binary()}
         ]) ::
-          {:ok, QueryResult.t()} | {:error, term()}
+          {:ok, Result.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
     {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), nil)
     runner_opts = Keyword.delete(opts, :repo)

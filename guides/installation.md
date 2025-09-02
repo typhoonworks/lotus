@@ -105,7 +105,7 @@ Test that Lotus is working correctly:
 ```elixir
 # In iex -S mix
 iex> Lotus.run_sql("SELECT 1 as test")
-{:ok, %Lotus.QueryResult{rows: [[1]], columns: ["test"], num_rows: 1}}
+{:ok, %Lotus.Result{rows: [[1]], columns: ["test"], num_rows: 1}}
 ```
 
 ## Database-Specific Setup

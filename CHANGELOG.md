@@ -4,7 +4,7 @@
 
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
-- **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.QueryResult structs
+- **NEW:** Comprehensive export system with CSV, JSON, and JSONL support for Lotus.Result structs
 - Added `schema_visibility` configuration for controlling which schemas are accessible through Lotus
 - Added schema visibility functions to `Lotus.Visibility` module:
   - `allowed_schema?/2` - Check if a schema is visible
@@ -27,6 +27,10 @@
 - Added battle-tested UUID binary handling using `Ecto.UUID.load/1`
 - Added comprehensive test coverage for all export functionality and edge cases
 - Added NimbleCSV integration for robust CSV generation with proper escaping
+- Added central `Lotus.Value` module providing unified interface for value normalization across JSON/CSV/UI contexts
+
+### Changed  
+- **BREAKING:** Renamed `Lotus.QueryResult` to `Lotus.Result` for cleaner API naming with the introduction of `Lotus.Value`
 
 ### Fixed
 - Fixed SQL quoting in `get_table_stats` to use adapter-specific quote characters (backticks for MySQL, double quotes for PostgreSQL)

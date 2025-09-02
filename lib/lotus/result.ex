@@ -1,4 +1,4 @@
-defmodule Lotus.QueryResult do
+defmodule Lotus.Result do
   @moduledoc """
   Represents the result of a SQL query execution.
 

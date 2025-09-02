@@ -34,6 +34,16 @@ defmodule Lotus.Export.Value do
     Normalizer.normalize(value)
   end
 
+  @doc """
+  Normalizes a value for display in UI, converting to a readable string representation.
+  """
+  @spec to_display_string(term()) :: String.t()
+  def to_display_string(value) do
+    value
+    |> Normalizer.normalize()
+    |> value_to_string()
+  end
+
   # Convert normalized value to string for CSV
   defp value_to_string(nil), do: ""
   defp value_to_string(value) when is_binary(value), do: value
