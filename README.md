@@ -49,7 +49,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.5.0"}
+    {:lotus, "~> 0.8.0"}
   ]
 end
 ```
@@ -85,7 +85,7 @@ config :lotus,
     adapter: Lotus.Cache.ETS,
     profiles: %{
       results: [ttl: 60_000],      # Cache query results for 1 minute
-      schema: [ttl: 3_600_000],    # Cache table schemas for 1 hour  
+      schema: [ttl: 3_600_000],    # Cache table schemas for 1 hour
       options: [ttl: 300_000]      # Cache query options for 5 minutes
     }
   ]

@@ -16,7 +16,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.5.0"}
+    {:lotus, "~> 0.8.0"}
   ]
 end
 ```
@@ -90,7 +90,7 @@ def start(_type, _args) do
     # {Lotus, cache: [adapter: Lotus.Cache.ETS, namespace: "prod"]},
     MyAppWeb.Endpoint
   ]
-  
+
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
 end
@@ -206,13 +206,13 @@ This prevents "connection pool pollution" where one operation's settings affect 
 
 #### MySQL
 - Snapshots and restores session-level settings:
-  - `@@session.transaction_read_only` (access mode)  
+  - `@@session.transaction_read_only` (access mode)
   - `@@session.transaction_isolation` (isolation level)
   - `@@session.max_execution_time` (statement timeout)
 - **Cross-version compatible** - handles MySQL 5.7 vs 8.0+ differences
 - Guaranteed restoration using `try/after` blocks
 
-#### SQLite  
+#### SQLite
 - Snapshots and restores `PRAGMA query_only` setting
 - **Graceful fallback** for SQLite versions < 3.8.0 that don't support the pragma
 - Preserves original read-only state if database was already configured as read-only
@@ -227,7 +227,7 @@ Lotus.run_sql("SELECT * FROM users")  # Sets read-only mode
 MyApp.create_user(%{name: "John"})    # FAILS - connection still read-only!
 
 # With Lotus session management (safe):
-Lotus.run_sql("SELECT * FROM users")  # Sets + restores session state  
+Lotus.run_sql("SELECT * FROM users")  # Sets + restores session state
 MyApp.create_user(%{name: "John"})    # ✅ Works normally
 ```
 

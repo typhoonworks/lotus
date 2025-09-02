@@ -40,7 +40,7 @@ defmodule Lotus.Config do
             deny: ["staging_db"]
           ]
         },
-        
+
         # Table-level rules (lower precedence)
         table_visibility: %{
           default: [
@@ -209,14 +209,13 @@ defmodule Lotus.Config do
   def list_data_repo_names, do: Map.keys(data_repos())
 
   @doc """
-  Returns the default data repository.
+  Returns the default data repository as a {name, module} tuple.
 
-  - If there's only one data repo configured, returns it
-  - If multiple repos are configured and default_repo is set, returns that repo
-  - If multiple repos are configured without default_repo, raises an error
+  - If default_repo is configured, returns that repo
+  - If default_repo is not configured, returns the first available repo
   - If no data repos are configured, raises an error
   """
-  @spec default_data_repo() :: module()
+  @spec default_data_repo() :: {String.t(), module()}
   def default_data_repo do
     repos = data_repos()
 
@@ -233,24 +232,13 @@ defmodule Lotus.Config do
               }
         """
 
-      1 ->
-        {_name, repo} = Enum.at(repos, 0)
-        repo
-
       _ ->
         case load!()[:default_repo] do
           nil ->
-            raise ArgumentError, """
-            Multiple data repositories configured but no default_repo specified.
-            Please configure a default_repo:
-
-                config :lotus, default_repo: "primary"
-
-            Available repos: #{inspect(Map.keys(repos))}
-            """
+            Enum.at(repos, 0)
 
           default_name ->
-            get_data_repo!(default_name)
+            {default_name, get_data_repo!(default_name)}
         end
     end
   end
