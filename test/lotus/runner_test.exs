@@ -809,4 +809,43 @@ defmodule Lotus.RunnerTest do
       SqliteRepo.query!("PRAGMA query_only = OFF")
     end
   end
+
+  describe "Result with additional attributes" do
+    test "returns result with num_rows, duration_ms, and command attributes" do
+      sql =
+        "SELECT id, name, email, age, active, metadata, inserted_at, updated_at FROM test_users"
+
+      result = Runner.run_sql(Repo, sql)
+
+      assert {:ok,
+              %Lotus.Result{
+                columns: [
+                  "id",
+                  "name",
+                  "email",
+                  "age",
+                  "active",
+                  "metadata",
+                  "inserted_at",
+                  "updated_at"
+                ],
+                rows: rows,
+                num_rows: num_rows,
+                duration_ms: duration_ms,
+                command: command,
+                meta: meta
+              }} = result
+
+      assert is_list(rows)
+      assert is_integer(num_rows)
+      assert num_rows >= 0
+      assert is_integer(duration_ms)
+      assert duration_ms >= 0
+      assert is_binary(command)
+      assert command == "select"
+      assert is_map(meta)
+      assert is_integer(meta.connection_id)
+      assert is_list(meta.messages)
+    end
+  end
 end
