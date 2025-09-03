@@ -24,12 +24,12 @@ defmodule Lotus.Result do
         }
 
   @doc """
-  Creates a new QueryResult from columns and rows.
+  Creates a new Result from columns and rows.
 
   ## Examples
 
-      iex> Lotus.QueryResult.new(["name", "age"], [["John", 25], ["Jane", 30]])
-      %Lotus.QueryResult{
+      iex> Lotus.Result.new(["name", "age"], [["John", 25], ["Jane", 30]])
+      %Lotus.Result{
         columns: ["name", "age"],
         rows: [["John", 25], ["Jane", 30]],
         num_rows: 2,

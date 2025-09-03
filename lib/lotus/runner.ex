@@ -34,9 +34,26 @@ defmodule Lotus.Runner do
     Source.execute_in_transaction(
       repo,
       fn ->
-        case repo.query(sql, params, timeout: Keyword.get(opts, :timeout, 15_000)) do
-          {:ok, %{columns: cols, rows: rows}} ->
-            {:ok, Result.new(cols, rows)}
+        timeout = Keyword.get(opts, :timeout, 15_000)
+
+        {elapsed_us, res} =
+          :timer.tc(fn ->
+            repo.query(sql, params, timeout: timeout)
+          end)
+
+        case res do
+          {:ok, %{columns: cols, rows: rows} = raw} ->
+            num_rows = Map.get(raw, :num_rows, length(rows || []))
+            command = normalize_command(Map.get(raw, :command))
+            duration_ms = System.convert_time_unit(elapsed_us, :microsecond, :millisecond)
+
+            {:ok,
+             Result.new(cols, rows,
+               num_rows: num_rows,
+               duration_ms: duration_ms,
+               command: command,
+               meta: Map.take(raw, [:connection_id, :messages])
+             )}
 
           {:error, err} ->
             repo.rollback(Source.format_error(err))
@@ -54,6 +71,11 @@ defmodule Lotus.Runner do
   rescue
     e -> {:error, Source.format_error(e)}
   end
+
+  defp normalize_command(nil), do: nil
+  defp normalize_command(cmd) when is_atom(cmd), do: Atom.to_string(cmd)
+  defp normalize_command(cmd) when is_binary(cmd), do: cmd
+  defp normalize_command(cmd), do: inspect(cmd)
 
   # Allow a single statement with an optional trailing semicolon.
   # Reject any additional top-level semicolons (outside strings/comments).
