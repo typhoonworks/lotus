@@ -8,6 +8,10 @@
 ### Changed
 - **BREAKING:** Enhanced `QueryVariable.static_options` to support multiple input formats but normalize output to `%{value: String.t(), label: String.t()}` maps
 
+#### Data Migration Required
+
+If you have existing queries stored in your database with `static_options` in the old format, you will need to migrate them. See the [Migration Guide in README.md](README.md#upgrading-from-versions--090) for detailed instructions and migration script.
+
 ## [0.8.0] - 2025-09-03
 
 ### Added

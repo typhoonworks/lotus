@@ -58,6 +58,76 @@ Lotus requires Elixir 1.16 or later, and OTP 25 or later. It may work with earli
 
 Follow the [installation instructions](guides/installation.md) to set up Lotus in your application.
 
+## Migration Guide
+
+### Upgrading from versions < 0.9.0
+
+If you're upgrading from a version prior to 0.9.0 and have stored queries with `static_options`, you'll need to migrate your data. The `static_options` field format has changed from simple string arrays to structured maps.
+
+**Old format:**
+```elixir
+"static_options" => ["Bob", "Alice", "Charlie"]
+```
+
+**New format:**
+```elixir
+"static_options" => [
+  %{"value" => "Bob", "label" => "Bob"},
+  %{"value" => "Alice", "label" => "Alice"},
+  %{"value" => "Charlie", "label" => "Charlie"}
+]
+```
+
+**Migration script:**
+```elixir
+# Run this in your application console (iex -S mix)
+import Ecto.Query
+
+# Use the same repo that Lotus is configured to store queries in
+repo = Lotus.repo()  # Returns the configured ecto_repo
+
+# Get all queries (raw data to bypass Ecto schema loading)
+{:ok, result} = repo.query("SELECT id, name, variables FROM lotus_queries")
+
+# Process each row
+for [id, name, variables] <- result.rows do
+  needs_migration =
+    Enum.any?(variables, fn var ->
+      case var["static_options"] do
+        [first | _] when is_binary(first) -> true
+        _ -> false
+      end
+    end)
+
+  if needs_migration do
+    IO.puts("Migrating query: #{name}")
+
+    updated_variables =
+      Enum.map(variables, fn var ->
+        case var["static_options"] do
+          options when is_list(options) ->
+            migrated_options =
+              Enum.map(options, fn
+                opt when is_binary(opt) -> %{"value" => opt, "label" => opt}
+                opt -> opt  # Already migrated or other format
+              end)
+            Map.put(var, "static_options", migrated_options)
+
+          _ -> var
+        end
+      end)
+
+    {:ok, _} = repo.query("""
+      UPDATE lotus_queries
+      SET variables = $1, updated_at = NOW()
+      WHERE id = $2
+    """, [updated_variables, id])
+
+    IO.puts("✓ Updated query #{name}")
+  end
+end
+```
+
 ## Getting Started
 Take a look at the [overview guide](guides/overview.md) for a quick introduction to Lotus.
 
