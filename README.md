@@ -18,6 +18,19 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 
 >🚧 This library is in its infancy so you should treat all versions as early pre-release versions. We'll make the best effort to give heads up about breaking changes; however we can't guarantee backwards compatibility for every change.
 
+## Lotus Web UI
+
+While Lotus can be used standalone, it pairs naturally with [Lotus Web](https://github.com/typhoonworks/lotus_web) (v0.4+ for Lotus 0.9), which provides a beautiful web interface you can mount directly in your Phoenix application:
+
+- 🖥️ **Web-based SQL editor** with syntax highlighting and autocomplete
+- 🗂️ **Query management** - save, organize, and reuse SQL queries
+- 🔍 **Schema explorer** - browse tables and columns interactively  
+- 📊 **Results visualization** - clean, tabular display with export capabilities
+- ⚡ **LiveView-powered** - real-time query execution without page refreshes
+- 🔒 **Secure by default** - leverages Lotus's read-only architecture
+
+Learn more about setting up Lotus Web in the [installation guide](guides/installation.md#lotus-web-setup).
+
 ## Current Features
 - 🔐 **Enhanced security** with read-only execution, table visibility controls, and automatic session state management
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
@@ -49,7 +62,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.8.0"}
+    {:lotus, "~> 0.9.0"}
   ]
 end
 ```
