@@ -10,6 +10,11 @@ defmodule Lotus.Storage.QueryVariable.StaticOption do
 
   @primary_key false
 
+  @type t :: %__MODULE__{
+          value: String.t(),
+          label: String.t()
+        }
+
   embedded_schema do
     field(:value, :string)
     field(:label, :string)
