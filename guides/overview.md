@@ -67,6 +67,17 @@ Lotus is perfect for:
 - **Database administration**: Explore table structures and gather statistics
 - **Multi-tenant applications**: Manage schema-per-tenant architectures
 
+## Lotus Web UI
+
+For teams that need a visual interface, [Lotus Web](https://github.com/typhoonworks/lotus_web) provides a Phoenix LiveView-powered dashboard that you can mount directly in your application. It's a lightweight alternative to complex BI tools like Metabase or Grafana, offering:
+
+- **Web-based SQL editor** with syntax highlighting
+- **Interactive query management** and organization
+- **Schema exploration** to browse tables and columns
+- **Real-time query execution** with clean result visualization
+- **Multi-database support** to query different repositories
+- **Zero additional infrastructure** - runs inside your Phoenix app
+
 ## What's Next?
 
 Continue with the [Installation Guide](installation.md) to set up Lotus in your application, then check out [Getting Started](getting-started.md) for your first queries.

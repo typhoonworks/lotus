@@ -640,6 +640,30 @@ case Lotus.run_query(query) do
 end
 ```
 
+## Using Lotus Web
+
+If you prefer a visual interface or need to provide query access to non-technical users, consider setting up [Lotus Web](https://github.com/typhoonworks/lotus_web). It provides a beautiful web interface that mounts directly in your Phoenix application:
+
+```elixir
+# In your router
+import Lotus.Web.Router
+
+scope "/", MyAppWeb do
+  pipe_through [:browser, :require_authenticated_user]
+  
+  lotus_dashboard "/lotus"
+end
+```
+
+With Lotus Web, you get:
+- A SQL editor with syntax highlighting
+- Visual query management and organization
+- Interactive schema exploration
+- Real-time result visualization
+- All without leaving your application
+
+See the [installation guide](installation.md#lotus-web-setup) for detailed setup instructions.
+
 ## Next Steps
 
 Now that you understand the basics, explore:

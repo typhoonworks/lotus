@@ -16,7 +16,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.8.0"}
+    {:lotus, "~> 0.9.0"}
   ]
 end
 ```
@@ -232,6 +232,69 @@ MyApp.create_user(%{name: "John"})    # ✅ Works normally
 ```
 
 This automatic session management ensures Lotus plays nicely with other parts of your application that share the same database connection pool.
+
+## Lotus Web Setup
+
+[Lotus Web](https://github.com/typhoonworks/lotus_web) provides a beautiful web interface for Lotus that you can mount directly in your Phoenix application. It's perfect for teams who need visual query tools without the complexity of full BI solutions.
+
+### Installation
+
+Add `lotus_web` to your dependencies:
+
+```elixir
+def deps do
+  [
+    {:lotus, "~> 0.9.0"},
+    {:lotus_web, "~> 0.4.0"}  # Requires Lotus 0.9+
+  ]
+end
+```
+
+### Mounting in Your Router
+
+Add Lotus Web to your Phoenix router:
+
+```elixir
+defmodule MyAppWeb.Router do
+  use MyAppWeb, :router
+  import Lotus.Web.Router
+
+  # ... other routes
+
+  scope "/", MyAppWeb do
+    pipe_through [:browser, :require_authenticated_user]  # Always add authentication!
+    
+    lotus_dashboard "/lotus"
+  end
+end
+```
+
+**⚠️ Security Notice**: Always mount Lotus Web behind authentication. The dashboard provides powerful query capabilities and should only be accessible to authorized users.
+
+### Features
+
+With Lotus Web, your team gets:
+
+- **SQL Editor**: Write queries with syntax highlighting and autocomplete
+- **Query Management**: Save, organize, and share queries across your team
+- **Schema Explorer**: Browse database tables and columns interactively
+- **Multi-Database Support**: Switch between configured repositories
+- **Real-time Execution**: LiveView-powered interface with instant feedback
+- **Smart Variables**: Use parameterized queries with `{{variable}}` syntax
+
+### Version Compatibility
+
+| Lotus Version | Lotus Web Version |
+|---------------|-------------------|
+| 0.9.x         | 0.4.x            |
+| 0.8.x         | 0.3.x            |
+| 0.6.x - 0.7.x | 0.3.x            |
+
+The dependency constraints in `mix.exs` will automatically ensure compatible versions are installed.
+
+### Next Steps
+
+Once installed, visit `/lotus` in your application (or whatever path you mounted it at) to start using the web interface. For more details, see the [Lotus Web documentation](https://github.com/typhoonworks/lotus_web).
 
 ## Troubleshooting
 

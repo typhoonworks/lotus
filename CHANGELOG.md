@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-09-04
+
 ### Added
 - Added `num_rows`, `duration_ms`, and `command` attributes to `Lotus.Result` struct returned by query execution
 - Added comprehensive error messages for type conversion failures in query variables
@@ -20,7 +22,7 @@
 
 If you have existing queries stored in your database with `static_options` in the old format, you will need to migrate them. See the [Migration Guide in README.md](README.md#upgrading-from-versions--090) for detailed instructions and migration script.
 
-## [0.8.0] - 2025-09-03
+## [0.9.0] - 2025-09-03
 
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
