@@ -4,9 +4,17 @@
 
 ### Added
 - Added `num_rows`, `duration_ms`, and `command` attributes to `Lotus.Result` struct returned by query execution
+- Added comprehensive error messages for type conversion failures in query variables
+- Added support for both integer and float parsing in `:number` type variables
 
 ### Changed
 - **BREAKING:** Enhanced `QueryVariable.static_options` to support multiple input formats but normalize output to `%{value: String.t(), label: String.t()}` maps
+
+### Fixed
+- Fixed type casting errors that previously showed generic "Missing required variable" instead of specific type conversion issues
+- Fixed number type variables to properly handle both integers (`"123"`) and floats (`"123.45"`)
+- Fixed date type variables to show clear error messages for invalid date formats
+- Improved error messages to distinguish between truly missing variables and type conversion failures
 
 #### Data Migration Required
 

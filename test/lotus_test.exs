@@ -210,6 +210,137 @@ defmodule LotusTest do
       assert msg =~ "Missing required variable"
     end
 
+    test "errors with helpful message for invalid number conversion" do
+      query = %Query{
+        name: "Invalid Number Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "not_a_number"}
+        ]
+      }
+
+      assert {:error, msg} = Lotus.run_query(query)
+      assert msg =~ "Invalid number format: 'not_a_number' is not a valid number"
+    end
+
+    test "errors with helpful message for number with non-numeric characters" do
+      query = %Query{
+        name: "Invalid Number Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "25abc"}
+        ]
+      }
+
+      assert {:error, msg} = Lotus.run_query(query)
+      assert msg =~ "Invalid number format: '25abc' contains non-numeric characters"
+    end
+
+    test "errors with helpful message for invalid date conversion" do
+      query = %Query{
+        name: "Invalid Date Query",
+        statement: "SELECT name FROM test_users WHERE created_at > {{start_date}}",
+        variables: [
+          %QueryVariable{name: "start_date", type: :date, default: "not_a_date"}
+        ]
+      }
+
+      assert {:error, msg} = Lotus.run_query(query)
+      assert msg =~ "Invalid date format: 'not_a_date' is not a valid ISO8601 date"
+    end
+
+    test "errors for common invalid date formats" do
+      invalid_dates = [
+        # US format
+        "12/25/2023",
+        # EU format
+        "25/12/2023",
+        # Dashed EU format
+        "25-12-2023",
+        # Dashed US format
+        "12-25-2023",
+        # YYYY/MM/DD
+        "2023/12/25",
+        # Named month
+        "Dec 25, 2023",
+        # Named month EU
+        "25 Dec 2023",
+        # Invalid day
+        "2023-12-32",
+        # Invalid month
+        "2023-13-25",
+        # Compact format
+        "20231225",
+        # Missing leading zeros
+        "2023-2-5",
+        # Empty string
+        ""
+      ]
+
+      for invalid_date <- invalid_dates do
+        query = %Query{
+          name: "Invalid Date Query",
+          statement: "SELECT name FROM test_users WHERE inserted_at > {{start_date}}",
+          variables: [
+            %QueryVariable{name: "start_date", type: :date, default: invalid_date}
+          ]
+        }
+
+        assert {:error, msg} = Lotus.run_query(query)
+
+        assert msg =~ "Invalid date format: '#{invalid_date}' is not a valid ISO8601 date",
+               "Expected error for date format: #{invalid_date}"
+      end
+    end
+
+    test "successfully parses valid ISO8601 date formats" do
+      valid_dates = [
+        # Standard ISO8601
+        "2023-12-25",
+        # New Year
+        "2023-01-01",
+        # End of year
+        "2023-12-31"
+      ]
+
+      for valid_date <- valid_dates do
+        query = %Query{
+          name: "Valid Date Query",
+          statement: "SELECT name FROM test_users WHERE inserted_at > {{start_date}}",
+          variables: [
+            %QueryVariable{name: "start_date", type: :date, default: valid_date}
+          ]
+        }
+
+        assert {:ok, _result} = Lotus.run_query(query),
+               "Should succeed for valid date format: #{valid_date}"
+      end
+    end
+
+    test "successfully converts integer strings to integers" do
+      query = %Query{
+        name: "Integer Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "25"}
+        ]
+      }
+
+      assert {:ok, _result} = Lotus.run_query(query)
+    end
+
+    test "successfully converts float strings to floats" do
+      query = %Query{
+        name: "Float Query",
+        statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
+        variables: [
+          %QueryVariable{name: "min_age", type: :number, default: "25.5"}
+        ]
+      }
+
+      assert {:ok, _result} = Lotus.run_query(query)
+    end
+
     test "runs query using mixed stored defaults (number) and runtime values (text)" do
       query = %Query{
         name: "Mixed defaults and overrides",

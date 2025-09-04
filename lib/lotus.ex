@@ -183,8 +183,8 @@ defmodule Lotus do
       try do
         Query.to_sql_params(q, vars)
       rescue
-        ArgumentError ->
-          {:error, "Missing required variable"}
+        e in ArgumentError ->
+          {:error, e.message}
       end
 
     case {sql, params} do
