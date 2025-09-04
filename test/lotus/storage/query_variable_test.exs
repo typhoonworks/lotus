@@ -43,10 +43,11 @@ defmodule Lotus.Storage.QueryVariableTest do
       assert changeset.valid?
 
       variable = Ecto.Changeset.apply_changes(changeset)
+
       assert [
-        %{value: "active", label: "Active"},
-        %{value: "inactive", label: "Inactive"}
-      ] = variable.static_options
+               %{value: "active", label: "Active"},
+               %{value: "inactive", label: "Inactive"}
+             ] = variable.static_options
     end
 
     test "rejects mixed format for static_options" do
@@ -59,11 +60,11 @@ defmodule Lotus.Storage.QueryVariableTest do
 
       changeset = QueryVariable.changeset(%QueryVariable{}, attrs)
       refute changeset.valid?
-      
+
       assert %{static_options: [error_msg]} = errors_on(changeset)
       assert error_msg =~ "cannot mix different formats"
     end
-    
+
     test "accepts all-string format for static_options" do
       attrs = %{
         name: "priority",
@@ -76,11 +77,12 @@ defmodule Lotus.Storage.QueryVariableTest do
       assert changeset.valid?
 
       variable = Ecto.Changeset.apply_changes(changeset)
+
       assert [
-        %{value: "low", label: "low"},
-        %{value: "medium", label: "medium"},
-        %{value: "high", label: "high"}
-      ] = variable.static_options
+               %{value: "low", label: "low"},
+               %{value: "medium", label: "medium"},
+               %{value: "high", label: "high"}
+             ] = variable.static_options
     end
   end
 

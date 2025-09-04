@@ -88,53 +88,55 @@ defmodule Lotus.StorageTest do
     test "returns nil when query not found" do
       assert Storage.get_query(999_999) == nil
     end
-    
+
     test "retrieves query with string static_options correctly" do
-      {:ok, query} = Storage.create_query(%{
-        name: "String Options Query",
-        statement: "SELECT * FROM users WHERE role = {{role}}",
-        variables: [
-          %{
-            name: "role",
-            type: :text,
-            widget: :select,
-            static_options: ["admin", "user", "guest"]
-          }
-        ]
-      })
+      {:ok, query} =
+        Storage.create_query(%{
+          name: "String Options Query",
+          statement: "SELECT * FROM users WHERE role = {{role}}",
+          variables: [
+            %{
+              name: "role",
+              type: :text,
+              widget: :select,
+              static_options: ["admin", "user", "guest"]
+            }
+          ]
+        })
 
       retrieved = Storage.get_query(query.id)
       [variable] = retrieved.variables
-      
+
       # Should get normalized map format
       assert [
-        %{value: "admin", label: "admin"},
-        %{value: "user", label: "user"},
-        %{value: "guest", label: "guest"}
-      ] = variable.static_options
+               %{value: "admin", label: "admin"},
+               %{value: "user", label: "user"},
+               %{value: "guest", label: "guest"}
+             ] = variable.static_options
     end
-    
+
     test "retrieves query with tuple static_options correctly" do
-      {:ok, query} = Storage.create_query(%{
-        name: "Tuple Options Query", 
-        statement: "SELECT * FROM tasks WHERE status = {{status}}",
-        variables: [
-          %{
-            name: "status",
-            type: :text,
-            widget: :select,
-            static_options: [{"todo", "To Do"}, {"done", "Completed"}]
-          }
-        ]
-      })
+      {:ok, query} =
+        Storage.create_query(%{
+          name: "Tuple Options Query",
+          statement: "SELECT * FROM tasks WHERE status = {{status}}",
+          variables: [
+            %{
+              name: "status",
+              type: :text,
+              widget: :select,
+              static_options: [{"todo", "To Do"}, {"done", "Completed"}]
+            }
+          ]
+        })
 
       retrieved = Storage.get_query(query.id)
       [variable] = retrieved.variables
-      
+
       assert [
-        %{value: "todo", label: "To Do"},
-        %{value: "done", label: "Completed"}
-      ] = variable.static_options
+               %{value: "todo", label: "To Do"},
+               %{value: "done", label: "Completed"}
+             ] = variable.static_options
     end
   end
 
@@ -222,7 +224,7 @@ defmodule Lotus.StorageTest do
       refute changeset.valid?
       assert %{name: ["can't be blank"], statement: ["can't be blank"]} = errors_on(changeset)
     end
-    
+
     test "creates query with string static_options" do
       attrs = %{
         name: "String Options Query",
@@ -239,14 +241,14 @@ defmodule Lotus.StorageTest do
 
       assert {:ok, query} = Storage.create_query(attrs)
       [variable] = query.variables
-      
+
       assert [
-        %{value: "admin", label: "admin"},
-        %{value: "user", label: "user"},
-        %{value: "guest", label: "guest"}
-      ] = variable.static_options
+               %{value: "admin", label: "admin"},
+               %{value: "user", label: "user"},
+               %{value: "guest", label: "guest"}
+             ] = variable.static_options
     end
-    
+
     test "creates query with tuple static_options" do
       attrs = %{
         name: "Tuple Options Query",
@@ -256,21 +258,25 @@ defmodule Lotus.StorageTest do
             name: "status",
             type: :text,
             widget: :select,
-            static_options: [{"todo", "To Do"}, {"in_progress", "In Progress"}, {"done", "Completed"}]
+            static_options: [
+              {"todo", "To Do"},
+              {"in_progress", "In Progress"},
+              {"done", "Completed"}
+            ]
           }
         ]
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
       [variable] = query.variables
-      
+
       assert [
-        %{value: "todo", label: "To Do"},
-        %{value: "in_progress", label: "In Progress"},
-        %{value: "done", label: "Completed"}
-      ] = variable.static_options
+               %{value: "todo", label: "To Do"},
+               %{value: "in_progress", label: "In Progress"},
+               %{value: "done", label: "Completed"}
+             ] = variable.static_options
     end
-    
+
     test "rejects query with mixed static_options format" do
       attrs = %{
         name: "Mixed Options Query",
@@ -287,13 +293,13 @@ defmodule Lotus.StorageTest do
 
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
-      
+
       # Check that the error is on the nested variable
       assert %{variables: [variable_errors]} = errors_on(changeset)
       assert %{static_options: [error_msg]} = variable_errors
       assert error_msg =~ "cannot mix different formats"
     end
-    
+
     test "creates query with map static_options" do
       attrs = %{
         name: "Map Options Query",
@@ -303,18 +309,21 @@ defmodule Lotus.StorageTest do
             name: "level",
             type: :text,
             widget: :select,
-            static_options: [%{"value" => "info", "label" => "Information"}, %{"value" => "error", "label" => "Error"}]
+            static_options: [
+              %{"value" => "info", "label" => "Information"},
+              %{"value" => "error", "label" => "Error"}
+            ]
           }
         ]
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
       [variable] = query.variables
-      
+
       assert [
-        %{value: "info", label: "Information"},
-        %{value: "error", label: "Error"}
-      ] = variable.static_options
+               %{value: "info", label: "Information"},
+               %{value: "error", label: "Error"}
+             ] = variable.static_options
     end
   end
 
