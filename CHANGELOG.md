@@ -5,6 +5,9 @@
 ### Added
 - Added `num_rows`, `duration_ms`, and `command` attributes to `Lotus.Result` struct returned by query execution
 
+### Changed
+- **BREAKING:** Enhanced `QueryVariable.static_options` to support multiple input formats but normalize output to `%{value: String.t(), label: String.t()}` maps
+
 ## [0.8.0] - 2025-09-03
 
 ### Added
