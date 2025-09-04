@@ -143,8 +143,39 @@ defmodule Lotus.Storage.Query do
 
   defp get_source_type(repo) when is_atom(repo), do: Sources.source_type(repo)
 
-  defp cast_value(value, :number) when is_binary(value), do: String.to_integer(value)
-  defp cast_value(value, :date) when is_binary(value), do: Date.from_iso8601!(value)
+  defp cast_value(value, :number) when is_binary(value) do
+    case Integer.parse(value) do
+      {int_value, ""} ->
+        int_value
+
+      {_int_value, _remainder} ->
+        case Float.parse(value) do
+          {float_value, ""} ->
+            float_value
+
+          {_float_value, _remainder} ->
+            raise ArgumentError,
+                  "Invalid number format: '#{value}' contains non-numeric characters"
+
+          :error ->
+            raise ArgumentError, "Invalid number format: '#{value}' is not a valid number"
+        end
+
+      :error ->
+        raise ArgumentError, "Invalid number format: '#{value}' is not a valid number"
+    end
+  end
+
+  defp cast_value(value, :date) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} ->
+        date
+
+      {:error, _reason} ->
+        raise ArgumentError, "Invalid date format: '#{value}' is not a valid ISO8601 date"
+    end
+  end
+
   defp cast_value(value, _), do: value
 
   defp validate_statement(changeset) do
