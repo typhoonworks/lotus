@@ -16,7 +16,21 @@
 
 Lotus is a lightweight SQL query runner and storage library for Elixir applications with Ecto. It provides a safe, read-only environment for executing analytical queries while offering organized storage and management of saved queries.
 
->🚧 This library is in its infancy so you should treat all versions as early pre-release versions. We'll make the best effort to give heads up about breaking changes; however we can't guarantee backwards compatibility for every change.
+>🚧 While this library already ships a lot of features and the public API is mostly set, it’s still evolving. We’ll make a best effort to announce breaking changes, but we can’t guarantee backwards compatibility yet — especially as we generalize the `Source` abstraction to support more than SQL-backed data sources.
+
+## Production Use and UUID Caveats
+
+Lotus is generally safe to run in production: it executes queries in read‑only transactions and restores session state (timeouts, isolation, etc.) to avoid pool pollution. We are running it in [Accomplish](https://accomplish.dev) successfully in production today, notwithanding being affected by the limitation described below.
+
+If your application uses UUIDs or mixed ID formats across databases, there are current limitations to be aware of:
+
+- Runtime Lotus query variable binding around UUID columns can be constrained across different storage types:
+  - PostgreSQL `uuid`
+  - MySQL `BINARY(16)` vs `CHAR(36|32)`
+  - SQLite `TEXT` vs `BLOB`
+- Queries still work, and you can get a lot of value, but in some cases you may need explicit casts or to shape values to match the column’s storage format when using `{{var}}` in predicates against UUID columns. This limitation particularly affects the Lotus Web library today — there isn’t a built‑in workaround in the UI for column‑specific typing/casting yet.
+
+We plan to improve this with column‑aware binding (using schema metadata per adapter to deterministically cast/shape values for the true column type). Until then, keep the above in mind when authoring queries that filter on UUID columns.
 
 ## Lotus Web UI
 
@@ -24,7 +38,7 @@ While Lotus can be used standalone, it pairs naturally with [Lotus Web](https://
 
 - 🖥️ **Web-based SQL editor** with syntax highlighting and autocomplete
 - 🗂️ **Query management** - save, organize, and reuse SQL queries
-- 🔍 **Schema explorer** - browse tables and columns interactively  
+- 🔍 **Schema explorer** - browse tables and columns interactively
 - 📊 **Results visualization** - clean, tabular display with export capabilities
 - ⚡ **LiveView-powered** - real-time query execution without page refreshes
 - 🔒 **Secure by default** - leverages Lotus's read-only architecture
