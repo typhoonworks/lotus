@@ -9,6 +9,7 @@ defmodule Lotus.Storage.QueryVariable do
     * `:label`  — a human-friendly label shown in the UI
     * `:default` — fallback value if none is provided
     * `:static_options` — hardcoded list of allowed values (for selects)
+      Can be either a list of strings or a list of {value, label} tuples
     * `:options_query`  — SQL to dynamically populate allowed values
 
   Validation ensures that when a variable is configured as a `:select`
@@ -17,6 +18,7 @@ defmodule Lotus.Storage.QueryVariable do
 
   use Ecto.Schema
   import Ecto.Changeset
+  alias Lotus.Storage.QueryVariable.StaticOption
 
   @primary_key false
 
@@ -29,11 +31,11 @@ defmodule Lotus.Storage.QueryVariable do
           widget: :input | :select | nil,
           label: String.t() | nil,
           default: String.t() | nil,
-          static_options: [String.t()],
+          static_options: [StaticOption.t()],
           options_query: String.t() | nil
         }
 
-  @permitted ~w(name type widget label default static_options options_query)a
+  @permitted ~w(name type widget label default options_query)a
   @required ~w(name type)a
 
   embedded_schema do
@@ -42,16 +44,56 @@ defmodule Lotus.Storage.QueryVariable do
     field(:widget, Ecto.Enum, values: @available_widgets)
     field(:label, :string)
     field(:default, :string)
-    field(:static_options, {:array, :string}, default: [])
     field(:options_query, :string)
+
+    embeds_many(:static_options, StaticOption)
   end
 
   def changeset(variable, attrs \\ %{}) do
     variable
     |> cast(attrs, @permitted)
+    |> cast_static_options(attrs)
     |> validate_required(@required)
     |> set_default_widget()
     |> validate_select_options()
+  end
+
+  defp cast_static_options(changeset, %{static_options: options}) when is_list(options) do
+    case validate_consistent_format(options) do
+      :ok ->
+        normalized_options =
+          options
+          |> Enum.map(&StaticOption.from_input/1)
+          |> Enum.reject(&is_nil/1)
+
+        put_embed(changeset, :static_options, normalized_options)
+
+      {:error, message} ->
+        add_error(changeset, :static_options, message)
+    end
+  end
+
+  defp cast_static_options(changeset, %{"static_options" => options}) when is_list(options) do
+    cast_static_options(changeset, %{static_options: options})
+  end
+
+  defp cast_static_options(changeset, _attrs), do: changeset
+
+  defp validate_consistent_format(options) do
+    has_strings = Enum.any?(options, &is_binary/1)
+    has_tuples = Enum.any?(options, &match?({_, _}, &1))
+    has_maps = Enum.any?(options, &is_map/1)
+
+    cond do
+      has_strings and (has_tuples or has_maps) ->
+        {:error, "cannot mix different formats - use consistent format throughout"}
+
+      has_tuples and has_maps ->
+        {:error, "cannot mix different formats - use consistent format throughout"}
+
+      true ->
+        :ok
+    end
   end
 
   defp set_default_widget(changeset) do
@@ -85,7 +127,7 @@ defmodule Lotus.Storage.QueryVariable do
   @doc """
   Determines the source of options for a query variable.
 
-  Returns `:query` if the variable has a non-empty `options_query`, 
+  Returns `:query` if the variable has a non-empty `options_query`,
   otherwise returns `:static`.
 
   ## Examples
@@ -99,6 +141,10 @@ defmodule Lotus.Storage.QueryVariable do
       :static
 
       iex> var = %Lotus.Storage.QueryVariable{static_options: ["a", "b"]}
+      iex> Lotus.Storage.QueryVariable.get_option_source(var)
+      :static
+
+      iex> var = %Lotus.Storage.QueryVariable{static_options: [{"val", "Label"}]}
       iex> Lotus.Storage.QueryVariable.get_option_source(var)
       :static
 

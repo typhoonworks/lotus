@@ -340,7 +340,12 @@ defmodule Lotus.Storage.QueryTest do
       variables = get_field(changeset, :variables)
       status_var = hd(variables)
       assert status_var.widget == :select
-      assert status_var.static_options == ["active", "inactive", "pending"]
+
+      assert [
+               %{value: "active", label: "active"},
+               %{value: "inactive", label: "inactive"},
+               %{value: "pending", label: "pending"}
+             ] = status_var.static_options
     end
 
     test "accepts variables with select widgets and options_query" do
