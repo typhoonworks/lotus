@@ -4,6 +4,7 @@ defmodule LotusTest do
   import Lotus.Fixtures
 
   alias Lotus.Config
+  alias Lotus.Storage.Query
 
   setup do
     setup_test_data()
@@ -596,6 +597,50 @@ defmodule LotusTest do
   describe "configuration delegates" do
     test "unique_names?/0 delegates to Config.unique_names?/0" do
       assert Lotus.unique_names?() == Config.unique_names?()
+    end
+  end
+
+  describe "basic windowed pagination" do
+    test "run_sql applies windowing when window options provided" do
+      sql = "SELECT name FROM test_users ORDER BY name"
+
+      assert {:ok, result} = Lotus.run_sql(sql, [], window: [limit: 1])
+      assert result.num_rows == 1
+      assert result.rows == [["Charles Bukowski"]]
+      assert result.meta.window == %{limit: 1, offset: 0}
+    end
+
+    test "run_sql does not apply windowing when no window options provided" do
+      sql = "SELECT name FROM test_users ORDER BY name"
+
+      assert {:ok, result} = Lotus.run_sql(sql)
+      assert result.num_rows == 3
+      assert Map.get(result.meta, :window) == nil
+    end
+
+    test "run_query applies windowing when window options provided" do
+      query = %Query{
+        name: "Test Window Query",
+        statement: "SELECT name FROM test_users ORDER BY name",
+        variables: []
+      }
+
+      assert {:ok, result} = Lotus.run_query(query, window: [limit: 1])
+      assert result.num_rows == 1
+      assert result.rows == [["Charles Bukowski"]]
+      assert result.meta.window == %{limit: 1, offset: 0}
+    end
+
+    test "run_query does not apply windowing when no window options provided" do
+      query = %Query{
+        name: "Test No Window Query",
+        statement: "SELECT name FROM test_users ORDER BY name",
+        variables: []
+      }
+
+      assert {:ok, result} = Lotus.run_query(query)
+      assert result.num_rows == 3
+      assert Map.get(result.meta, :window) == nil
     end
   end
 end

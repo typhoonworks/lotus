@@ -77,6 +77,7 @@ defmodule Lotus.Config do
           unique_names: boolean(),
           data_repos: %{String.t() => module()},
           default_repo: String.t() | nil,
+          default_page_size: pos_integer() | nil,
           table_visibility: map(),
           schema_visibility: map(),
           cache: cache_config()
@@ -110,6 +111,12 @@ defmodule Lotus.Config do
       required: false,
       doc:
         "The default data repository name to use when no repo is specified. Required when multiple data_repos are configured."
+    ],
+    default_page_size: [
+      type: {:or, [:pos_integer, nil]},
+      default: nil,
+      doc:
+        "Global default page size for windowed pagination when no explicit limit is provided. If not set, falls back to built-in default."
     ],
     unique_names: [
       type: :boolean,
@@ -161,6 +168,7 @@ defmodule Lotus.Config do
       :unique_names,
       :data_repos,
       :default_repo,
+      :default_page_size,
       :table_visibility,
       :schema_visibility,
       :cache
@@ -375,6 +383,14 @@ defmodule Lotus.Config do
       config -> config[:default_profile] || :results
     end
   end
+
+  @doc """
+  Returns the globally configured default page size for windowed pagination, if any.
+
+  When nil, Lotus uses its built-in default page size.
+  """
+  @spec default_page_size() :: pos_integer() | nil
+  def default_page_size, do: load!()[:default_page_size]
 
   @doc """
   Returns the entire validated configuration as a map.

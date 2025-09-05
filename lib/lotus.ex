@@ -35,6 +35,8 @@ defmodule Lotus do
       {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
   """
 
+  @default_page_size 1000
+
   @type cache_opt ::
           :bypass
           | :refresh
@@ -549,59 +551,68 @@ defmodule Lotus do
     )
   end
 
+  defp resolve_window_limit(window_opts) do
+    max_limit = Config.default_page_size() || @default_page_size
+
+    case Keyword.get(window_opts, :limit) do
+      nil ->
+        max_limit
+
+      limit when not is_integer(limit) or limit <= 0 ->
+        max_limit
+
+      limit ->
+        min(limit, max_limit)
+    end
+  end
+
   defp maybe_apply_window(sql, params, _repo_or_name, _search_path, nil),
     do: {sql, params, nil, nil}
 
   defp maybe_apply_window(sql, params, repo_or_name, search_path, window_opts)
        when is_list(window_opts) do
     base_sql = trim_trailing_semicolon(sql)
-    limit = Keyword.get(window_opts, :limit)
+    limit = resolve_window_limit(window_opts)
     offset = Keyword.get(window_opts, :offset, 0)
     count_mode = Keyword.get(window_opts, :count, :none)
 
-    cond do
-      is_nil(limit) or not is_integer(limit) or limit <= 0 ->
-        {sql, params, nil, nil}
+    {limit_ph, offset_ph} =
+      Lotus.Source.limit_offset_placeholders(
+        repo_or_name,
+        length(params) + 1,
+        length(params) + 2
+      )
 
-      true ->
-        {limit_ph, offset_ph} =
-          Lotus.Source.limit_offset_placeholders(
-            repo_or_name,
-            length(params) + 1,
-            length(params) + 2
-          )
+    paged_sql =
+      "SELECT * FROM (" <>
+        base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
 
-        paged_sql =
-          "SELECT * FROM (" <>
-            base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+    paged_params = params ++ [limit, offset]
 
-        paged_params = params ++ [limit, offset]
+    window_meta =
+      case count_mode do
+        :exact ->
+          %{
+            window: %{limit: limit, offset: offset},
+            total_count: :pending,
+            total_mode: :exact,
+            count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
+            count_params: params,
+            repo_or_name: repo_or_name,
+            search_path: search_path
+          }
 
-        window_meta =
-          case count_mode do
-            :exact ->
-              %{
-                window: %{limit: limit, offset: offset},
-                total_count: :pending,
-                total_mode: :exact,
-                count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
-                count_params: params,
-                repo_or_name: repo_or_name,
-                search_path: search_path
-              }
+        _ ->
+          %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
+      end
 
-            _ ->
-              %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
-          end
+    # Include window in cache key bound variables
+    cache_bound = %{
+      __params__: params,
+      __window__: %{limit: limit, offset: offset, count: count_mode}
+    }
 
-        # Include window in cache key bound variables
-        cache_bound = %{
-          __params__: params,
-          __window__: %{limit: limit, offset: offset, count: count_mode}
-        }
-
-        {paged_sql, paged_params, window_meta, cache_bound}
-    end
+    {paged_sql, paged_params, window_meta, cache_bound}
   end
 
   defp merge_window_meta(%Result{} = res, nil), do: res
