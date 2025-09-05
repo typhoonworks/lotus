@@ -595,14 +595,10 @@ defmodule Lotus do
           end
 
         # Include window in cache key bound variables
-        cache_bound =
-          case params do
-            list when is_list(list) ->
-              %{__params__: list, __window__: %{limit: limit, offset: offset, count: count_mode}}
-
-            %{} = map ->
-              Map.put(map, "__window__", %{limit: limit, offset: offset, count: count_mode})
-          end
+        cache_bound = %{
+          __params__: params,
+          __window__: %{limit: limit, offset: offset, count: count_mode}
+        }
 
         {paged_sql, paged_params, window_meta, cache_bound}
     end
@@ -611,7 +607,8 @@ defmodule Lotus do
   defp merge_window_meta(%Result{} = res, nil), do: res
 
   defp merge_window_meta(%Result{} = res, %{total_mode: :none, window: win} = _meta) do
-    %Result{res | num_rows: length(res.rows), meta: Map.merge(res.meta || %{}, %{window: win})}
+    updated_meta = Map.merge(res.meta, %{window: win})
+    %Result{res | num_rows: length(res.rows), meta: updated_meta}
   end
 
   defp merge_window_meta(%Result{} = res, %{total_mode: :exact} = meta) do
@@ -624,11 +621,13 @@ defmodule Lotus do
         _ -> nil
       end
 
+    updated_meta =
+      Map.merge(res.meta, %{window: win, total_count: total_count, total_mode: :exact})
+
     %Result{
       res
       | num_rows: length(res.rows),
-        meta:
-          Map.merge(res.meta || %{}, %{window: win, total_count: total_count, total_mode: :exact})
+        meta: updated_meta
     }
   end
 
