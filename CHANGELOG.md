@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-09-05
+
 ### Added
 
 - Added windowed pagination capped at max 1000 pages to prevent performance degradation
