@@ -70,6 +70,12 @@ defmodule Lotus.Sources.Postgres do
   def param_placeholder(idx, _var, _type), do: "$#{idx}"
 
   @impl true
+  def limit_offset_placeholders(limit_idx, offset_idx) do
+    # Postgres supports positional parameters for LIMIT/OFFSET
+    {"$#{limit_idx}", "$#{offset_idx}"}
+  end
+
+  @impl true
   def handled_errors, do: [Postgrex.Error]
 
   @impl true

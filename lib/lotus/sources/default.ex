@@ -47,6 +47,16 @@ defmodule Lotus.Sources.Default do
   def param_placeholder(_idx, _var, _type), do: "?"
 
   @impl true
+  @doc """
+  Returns generic placeholders for LIMIT and OFFSET (`"?"` for both).
+
+  Unknown sources should implement their own version if they have specific requirements.
+  """
+  def limit_offset_placeholders(_limit_idx, _offset_idx) do
+    {"?", "?"}
+  end
+
+  @impl true
   @doc "The default source does not handle any specific exceptions."
   def handled_errors, do: []
 

@@ -64,6 +64,25 @@ defmodule Lotus.Source do
               String.t()
 
   @doc """
+  Return the SQL parameter placeholders for LIMIT and OFFSET clauses.
+
+  Some databases (like MySQL) don't support typed placeholders for LIMIT/OFFSET,
+  while others (like PostgreSQL) do.
+
+  Returns a tuple of {limit_placeholder, offset_placeholder}.
+
+  Examples:
+    * Postgres → `{"$1", "$2"}`
+    * MySQL    → `{"?", "?"}`
+    * SQLite   → `{"?", "?"}`
+  """
+  @callback limit_offset_placeholders(
+              limit_index :: pos_integer(),
+              offset_index :: pos_integer()
+            ) ::
+              {limit_placeholder :: String.t(), offset_placeholder :: String.t()}
+
+  @doc """
   List the exception modules that this source formats specially in `format_error/1`.
   """
   @callback handled_errors() :: [module()]
@@ -244,6 +263,25 @@ defmodule Lotus.Source do
     case resolve_repo_safe(repo_or_name) do
       nil -> Lotus.Sources.Postgres.param_placeholder(index, var, type)
       repo -> impl_for(repo).param_placeholder(index, var, type)
+    end
+  end
+
+  @doc """
+  Returns the source-specific SQL parameter placeholders for LIMIT and OFFSET clauses.
+
+  - `repo_or_name` can be the Repo module or a data-repo name string.
+  - `limit_index` and `offset_index` are 1-based indexes for the parameters.
+
+  If the repo cannot be resolved, we default to Postgres-style placeholders.
+  """
+  @spec limit_offset_placeholders(repo | String.t() | nil, pos_integer(), pos_integer()) ::
+          {String.t(), String.t()}
+  def limit_offset_placeholders(repo_or_name, limit_index, offset_index)
+      when is_integer(limit_index) and limit_index > 0 and is_integer(offset_index) and
+             offset_index > 0 do
+    case resolve_repo_safe(repo_or_name) do
+      nil -> Lotus.Sources.Postgres.limit_offset_placeholders(limit_index, offset_index)
+      repo -> impl_for(repo).limit_offset_placeholders(limit_index, offset_index)
     end
   end
 

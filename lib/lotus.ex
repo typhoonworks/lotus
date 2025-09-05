@@ -42,6 +42,14 @@ defmodule Lotus do
           | {:profile, atom()}
           | {:tags, [binary()]}
 
+  @type window_count_mode :: :none | :exact
+
+  @type window_opts :: [
+          limit: pos_integer(),
+          offset: non_neg_integer(),
+          count: window_count_mode
+        ]
+
   @type opts :: [
           timeout: non_neg_integer(),
           statement_timeout_ms: non_neg_integer(),
@@ -49,7 +57,8 @@ defmodule Lotus do
           search_path: binary() | nil,
           repo: binary() | nil,
           vars: map(),
-          cache: [cache_opt] | :bypass | :refresh | nil
+          cache: [cache_opt] | :bypass | :refresh | nil,
+          window: window_opts
         ]
 
   alias Lotus.{Config, Storage, Runner, Result, Schema, Sources}
@@ -165,6 +174,12 @@ defmodule Lotus do
   - `:number` - Cast from string to integer
   - `:date` - Cast from ISO8601 string to Date struct
 
+
+  ### Windowed pagination
+  Pass `window: [limit: pos_integer, offset: non_neg_integer, count: :none | :exact]` to
+  return only a page of rows from the original query. When `count: :exact`, Lotus will
+  also compute `SELECT COUNT(*) FROM (original_sql)` and include `meta.total_count` in
+  the result. The `num_rows` field always reflects the number of rows in the returned page.
   """
   @spec run_query(Query.t() | term(), opts()) :: {:ok, Result.t()} | {:error, term()}
   def run_query(query_or_id, opts \\ [])
@@ -197,7 +212,16 @@ defmodule Lotus do
         search_path = Keyword.get(opts, :search_path) || q.search_path
         final_opts = if search_path, do: Keyword.put(opts, :search_path, search_path), else: opts
 
-        key = result_key(sql, vars, repo_name, search_path)
+        {sql, params, window_meta, cache_bound} =
+          maybe_apply_window(
+            sql,
+            params,
+            repo_mod || repo_name,
+            search_path,
+            Keyword.get(opts, :window)
+          )
+
+        key = result_key(sql, cache_bound || vars, repo_name, search_path)
 
         tags =
           ["query:#{q.id}", "repo:#{repo_name}"] ++
@@ -211,7 +235,9 @@ defmodule Lotus do
           end
 
         exec_with_cache(opts[:cache], profile, key, tags, fn ->
-          Runner.run_sql(repo_mod, sql, params, final_opts)
+          with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, final_opts) do
+            {:ok, merge_window_meta(res, window_meta)}
+          end
         end)
     end
   end
@@ -281,6 +307,11 @@ defmodule Lotus do
 
       # With search_path for schema resolution
       {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
+
+  ### Windowed pagination
+  Pass `window: [limit: pos_integer, offset: non_neg_integer, count: :none | :exact]` to
+  page results from the SQL. See `run_query/2` for details. The cache key automatically
+  incorporates the window so different pages are cached independently.
   """
   @spec run_sql(binary(), list(any()), [
           {:read_only, boolean()}
@@ -288,6 +319,7 @@ defmodule Lotus do
           | {:timeout, non_neg_integer()}
           | {:search_path, binary() | nil}
           | {:repo, atom() | binary()}
+          | {:window, window_opts}
         ]) ::
           {:ok, Result.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
@@ -295,7 +327,16 @@ defmodule Lotus do
     runner_opts = Keyword.delete(opts, :repo)
     search_path = Keyword.get(runner_opts, :search_path)
 
-    key = result_key(sql, params, repo_name, search_path)
+    {sql, params, window_meta, cache_bound} =
+      maybe_apply_window(
+        sql,
+        params,
+        repo_mod || repo_name,
+        search_path,
+        Keyword.get(opts, :window)
+      )
+
+    key = result_key(sql, cache_bound || params, repo_name, search_path)
 
     tags =
       ["repo:#{repo_name}"] ++
@@ -309,7 +350,9 @@ defmodule Lotus do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      Runner.run_sql(repo_mod, sql, params, runner_opts)
+      with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, runner_opts) do
+        {:ok, merge_window_meta(res, window_meta)}
+      end
     end)
   end
 
@@ -504,5 +547,132 @@ defmodule Lotus do
       search_path: search_path,
       lotus_version: Lotus.version()
     )
+  end
+
+  defp maybe_apply_window(sql, params, _repo_or_name, _search_path, nil),
+    do: {sql, params, nil, nil}
+
+  defp maybe_apply_window(sql, params, repo_or_name, search_path, window_opts)
+       when is_list(window_opts) do
+    base_sql = trim_trailing_semicolon(sql)
+    limit = Keyword.get(window_opts, :limit)
+    offset = Keyword.get(window_opts, :offset, 0)
+    count_mode = Keyword.get(window_opts, :count, :none)
+
+    cond do
+      is_nil(limit) or not is_integer(limit) or limit <= 0 ->
+        {sql, params, nil, nil}
+
+      true ->
+        {limit_ph, offset_ph} =
+          Lotus.Source.limit_offset_placeholders(
+            repo_or_name,
+            length(params) + 1,
+            length(params) + 2
+          )
+
+        paged_sql =
+          "SELECT * FROM (" <>
+            base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+
+        paged_params = params ++ [limit, offset]
+
+        window_meta =
+          case count_mode do
+            :exact ->
+              %{
+                window: %{limit: limit, offset: offset},
+                total_count: :pending,
+                total_mode: :exact,
+                count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
+                count_params: params,
+                repo_or_name: repo_or_name,
+                search_path: search_path
+              }
+
+            _ ->
+              %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
+          end
+
+        # Include window in cache key bound variables
+        cache_bound =
+          case params do
+            list when is_list(list) ->
+              %{__params__: list, __window__: %{limit: limit, offset: offset, count: count_mode}}
+
+            %{} = map ->
+              Map.put(map, "__window__", %{limit: limit, offset: offset, count: count_mode})
+          end
+
+        {paged_sql, paged_params, window_meta, cache_bound}
+    end
+  end
+
+  defp merge_window_meta(%Result{} = res, nil), do: res
+
+  defp merge_window_meta(%Result{} = res, %{total_mode: :none, window: win} = _meta) do
+    %Result{res | num_rows: length(res.rows), meta: Map.merge(res.meta || %{}, %{window: win})}
+  end
+
+  defp merge_window_meta(%Result{} = res, %{total_mode: :exact} = meta) do
+    win = Map.fetch!(meta, :window)
+
+    # Try to compute exact count synchronously. If it fails, fall back with no total.
+    total_count =
+      case do_count(meta) do
+        {:ok, n} when is_integer(n) and n >= 0 -> n
+        _ -> nil
+      end
+
+    %Result{
+      res
+      | num_rows: length(res.rows),
+        meta:
+          Map.merge(res.meta || %{}, %{window: win, total_count: total_count, total_mode: :exact})
+    }
+  end
+
+  defp do_count(
+         %{count_sql: count_sql, count_params: count_params, repo_or_name: repo_or_name} = meta
+       ) do
+    {repo_mod, _repo_name} = Sources.resolve!(repo_or_name, nil)
+
+    runner_opts = []
+
+    runner_opts =
+      case Map.get(meta, :search_path) do
+        sp when is_binary(sp) and byte_size(sp) > 0 -> Keyword.put(runner_opts, :search_path, sp)
+        _ -> runner_opts
+      end
+
+    case Runner.run_sql(repo_mod, count_sql, count_params, runner_opts) do
+      {:ok, %Result{rows: [[n]]}} when is_integer(n) ->
+        {:ok, n}
+
+      {:ok, %Result{rows: [[n]]}} when is_binary(n) ->
+        case Integer.parse(n) do
+          {v, _} -> {:ok, v}
+          _ -> {:error, :invalid_count}
+        end
+
+      {:ok, %Result{rows: _}} ->
+        {:error, :invalid_count}
+
+      other ->
+        other
+    end
+  end
+
+  defp trim_trailing_semicolon(sql) do
+    s = String.trim(sql)
+
+    if String.ends_with?(s, ";") do
+      s
+      |> String.trim_trailing()
+      |> String.trim_trailing(";")
+      |> String.trim_trailing()
+    else
+      s
+    end
   end
 end

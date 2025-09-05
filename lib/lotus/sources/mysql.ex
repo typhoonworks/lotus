@@ -131,6 +131,12 @@ defmodule Lotus.Sources.MySQL do
   def param_placeholder(_idx, _var, _type), do: "?"
 
   @impl true
+  def limit_offset_placeholders(_limit_idx, _offset_idx) do
+    # MySQL doesn't support CAST in LIMIT/OFFSET clauses
+    {"?", "?"}
+  end
+
+  @impl true
   def handled_errors, do: [MyXQL.Error]
 
   @impl true
