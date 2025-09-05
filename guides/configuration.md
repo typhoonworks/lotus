@@ -142,6 +142,71 @@ config :lotus,
 
 For detailed caching configuration and usage, see the [Caching Guide](caching.md).
 
+#### `default_page_size`
+
+Configures the global default page size for windowed pagination. This setting helps prevent performance issues when users query large tables by automatically limiting the number of rows returned when using windowed pagination without an explicit limit.
+
+```elixir
+config :lotus,
+  default_page_size: 1000  # Default: 1000 rows
+```
+
+**Type**: `pos_integer() | nil`  
+**Default**: `nil` (falls back to built-in default of 1000)
+
+**How it Works:**
+
+This configuration only applies when using windowed pagination (`window` option) without specifying an explicit `limit`:
+
+```elixir
+# Without window option - returns ALL rows (no pagination applied)
+{:ok, result} = Lotus.run_sql("SELECT * FROM large_table")
+# Could return millions of rows
+
+# With window option but no limit - uses default_page_size
+{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [])
+# Returns max 1000 rows (or your configured default)
+
+# With explicit limit - uses the specified limit (capped at default_page_size)
+{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [limit: 500])
+# Returns max 500 rows
+
+# Limit exceeding default is capped for safety
+{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [limit: 5000])  
+# Returns max 1000 rows (capped at default_page_size)
+```
+
+**Precedence Rules:**
+
+1. **Explicit limit in window options**: Takes priority but is capped at `default_page_size`
+2. **Configured `default_page_size`**: Used when no explicit limit provided
+3. **Built-in default (1000)**: Fallback when `default_page_size` is `nil`
+
+**Performance Benefits:**
+
+- **Prevents accidental large queries**: Users can't accidentally return millions of rows
+- **Predictable memory usage**: Limits memory consumption per query
+- **Better responsiveness**: Faster query execution with smaller result sets
+- **Configurable safety**: Adjust the limit based on your application's needs
+
+**Example Configurations:**
+
+```elixir
+# Conservative limit for high-traffic applications
+config :lotus, default_page_size: 100
+
+# Moderate limit for typical applications  
+config :lotus, default_page_size: 1000
+
+# Higher limit for data analysis environments
+config :lotus, default_page_size: 5000
+
+# Disable default limiting (use built-in 1000)
+config :lotus, default_page_size: nil
+```
+
+> **⚠️ Important**: This setting only affects queries that explicitly use windowed pagination. Queries without the `window` option will return all matching rows regardless of this setting.
+
 ### Behavior Options
 
 #### `unique_names`

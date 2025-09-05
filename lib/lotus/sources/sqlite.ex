@@ -75,6 +75,12 @@ defmodule Lotus.Sources.SQLite3 do
   def param_placeholder(_idx, _var, _type), do: "?"
 
   @impl true
+  def limit_offset_placeholders(_limit_idx, _offset_idx) do
+    # SQLite uses simple ? placeholders for LIMIT/OFFSET
+    {"?", "?"}
+  end
+
+  @impl true
   def handled_errors, do: [Exqlite.Error]
 
   @impl true
