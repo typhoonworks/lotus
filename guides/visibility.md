@@ -347,3 +347,35 @@ config :lotus,
     ]
   }
 ```
+
+### Supabase Configuration
+
+When using Supabase as your database, it includes many additional system schemas that you typically don't want your users to query directly through Lotus. It's recommended to configure Lotus with schema deny rules to hide these internal schemas:
+
+```elixir
+config :lotus,
+  schema_visibility: %{
+    default: [
+      deny: [
+        "auth",           # Supabase authentication
+        "extensions",     # PostgreSQL extensions
+        "graphql",        # GraphQL schema
+        "graphql_public", # Public GraphQL schema
+        "pgbouncer",      # Connection pooler
+        "realtime",       # Realtime subscriptions
+        "storage",        # File storage
+        "vault",          # Secrets management
+        "pg_catalog",     # PostgreSQL system catalog
+        "information_schema", # SQL standard metadata
+        "pg_toast"        # TOAST storage
+      ]
+    ]
+  }
+```
+
+This configuration ensures that:
+- Users can only query your application's schemas (like `public`)
+- Supabase's internal schemas remain hidden from the Lotus interface
+- System schemas are properly protected from accidental exposure
+
+**Note**: The last three schemas (`pg_catalog`, `information_schema`, `pg_toast`) are already blocked by Lotus's built-in security, but including them explicitly in your configuration makes the intent clear.
