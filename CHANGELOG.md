@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.2] - 2025-09-07
+
+- Added `Lotus.Export.stream_csv/2` to export the full result page by page
+
 ## [0.9.1] - 2025-09-05
 
 ### Added
