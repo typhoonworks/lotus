@@ -1,5 +1,7 @@
 # Lotus
 
+[Try the demo here](https://lotus.typhoon.works/)
+
 ![Lotus](https://raw.githubusercontent.com/typhoonworks/lotus/main/media/banner.png)
 
 <p>
