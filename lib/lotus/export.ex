@@ -5,6 +5,10 @@ defmodule Lotus.Export do
 
   alias Lotus.Result
   alias Lotus.Value
+  alias Lotus.Storage.Query
+  alias Lotus.Config
+
+  @default_page_size 1000
 
   @doc """
   Converts a Result struct to CSV format using NimbleCSV.
@@ -23,6 +27,25 @@ defmodule Lotus.Export do
       |> Enum.to_list()
 
     [header | body]
+  end
+
+  @doc """
+  Runs a Query and converts the full, unpaginated result to CSV iodata.
+
+  Accepts a `%Lotus.Storage.Query{}` and Lotus options such as `:repo`, `:vars`,
+  and `:search_path`. Pagination is explicitly disabled (no window) to fetch all
+  matching rows.
+
+  Raises on execution errors.
+  """
+  @spec to_csv(Query.t(), keyword()) :: [binary() | iodata()]
+  def to_csv(%Query{} = q, opts \\ []) do
+    run_opts = Keyword.merge(opts, window: nil)
+
+    case Lotus.run_query(q, run_opts) do
+      {:ok, %Result{} = res} -> to_csv(res)
+      {:error, err} -> raise ArgumentError, "to_csv/2 failed: #{inspect(err)}"
+    end
   end
 
   @doc """
@@ -48,6 +71,52 @@ defmodule Lotus.Export do
     |> Stream.map(&Lotus.JSON.encode!/1)
     |> Stream.intersperse("\n")
     |> Enum.join()
+  end
+
+  @doc """
+  Stream a CSV export for a Query by fetching pages of results.
+
+  Uses windowed pagination under the hood and outputs CSV iodata chunks. The
+  first yielded chunk contains the header row. Subsequent chunks contain rows.
+
+  Options:
+  - `:page_size` — page size used for windowed fetching (defaults to configured
+    Lotus default page size or 1000)
+  - Any `Lotus.run_query/2` option such as `:repo`, `:vars`, `:search_path`.
+
+  Raises on execution errors during streaming.
+  """
+  @spec stream_csv(Query.t(), keyword()) :: Enumerable.t()
+  def stream_csv(%Query{} = q, opts \\ []) do
+    page_size = Keyword.get(opts, :page_size, Config.default_page_size() || @default_page_size)
+
+    Stream.resource(
+      fn -> %{offset: 0, header?: false} end,
+      fn %{offset: off, header?: header?} = state ->
+        run_opts = Keyword.merge(opts, window: [limit: page_size, offset: off, count: :none])
+
+        case Lotus.run_query(q, run_opts) do
+          {:ok, %Result{columns: _cols, rows: []}} ->
+            {:halt, state}
+
+          {:ok, %Result{columns: cols, rows: rows}} ->
+            header = if header?, do: [], else: [CSVParser.dump_to_iodata([cols])]
+
+            body =
+              rows
+              |> Stream.map(&normalize_row_for_csv/1)
+              |> Stream.map(&CSVParser.dump_to_iodata([&1]))
+              |> Enum.to_list()
+
+            next = %{offset: off + length(rows), header?: true}
+            {header ++ body, next}
+
+          {:error, err} ->
+            raise "stream_csv(query) execution error: #{inspect(err)}"
+        end
+      end,
+      fn _ -> :ok end
+    )
   end
 
   defp row_to_map_for_json(columns, row) do
