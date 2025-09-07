@@ -98,7 +98,21 @@ defmodule Lotus.Sources.Postgres do
 
   @impl true
   def builtin_schema_denies(_repo) do
-    ["pg_catalog", "information_schema", "pg_toast", ~r/^pg_temp/, ~r/^pg_toast/]
+    [
+      "auth",
+      "extensions",
+      "graphql",
+      "graphql_public",
+      "pgbouncer",
+      "realtime",
+      "storage",
+      "vault",
+      "pg_catalog",
+      "information_schema",
+      "pg_toast",
+      ~r/^pg_temp/,
+      ~r/^pg_toast/
+    ]
   end
 
   @impl true
