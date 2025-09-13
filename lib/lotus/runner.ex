@@ -3,7 +3,9 @@ defmodule Lotus.Runner do
   Read-only SQL execution with safety checks, param binding, and result shaping.
   """
 
-  alias Lotus.{Source, Result, Preflight}
+  alias Lotus.{Source, Sources, Result, Preflight, Visibility}
+  alias Lotus.Preflight.Relations
+  alias Lotus.Visibility.Policy
 
   @type repo :: module()
   @type sql :: String.t()
@@ -47,13 +49,25 @@ defmodule Lotus.Runner do
             command = normalize_command(Map.get(raw, :command))
             duration_ms = System.convert_time_unit(elapsed_us, :microsecond, :millisecond)
 
-            {:ok,
-             Result.new(cols, rows,
-               num_rows: num_rows,
-               duration_ms: duration_ms,
-               command: command,
-               meta: Map.take(raw, [:connection_id, :messages])
-             )}
+            repo_name = Sources.name_from_module!(repo)
+            rels = Relations.take()
+
+            policies =
+              Enum.map(cols || [], fn c -> Visibility.column_policy_for(repo_name, rels, c) end)
+
+            case enforce_column_policies(cols || [], rows || [], policies) do
+              {:error, msg} ->
+                repo.rollback(msg)
+
+              {final_cols, final_rows} ->
+                {:ok,
+                 Result.new(final_cols, final_rows,
+                   num_rows: num_rows,
+                   duration_ms: duration_ms,
+                   command: command,
+                   meta: Map.take(raw, [:connection_id, :messages])
+                 )}
+            end
 
           {:error, err} ->
             repo.rollback(Source.format_error(err))
@@ -76,6 +90,86 @@ defmodule Lotus.Runner do
   defp normalize_command(cmd) when is_atom(cmd), do: Atom.to_string(cmd)
   defp normalize_command(cmd) when is_binary(cmd), do: cmd
   defp normalize_command(cmd), do: inspect(cmd)
+
+  defp enforce_column_policies(cols, rows, policies) do
+    error_cols =
+      cols
+      |> Enum.zip(policies)
+      |> Enum.filter(fn {_c, pol} -> Policy.causes_error?(pol) end)
+      |> Enum.map(fn {c, _} -> c end)
+
+    if error_cols != [] do
+      {:error, "Query selects hidden column(s): #{Enum.join(error_cols, ", ")}"}
+    else
+      omit_idx =
+        policies
+        |> Enum.with_index()
+        |> Enum.filter(fn {pol, _i} -> Policy.omits_column?(pol) end)
+        |> Enum.map(fn {_pol, i} -> i end)
+        |> MapSet.new()
+
+      mask_map =
+        policies
+        |> Enum.with_index()
+        |> Enum.reduce(%{}, fn
+          {pol, i}, acc ->
+            if Policy.requires_mask?(pol) do
+              Map.put(acc, i, pol)
+            else
+              acc
+            end
+        end)
+
+      new_cols =
+        cols
+        |> Enum.with_index()
+        |> Enum.reject(fn {_c, i} -> MapSet.member?(omit_idx, i) end)
+        |> Enum.map(&elem(&1, 0))
+
+      new_rows =
+        Enum.map(rows, fn row ->
+          row
+          |> Enum.with_index()
+          |> Enum.reject(fn {_v, i} -> MapSet.member?(omit_idx, i) end)
+          |> Enum.map(fn {v, i} ->
+            case Map.get(mask_map, i) do
+              nil -> v
+              %{mask: :null} -> nil
+              %{mask: {:fixed, value}} -> value
+              %{mask: :sha256} -> sha256_hex(to_string_safe(v))
+              %{mask: {:partial, opts}} -> partial_mask(to_string_safe(v), opts)
+              _ -> nil
+            end
+          end)
+        end)
+
+      {new_cols, new_rows}
+    end
+  end
+
+  defp to_string_safe(nil), do: ""
+  defp to_string_safe(v) when is_binary(v), do: v
+  defp to_string_safe(v), do: to_string(v)
+
+  defp sha256_hex(s) do
+    :crypto.hash(:sha256, s) |> Base.encode16(case: :lower)
+  end
+
+  defp partial_mask(s, opts) when is_binary(s) do
+    keep_last = Keyword.get(opts, :keep_last, 4)
+    keep_first = Keyword.get(opts, :keep_first, 0)
+    repl = Keyword.get(opts, :replacement, "*")
+
+    len = String.length(s)
+    left = min(keep_first, len)
+    right = min(keep_last, max(len - left, 0))
+    mid = max(len - left - right, 0)
+
+    left_part = String.slice(s, 0, left)
+    right_part = if right > 0, do: String.slice(s, len - right, right), else: ""
+    masked = String.duplicate(repl, mid)
+    left_part <> masked <> right_part
+  end
 
   # Allow a single statement with an optional trailing semicolon.
   # Reject any additional top-level semicolons (outside strings/comments).
@@ -174,9 +268,7 @@ defmodule Lotus.Runner do
 
   defp preflight_visibility(repo, sql, params, opts) do
     if needs_preflight?(sql) do
-      repo_name =
-        Lotus.Config.data_repos()
-        |> Enum.find_value(fn {name, mod} -> if mod == repo, do: name end) || "default"
+      repo_name = Sources.name_from_module!(repo)
 
       search_path = Keyword.get(opts, :search_path)
 

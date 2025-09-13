@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **NEW:** Column-level visibility rules with masking support (`:allow`, `:omit`, `:mask`, `:error`)
+- **NEW:** `Lotus.Visibility.Policy` module for policy creation and validation
+- **NEW:** `Lotus.Preflight.Relations` module for cleaner preflight relation management
+
 ## [0.9.2] - 2025-09-07
 
 - Added `Lotus.Export.stream_csv/2` to export the full result page by page

@@ -25,6 +25,7 @@ defmodule Lotus.Schema do
   """
 
   alias Lotus.{Visibility, Config, Source, Sources}
+  alias Lotus.Visibility.Policy
 
   @doc """
   Lists all visible schemas in the given repository.
@@ -232,7 +233,27 @@ defmodule Lotus.Schema do
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
       if Visibility.allowed_relation?(repo_name, {resolved_schema, table_name}) do
         try do
-          {:ok, Source.get_table_schema(repo, resolved_schema, table_name)}
+          cols = Source.get_table_schema(repo, resolved_schema, table_name)
+          rels = [{resolved_schema, table_name}]
+
+          annotated =
+            Enum.reduce(cols, [], fn col, acc ->
+              policy = Visibility.column_policy_for(repo_name, rels, col.name)
+
+              cond do
+                Policy.hidden_from_schema?(policy) ->
+                  acc
+
+                is_map(policy) ->
+                  [Map.put(col, :visibility, Map.take(policy, [:action, :mask])) | acc]
+
+                true ->
+                  [col | acc]
+              end
+            end)
+            |> Enum.reverse()
+
+          {:ok, annotated}
         rescue
           e -> {:error, Exception.message(e)}
         end

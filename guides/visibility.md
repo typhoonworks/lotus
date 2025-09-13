@@ -379,3 +379,172 @@ This configuration ensures that:
 - System schemas are properly protected from accidental exposure
 
 **Note**: The last three schemas (`pg_catalog`, `information_schema`, `pg_toast`) are already blocked by Lotus's built-in security, but including them explicitly in your configuration makes the intent clear.
+
+## Column-Level Visibility
+
+Column visibility provides fine-grained control over individual columns within tables. You can hide sensitive data, mask personally identifiable information (PII), or prevent certain columns from being queried entirely.
+
+### Configuration
+
+Add column visibility rules to your configuration:
+
+```elixir
+config :lotus,
+  column_visibility: %{
+    default: [
+      # Hide sensitive columns globally
+      {"password", :error},
+      {"ssn", [action: :mask, mask: :sha256]},
+      {"api_key", :omit}
+    ],
+    postgres: [
+      # Schema + table + column rules (most specific)
+      {"public", "users", "email", [action: :mask, mask: {:partial, keep_last: 4}]},
+      {"public", "users", "credit_card", :error},
+
+      # Table + column rules (any schema)
+      {"orders", "total", [action: :mask, mask: {:fixed, "HIDDEN"}]},
+
+      # Column rules (any schema/table)
+      {"created_by", :omit},
+      {"debug_info", [action: :omit, show_in_schema?: false]}
+    ]
+  }
+```
+
+### Actions
+
+Column policies support four actions:
+
+- **`:allow`** - Show column values normally (default behavior)
+- **`:omit`** - Remove column entirely from query results
+- **`:mask`** - Transform/redact column values using a masking strategy
+- **`:error`** - Fail the query if this column is selected
+
+### Masking Strategies
+
+When using `:mask` action, choose from these strategies:
+
+#### `:null` - Replace with NULL
+```elixir
+{"users", "middle_name", [action: :mask, mask: :null]}
+```
+
+#### `:sha256` - Replace with SHA256 hash
+```elixir
+{"users", "ssn", [action: :mask, mask: :sha256]}
+# "123-45-6789" becomes "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+```
+
+#### `{:fixed, value}` - Replace with fixed value
+```elixir
+{"users", "salary", [action: :mask, mask: {:fixed, "CONFIDENTIAL"}]}
+```
+
+#### `{:partial, options}` - Partial masking
+```elixir
+# Keep last 4 characters, mask the rest
+{"users", "phone", [action: :mask, mask: {:partial, keep_last: 4}]}
+# "555-123-4567" becomes "*******4567"
+
+# Keep first 2 and last 4, custom replacement
+{"users", "email", [action: :mask, mask: {:partial, keep_first: 2, keep_last: 4, replacement: "#"}]}
+# "john@example.com" becomes "jo#######.com"
+```
+
+### Schema Introspection Control
+
+Control whether columns appear in schema introspection:
+
+```elixir
+column_visibility: %{
+  default: [
+    # Column is masked but visible in schema
+    {"password_hash", [action: :mask, mask: :sha256, show_in_schema?: true]},
+
+    # Column is omitted and hidden from schema
+    {"internal_notes", [action: :omit, show_in_schema?: false]}
+  ]
+}
+```
+
+### Pattern Matching
+
+Use regex patterns for flexible column matching:
+
+```elixir
+column_visibility: %{
+  postgres: [
+    # Hide all columns ending in _secret
+    {~r/_secret$/, :error},
+
+    # Mask all PII columns across specific tables
+    {"users", ~r/(ssn|phone|email)/, [action: :mask, mask: :sha256]},
+
+    # Hash all audit columns in analytics schema
+    {"analytics", ~r/.*/, ~r/^audit_/, [action: :mask, mask: :sha256]}
+  ]
+}
+```
+
+### Simple Syntax
+
+For common cases, use atom shortcuts:
+
+```elixir
+column_visibility: %{
+  default: [
+    {"password", :error},        # Same as [action: :error]
+    {"temp_data", :omit},        # Same as [action: :omit]
+    {"user_agent", :mask}        # Same as [action: :mask, mask: :null]
+  ]
+}
+```
+
+### Precedence Rules
+
+Column rules are evaluated in this order (most to least specific):
+
+1. **Schema + Table + Column** - `{"public", "users", "email", policy}`
+2. **Table + Column** - `{"users", "email", policy}`
+3. **Column Only** - `{"email", policy}`
+
+The most specific matching rule wins.
+
+### Examples
+
+#### PII Protection
+```elixir
+column_visibility: %{
+  default: [
+    {"ssn", [action: :mask, mask: :sha256]},
+    {"credit_card", :error},
+    {"phone", [action: :mask, mask: {:partial, keep_last: 4}]},
+    {"email", [action: :mask, mask: {:partial, keep_first: 2, keep_last: 8}]}
+  ]
+}
+```
+
+#### Development vs Production
+```elixir
+# Different rules per environment
+column_visibility: %{
+  default: [
+    {"password", if(Mix.env() == :prod, do: :error, else: :allow)},
+    {"debug_info", if(Mix.env() == :prod, do: :omit, else: :allow)}
+  ]
+}
+```
+
+#### Multi-tenant Data
+```elixir
+column_visibility: %{
+  postgres: [
+    # Hide tenant isolation columns
+    {~r/^tenant_\d+/, ~r/.*/, "tenant_id", :omit},
+
+    # Mask cross-tenant data
+    {"shared_data", "user_reference", [action: :mask, mask: :sha256]}
+  ]
+}
+```

@@ -11,6 +11,7 @@ defmodule Lotus.Preflight do
 
   alias Lotus.Visibility
   alias Lotus.Sources
+  alias Lotus.Preflight.Relations
 
   @doc """
   Authorizes a SQL query by checking all relations it would access.
@@ -74,6 +75,7 @@ defmodule Lotus.Preflight do
         rels = collect_pg_relations(plan, MapSet.new()) |> MapSet.to_list()
 
         if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
+          Relations.put(rels)
           :ok
         else
           blocked_tables = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
@@ -121,6 +123,7 @@ defmodule Lotus.Preflight do
           |> Enum.map(&{nil, &1})
 
         if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
+          Relations.put(rels)
           :ok
         else
           blocked = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
@@ -166,6 +169,7 @@ defmodule Lotus.Preflight do
           end
 
         if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
+          Relations.put(rels)
           :ok
         else
           blocked = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
