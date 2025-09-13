@@ -452,12 +452,15 @@ defmodule Lotus.Schema do
         do: Keyword.get(cache_opts, :profile, default_profile),
         else: default_profile
 
-    case exec_with_cache(cache_opts, profile, key, tags, fn ->
-           case Source.resolve_table_schema(repo, table, schemas) do
-             nil -> {:ok, :not_found}
-             schema -> {:ok, {:found, schema}}
-           end
-         end) do
+    cache_result =
+      exec_with_cache(cache_opts, profile, key, tags, fn ->
+        case Source.resolve_table_schema(repo, table, schemas) do
+          nil -> {:ok, :not_found}
+          schema -> {:ok, {:found, schema}}
+        end
+      end)
+
+    case cache_result do
       {:ok, :not_found} -> nil
       {:ok, {:found, schema}} -> schema
       {:error, _} -> nil
@@ -483,26 +486,34 @@ defmodule Lotus.Schema do
   end
 
   defp choose_ttl(cache_opts, default_profile) do
-    cond do
-      is_list(cache_opts) and Keyword.has_key?(cache_opts, :ttl_ms) ->
-        Keyword.fetch!(cache_opts, :ttl_ms)
+    get_explicit_ttl(cache_opts) || get_profile_ttl(cache_opts, default_profile)
+  end
 
-      true ->
-        prof =
-          cond do
-            is_list(cache_opts) and Keyword.has_key?(cache_opts, :profile) ->
-              Keyword.fetch!(cache_opts, :profile)
+  defp get_explicit_ttl(cache_opts) when is_list(cache_opts) do
+    Keyword.get(cache_opts, :ttl_ms)
+  end
 
-            not is_nil(default_profile) ->
-              default_profile
+  defp get_explicit_ttl(_), do: nil
 
-            true ->
-              Config.default_cache_profile()
-          end
+  defp get_profile_ttl(cache_opts, default_profile) do
+    profile = determine_profile(cache_opts, default_profile)
 
-        Config.cache_profile_settings(prof)[:ttl_ms] ||
-          (Config.cache_config() && Config.cache_config()[:default_ttl_ms]) ||
-          :timer.seconds(60)
+    Config.cache_profile_settings(profile)[:ttl_ms] ||
+      get_default_ttl() ||
+      :timer.seconds(60)
+  end
+
+  defp determine_profile(cache_opts, default_profile) when is_list(cache_opts) do
+    Keyword.get(cache_opts, :profile, default_profile || Config.default_cache_profile())
+  end
+
+  defp determine_profile(_cache_opts, nil), do: Config.default_cache_profile()
+  defp determine_profile(_cache_opts, default_profile), do: default_profile
+
+  defp get_default_ttl do
+    case Config.cache_config() do
+      nil -> nil
+      config -> config[:default_ttl_ms]
     end
   end
 
@@ -526,27 +537,28 @@ defmodule Lotus.Schema do
         end
 
       :use ->
-        ttl = choose_ttl(cache_opts, ttl_default_profile)
-        opts = build_cache_options(cache_opts, tags)
+        exec_with_cache_use(cache_opts, ttl_default_profile, key, tags, fun)
+    end
+  end
 
-        try do
-          case Lotus.Cache.get_or_store(
-                 key,
-                 ttl,
-                 fn ->
-                   case fun.() do
-                     {:ok, val} -> val
-                     {:error, e} -> throw({:lotus_cache_error, e})
-                   end
-                 end,
-                 opts
-               ) do
-            {:ok, val, _meta} -> {:ok, val}
-            {:error, _} -> fun.()
-          end
-        catch
-          {:lotus_cache_error, e} -> {:error, e}
-        end
+  defp exec_with_cache_use(cache_opts, ttl_default_profile, key, tags, fun) do
+    ttl = choose_ttl(cache_opts, ttl_default_profile)
+    opts = build_cache_options(cache_opts, tags)
+
+    try do
+      case Lotus.Cache.get_or_store(key, ttl, fn -> cache_value_or_throw(fun) end, opts) do
+        {:ok, val, _meta} -> {:ok, val}
+        {:error, _} -> fun.()
+      end
+    catch
+      {:lotus_cache_error, e} -> {:error, e}
+    end
+  end
+
+  defp cache_value_or_throw(fun) do
+    case fun.() do
+      {:ok, val} -> val
+      {:error, e} -> throw({:lotus_cache_error, e})
     end
   end
 

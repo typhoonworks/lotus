@@ -95,28 +95,32 @@ defmodule Lotus.Export do
       fn %{offset: off, header?: header?} = state ->
         run_opts = Keyword.merge(opts, window: [limit: page_size, offset: off, count: :none])
 
-        case Lotus.run_query(q, run_opts) do
-          {:ok, %Result{columns: _cols, rows: []}} ->
-            {:halt, state}
-
-          {:ok, %Result{columns: cols, rows: rows}} ->
-            header = if header?, do: [], else: [CSVParser.dump_to_iodata([cols])]
-
-            body =
-              rows
-              |> Stream.map(&normalize_row_for_csv/1)
-              |> Stream.map(&CSVParser.dump_to_iodata([&1]))
-              |> Enum.to_list()
-
-            next = %{offset: off + length(rows), header?: true}
-            {header ++ body, next}
-
-          {:error, err} ->
-            raise "stream_csv(query) execution error: #{inspect(err)}"
-        end
+        Lotus.run_query(q, run_opts)
+        |> handle_csv_query_result(state, off, header?)
       end,
       fn _ -> :ok end
     )
+  end
+
+  defp handle_csv_query_result({:ok, %Result{columns: _cols, rows: []}}, state, _off, _header?) do
+    {:halt, state}
+  end
+
+  defp handle_csv_query_result({:ok, %Result{columns: cols, rows: rows}}, _state, off, header?) do
+    header = if header?, do: [], else: [CSVParser.dump_to_iodata([cols])]
+
+    body =
+      rows
+      |> Stream.map(&normalize_row_for_csv/1)
+      |> Stream.map(&CSVParser.dump_to_iodata([&1]))
+      |> Enum.to_list()
+
+    next = %{offset: off + length(rows), header?: true}
+    {header ++ body, next}
+  end
+
+  defp handle_csv_query_result({:error, err}, _state, _off, _header?) do
+    raise "stream_csv(query) execution error: #{inspect(err)}"
   end
 
   defp row_to_map_for_json(columns, row) do

@@ -58,36 +58,46 @@ if Code.ensure_loaded?(Postgrex.Interval) do
   defimpl Lotus.Export.Normalizer, for: Postgrex.Interval do
     # Postgrex.Interval has: months, days, secs, microsecs
     def normalize(%Postgrex.Interval{} = interval) do
-      parts = []
+      parts = build_date_parts(interval)
+      time_parts = build_time_parts(interval)
 
-      # Convert months to years and months
-      total_months = interval.months || 0
+      format_duration(parts, time_parts)
+    end
+
+    defp build_date_parts(interval) do
+      []
+      |> add_years_months(interval.months || 0)
+      |> add_days(interval.days)
+    end
+
+    defp add_years_months(parts, 0), do: parts
+
+    defp add_years_months(parts, total_months) do
       years = div(total_months, 12)
       months = rem(total_months, 12)
 
-      parts = if years != 0, do: parts ++ ["#{years}Y"], else: parts
-      parts = if months != 0, do: parts ++ ["#{months}M"], else: parts
+      parts
+      |> add_if_nonzero(years, "Y")
+      |> add_if_nonzero(months, "M")
+    end
 
-      parts =
-        if interval.days && interval.days != 0, do: parts ++ ["#{interval.days}D"], else: parts
+    defp add_days(parts, nil), do: parts
+    defp add_days(parts, 0), do: parts
+    defp add_days(parts, days), do: parts ++ ["#{days}D"]
 
-      # Handle time components (secs and microsecs)
+    defp add_if_nonzero(parts, 0, _suffix), do: parts
+    defp add_if_nonzero(parts, value, suffix), do: parts ++ ["#{value}#{suffix}"]
+
+    defp build_time_parts(interval) do
       total_microsecs = (interval.secs || 0) * 1_000_000 + (interval.microsecs || 0)
-      time_parts = format_time_parts(total_microsecs)
+      format_time_parts(total_microsecs)
+    end
 
-      duration_str =
-        if time_parts == [] do
-          parts
-        else
-          parts ++ ["T"] ++ time_parts
-        end
+    defp format_duration([], []), do: "P0D"
+    defp format_duration(parts, []), do: "P" <> Enum.join(parts)
 
-      if duration_str == [] do
-        # Zero duration
-        "P0D"
-      else
-        "P" <> Enum.join(duration_str)
-      end
+    defp format_duration(parts, time_parts) do
+      "P" <> Enum.join(parts ++ ["T"] ++ time_parts)
     end
 
     defp format_time_parts(0), do: []

@@ -8,17 +8,20 @@ defmodule Lotus.Sources.MySQL do
 
   @impl true
   def execute_in_transaction(repo, fun, opts) do
-    read_only? = Keyword.get(opts, :read_only, true)
+    session_state = capture_session_state(repo)
+    config = parse_transaction_config(opts)
 
-    stmt_ms =
-      case Keyword.get(opts, :statement_timeout_ms, 5_000) do
-        v when is_integer(v) and v >= 0 -> v
-        _ -> 5_000
-      end
+    try do
+      setup_transaction_session(repo, config)
+      repo.transaction(fun, timeout: config.timeout)
+    after
+      restore_session_state(repo, session_state)
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
 
-    timeout = Keyword.get(opts, :timeout, 15_000)
-
-    # Snapshot current session state
+  defp capture_session_state(repo) do
     prev_iso =
       case read_iso_var(repo) do
         {:ok, iso} -> iso
@@ -37,27 +40,45 @@ defmodule Lotus.Sources.MySQL do
         _ -> 0
       end
 
-    try do
-      if read_only?, do: repo.query!("SET SESSION TRANSACTION READ ONLY")
-      repo.query!("SET SESSION max_execution_time = #{stmt_ms}")
-      repo.transaction(fun, timeout: timeout)
-    after
-      # Restore read-only state
-      cond do
-        prev_ro in [1, "1", true] -> repo.query!("SET SESSION TRANSACTION READ ONLY")
-        prev_ro in [0, "0", false] -> repo.query!("SET SESSION TRANSACTION READ WRITE")
-        true -> repo.query!("SET SESSION TRANSACTION READ WRITE")
+    %{isolation: prev_iso, read_only: prev_ro, max_execution_time: prev_met}
+  end
+
+  defp parse_transaction_config(opts) do
+    read_only? = Keyword.get(opts, :read_only, true)
+
+    stmt_ms =
+      case Keyword.get(opts, :statement_timeout_ms, 5_000) do
+        v when is_integer(v) and v >= 0 -> v
+        _ -> 5_000
       end
 
-      # Restore isolation
-      if prev_iso, do: restore_iso(repo, prev_iso)
+    timeout = Keyword.get(opts, :timeout, 15_000)
 
-      # Restore timeout
-      timeout_val = if is_integer(prev_met) and prev_met >= 0, do: prev_met, else: 0
-      repo.query!("SET SESSION max_execution_time = #{timeout_val}")
+    %{read_only: read_only?, statement_timeout_ms: stmt_ms, timeout: timeout}
+  end
+
+  defp setup_transaction_session(repo, config) do
+    if config.read_only, do: repo.query!("SET SESSION TRANSACTION READ ONLY")
+    repo.query!("SET SESSION max_execution_time = #{config.statement_timeout_ms}")
+  end
+
+  defp restore_session_state(repo, session_state) do
+    restore_read_only_state(repo, session_state.read_only)
+    if session_state.isolation, do: restore_iso(repo, session_state.isolation)
+    restore_max_execution_time(repo, session_state.max_execution_time)
+  end
+
+  defp restore_read_only_state(repo, prev_ro) do
+    cond do
+      prev_ro in [1, "1", true] -> repo.query!("SET SESSION TRANSACTION READ ONLY")
+      prev_ro in [0, "0", false] -> repo.query!("SET SESSION TRANSACTION READ WRITE")
+      true -> repo.query!("SET SESSION TRANSACTION READ WRITE")
     end
-  rescue
-    e -> {:error, Exception.message(e)}
+  end
+
+  defp restore_max_execution_time(repo, prev_met) do
+    timeout_val = if is_integer(prev_met) and prev_met >= 0, do: prev_met, else: 0
+    repo.query!("SET SESSION max_execution_time = #{timeout_val}")
   end
 
   defp read_iso_var(repo) do
@@ -263,22 +284,18 @@ defmodule Lotus.Sources.MySQL do
     end
   end
 
-  defp format_mysql_type(type, char_len, num_prec, num_scale) do
-    cond do
-      type == "varchar" && char_len ->
-        "varchar(#{char_len})"
+  defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
+    do: "varchar(#{char_len})"
 
-      type == "char" && char_len ->
-        "char(#{char_len})"
+  defp format_mysql_type("char", char_len, _, _) when not is_nil(char_len),
+    do: "char(#{char_len})"
 
-      type == "decimal" && num_prec && num_scale ->
-        "decimal(#{num_prec},#{num_scale})"
+  defp format_mysql_type("decimal", _, num_prec, num_scale)
+       when not is_nil(num_prec) and not is_nil(num_scale),
+       do: "decimal(#{num_prec},#{num_scale})"
 
-      type == "decimal" && num_prec ->
-        "decimal(#{num_prec})"
+  defp format_mysql_type("decimal", _, num_prec, _) when not is_nil(num_prec),
+    do: "decimal(#{num_prec})"
 
-      true ->
-        type
-    end
-  end
+  defp format_mysql_type(type, _, _, _), do: type
 end

@@ -43,38 +43,7 @@ defmodule Lotus.Runner do
             repo.query(sql, params, timeout: timeout)
           end)
 
-        case res do
-          {:ok, %{columns: cols, rows: rows} = raw} ->
-            num_rows = Map.get(raw, :num_rows, length(rows || []))
-            command = normalize_command(Map.get(raw, :command))
-            duration_ms = System.convert_time_unit(elapsed_us, :microsecond, :millisecond)
-
-            repo_name = Sources.name_from_module!(repo)
-            rels = Relations.take()
-
-            policies =
-              Enum.map(cols || [], fn c -> Visibility.column_policy_for(repo_name, rels, c) end)
-
-            case enforce_column_policies(cols || [], rows || [], policies) do
-              {:error, msg} ->
-                repo.rollback(msg)
-
-              {final_cols, final_rows} ->
-                {:ok,
-                 Result.new(final_cols, final_rows,
-                   num_rows: num_rows,
-                   duration_ms: duration_ms,
-                   command: command,
-                   meta: Map.take(raw, [:connection_id, :messages])
-                 )}
-            end
-
-          {:error, err} ->
-            repo.rollback(Source.format_error(err))
-
-          other ->
-            other
-        end
+        handle_query_result(res, elapsed_us, repo)
       end,
       opts
     )
@@ -84,6 +53,40 @@ defmodule Lotus.Runner do
     end
   rescue
     e -> {:error, Source.format_error(e)}
+  end
+
+  defp handle_query_result({:ok, %{columns: cols, rows: rows} = raw}, elapsed_us, repo) do
+    num_rows = Map.get(raw, :num_rows, length(rows || []))
+    command = normalize_command(Map.get(raw, :command))
+    duration_ms = System.convert_time_unit(elapsed_us, :microsecond, :millisecond)
+
+    repo_name = Sources.name_from_module!(repo)
+    rels = Relations.take()
+
+    policies =
+      Enum.map(cols || [], fn c -> Visibility.column_policy_for(repo_name, rels, c) end)
+
+    case enforce_column_policies(cols || [], rows || [], policies) do
+      {:error, msg} ->
+        repo.rollback(msg)
+
+      {final_cols, final_rows} ->
+        {:ok,
+         Result.new(final_cols, final_rows,
+           num_rows: num_rows,
+           duration_ms: duration_ms,
+           command: command,
+           meta: Map.take(raw, [:connection_id, :messages])
+         )}
+    end
+  end
+
+  defp handle_query_result({:error, err}, _elapsed_us, repo) do
+    repo.rollback(Source.format_error(err))
+  end
+
+  defp handle_query_result(other, _elapsed_us, _repo) do
+    other
   end
 
   defp normalize_command(nil), do: nil
@@ -108,17 +111,7 @@ defmodule Lotus.Runner do
         |> Enum.map(fn {_pol, i} -> i end)
         |> MapSet.new()
 
-      mask_map =
-        policies
-        |> Enum.with_index()
-        |> Enum.reduce(%{}, fn
-          {pol, i}, acc ->
-            if Policy.requires_mask?(pol) do
-              Map.put(acc, i, pol)
-            else
-              acc
-            end
-        end)
+      mask_map = build_mask_map(policies)
 
       new_cols =
         cols
@@ -126,26 +119,36 @@ defmodule Lotus.Runner do
         |> Enum.reject(fn {_c, i} -> MapSet.member?(omit_idx, i) end)
         |> Enum.map(&elem(&1, 0))
 
-      new_rows =
-        Enum.map(rows, fn row ->
-          row
-          |> Enum.with_index()
-          |> Enum.reject(fn {_v, i} -> MapSet.member?(omit_idx, i) end)
-          |> Enum.map(fn {v, i} ->
-            case Map.get(mask_map, i) do
-              nil -> v
-              %{mask: :null} -> nil
-              %{mask: {:fixed, value}} -> value
-              %{mask: :sha256} -> sha256_hex(to_string_safe(v))
-              %{mask: {:partial, opts}} -> partial_mask(to_string_safe(v), opts)
-              _ -> nil
-            end
-          end)
-        end)
+      new_rows = Enum.map(rows, fn row -> process_row(row, omit_idx, mask_map) end)
 
       {new_cols, new_rows}
     end
   end
+
+  defp build_mask_map(policies) do
+    policies
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {pol, i}, acc ->
+      if Policy.requires_mask?(pol), do: Map.put(acc, i, pol), else: acc
+    end)
+  end
+
+  defp process_row(row, omit_idx, mask_map) do
+    row
+    |> Enum.with_index()
+    |> Enum.reject(fn {_v, i} -> MapSet.member?(omit_idx, i) end)
+    |> Enum.map(fn {v, i} -> apply_mask_policy(v, Map.get(mask_map, i)) end)
+  end
+
+  defp apply_mask_policy(value, nil), do: value
+  defp apply_mask_policy(_value, %{mask: :null}), do: nil
+  defp apply_mask_policy(_value, %{mask: {:fixed, fixed_value}}), do: fixed_value
+  defp apply_mask_policy(value, %{mask: :sha256}), do: sha256_hex(to_string_safe(value))
+
+  defp apply_mask_policy(value, %{mask: {:partial, opts}}),
+    do: partial_mask(to_string_safe(value), opts)
+
+  defp apply_mask_policy(_value, _), do: nil
 
   defp to_string_safe(nil), do: ""
   defp to_string_safe(v) when is_binary(v), do: v

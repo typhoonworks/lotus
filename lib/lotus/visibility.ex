@@ -223,9 +223,7 @@ defmodule Lotus.Visibility do
   """
   @spec allowed_relation?(String.t(), {String.t() | nil, String.t()}) :: boolean()
   def allowed_relation?(repo_name, {schema, table}) do
-    if not allowed_schema?(repo_name, schema) do
-      false
-    else
+    if allowed_schema?(repo_name, schema) do
       table_rules = Config.rules_for_repo_name(repo_name)
       builtin = builtin_table_denies(repo_name)
 
@@ -234,6 +232,8 @@ defmodule Lotus.Visibility do
       user_denied = deny_hit?(table_rules[:deny], schema, table)
 
       (allowed || table_rules[:allow] in [nil, []]) and not (builtin_denied or user_denied)
+    else
+      false
     end
   end
 
@@ -384,57 +384,65 @@ defmodule Lotus.Visibility do
           nil | %{action: atom(), mask: any(), show_in_schema?: boolean()}
   def column_policy_for(repo_name, relations, result_column_name) do
     rules = Config.column_rules_for_repo_name(repo_name)
-
     rels = relations || []
 
-    specific =
-      Enum.find_value(rules, fn
-        {schema_pat, table_pat, col_pat, policy} ->
-          if rels != [] and
-               Enum.any?(rels, fn {s, t} ->
-                 cv_match?(schema_pat, s) and cv_match?(table_pat, t) and
-                   cv_match?(col_pat, result_column_name)
-               end) do
-            normalize_policy(policy)
-          end
+    find_schema_table_column_match(rules, rels, result_column_name) ||
+      find_table_column_match(rules, rels, result_column_name) ||
+      find_column_only_match(rules, result_column_name)
+  end
 
-        _ ->
-          nil
-      end)
-
-    cond do
-      specific ->
-        specific
-
-      true ->
-        table_scoped =
-          Enum.find_value(rules, fn
-            {table_pat, col_pat, policy} ->
-              if rels != [] and
-                   Enum.any?(rels, fn {_s, t} ->
-                     cv_match?(table_pat, t) and cv_match?(col_pat, result_column_name)
-                   end) do
-                normalize_policy(policy)
-              end
-
-            _ ->
-              nil
-          end)
-
-        case table_scoped do
-          nil ->
-            Enum.find_value(rules, fn
-              {col_pat, policy} ->
-                if cv_match?(col_pat, result_column_name), do: normalize_policy(policy)
-
-              _ ->
-                nil
-            end)
-
-          other ->
-            other
+  defp find_schema_table_column_match(rules, rels, result_column_name) do
+    Enum.find_value(rules, fn
+      {schema_pat, table_pat, col_pat, policy} ->
+        if rels != [] and
+             schema_table_column_matches?(
+               rels,
+               schema_pat,
+               table_pat,
+               col_pat,
+               result_column_name
+             ) do
+          normalize_policy(policy)
         end
-    end
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp find_table_column_match(rules, rels, result_column_name) do
+    Enum.find_value(rules, fn
+      {table_pat, col_pat, policy} ->
+        if rels != [] and table_column_matches?(rels, table_pat, col_pat, result_column_name) do
+          normalize_policy(policy)
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp find_column_only_match(rules, result_column_name) do
+    Enum.find_value(rules, fn
+      {col_pat, policy} ->
+        if cv_match?(col_pat, result_column_name), do: normalize_policy(policy)
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp schema_table_column_matches?(rels, schema_pat, table_pat, col_pat, result_column_name) do
+    Enum.any?(rels, fn {s, t} ->
+      cv_match?(schema_pat, s) and cv_match?(table_pat, t) and
+        cv_match?(col_pat, result_column_name)
+    end)
+  end
+
+  defp table_column_matches?(rels, table_pat, col_pat, result_column_name) do
+    Enum.any?(rels, fn {_s, t} ->
+      cv_match?(table_pat, t) and cv_match?(col_pat, result_column_name)
+    end)
   end
 
   defp cv_match?(%Regex{} = rx, val) when is_binary(val), do: Regex.match?(rx, val)

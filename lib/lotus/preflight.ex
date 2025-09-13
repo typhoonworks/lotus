@@ -30,33 +30,21 @@ defmodule Lotus.Preflight do
   @spec authorize(module(), String.t(), String.t(), list(), String.t() | nil) ::
           :ok | {:error, String.t()}
   def authorize(repo, repo_name, sql, params, search_path \\ nil) do
-    unless Map.has_key?(Lotus.Config.data_repos(), repo_name) do
-      {:error, "Unknown data repo '#{repo_name}'"}
-    else
+    if Map.has_key?(Lotus.Config.data_repos(), repo_name) do
       case Sources.source_type(repo) do
         :postgres -> authorize_pg(repo, repo_name, sql, params, search_path)
         :sqlite -> authorize_sqlite(repo, repo_name, sql, params, search_path)
         :mysql -> authorize_mysql(repo, repo_name, sql, params, search_path)
         _ -> :ok
       end
+    else
+      {:error, "Unknown data repo '#{repo_name}'"}
     end
   end
 
   defp authorize_pg(repo, repo_name, sql, params, search_path) do
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
-
-    result =
-      if search_path do
-        case repo.transaction(fn ->
-               repo.query!("SET LOCAL search_path = #{search_path}")
-               repo.query(explain, params)
-             end) do
-          {:ok, query_result} -> query_result
-          {:error, err} -> {:error, err}
-        end
-      else
-        repo.query(explain, params)
-      end
+    result = execute_pg_explain(repo, explain, params, search_path)
 
     case result do
       {:ok, %{rows: [[json]]}} ->
@@ -84,6 +72,23 @@ defmodule Lotus.Preflight do
 
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp execute_pg_explain(repo, explain, params, nil) do
+    repo.query(explain, params)
+  end
+
+  defp execute_pg_explain(repo, explain, params, search_path) do
+    result =
+      repo.transaction(fn ->
+        repo.query!("SET LOCAL search_path = #{search_path}")
+        repo.query(explain, params)
+      end)
+
+    case result do
+      {:ok, query_result} -> query_result
+      {:error, err} -> {:error, err}
     end
   end
 
@@ -156,17 +161,7 @@ defmodule Lotus.Preflight do
 
         sql_rels = extract_mysql_tables_from_sql(sql)
 
-        rels =
-          if Enum.empty?(explain_rels) or
-               Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
-               String.contains?(sql, "information_schema") or
-               String.contains?(sql, "performance_schema") or
-               String.contains?(sql, "mysql.") or
-               String.contains?(sql, "sys.") do
-            sql_rels
-          else
-            explain_rels
-          end
+        rels = choose_mysql_relations(explain_rels, sql_rels, sql)
 
         if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
           Relations.put(rels)
@@ -237,6 +232,23 @@ defmodule Lotus.Preflight do
       [_, "", "", _, table] -> {nil, table}
     end)
     |> Enum.uniq()
+  end
+
+  defp choose_mysql_relations(explain_rels, sql_rels, sql) do
+    if should_use_sql_relations?(explain_rels, sql) do
+      sql_rels
+    else
+      explain_rels
+    end
+  end
+
+  defp should_use_sql_relations?(explain_rels, sql) do
+    Enum.empty?(explain_rels) or
+      Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
+      String.contains?(sql, "information_schema") or
+      String.contains?(sql, "performance_schema") or
+      String.contains?(sql, "mysql.") or
+      String.contains?(sql, "sys.")
   end
 
   # Map of alias -> base table derived from SQL text.
@@ -315,7 +327,6 @@ defmodule Lotus.Preflight do
       {nil, table} -> table
       {schema, table} -> "#{schema}.#{table}"
     end)
-    |> Enum.join(", ")
   end
 
   defp normalize_preflight_error(e) do
