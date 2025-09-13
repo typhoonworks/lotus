@@ -8,34 +8,29 @@ defmodule Lotus.Cache do
   def enabled?(), do: match?({:ok, _}, adapter())
 
   def get(key) do
-    with {:ok, adapter} <- adapter() do
-      adapter.get(ns(key))
-    else
+    case adapter() do
+      {:ok, adapter} -> adapter.get(ns(key))
       _ -> :miss
     end
   end
 
   def get_or_store(key, ttl_ms, fun, opts \\ []) do
-    with {:ok, adapter} <- adapter() do
-      adapter.get_or_store(ns(key), ttl_ms, fun, opts)
-    else
-      _ ->
-        {:ok, fun.(), :miss}
+    case adapter() do
+      {:ok, adapter} -> adapter.get_or_store(ns(key), ttl_ms, fun, opts)
+      _ -> {:ok, fun.(), :miss}
     end
   end
 
   def put(key, value, ttl_ms, opts \\ []) do
-    with {:ok, adapter} <- adapter() do
-      adapter.put(ns(key), value, ttl_ms, opts)
-    else
+    case adapter() do
+      {:ok, adapter} -> adapter.put(ns(key), value, ttl_ms, opts)
       _ -> :ok
     end
   end
 
   def delete(key) do
-    with {:ok, adapter} <- adapter() do
-      adapter.delete(ns(key))
-    else
+    case adapter() do
+      {:ok, adapter} -> adapter.delete(ns(key))
       _ -> :ok
     end
   end

@@ -117,49 +117,50 @@ defmodule Lotus.Schema do
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    with :ok <- Visibility.validate_schemas(schemas, repo_name) do
-      search_path = Keyword.get(opts, :search_path)
+    case Visibility.validate_schemas(schemas, repo_name) do
+      :ok ->
+        search_path = Keyword.get(opts, :search_path)
 
-      key =
-        schema_key(
-          :list_tables,
-          repo_name,
-          search_path || Enum.join(schemas, ","),
-          include_views?
-        )
+        key =
+          schema_key(
+            :list_tables,
+            repo_name,
+            search_path || Enum.join(schemas, ","),
+            include_views?
+          )
 
-      tags = ["repo:#{repo_name}", "schema:list_tables"]
+        tags = ["repo:#{repo_name}", "schema:list_tables"]
 
-      profile =
-        if is_list(opts[:cache]) do
-          Keyword.get(opts[:cache], :profile, :schema)
-        else
-          :schema
-        end
+        profile =
+          if is_list(opts[:cache]) do
+            Keyword.get(opts[:cache], :profile, :schema)
+          else
+            :schema
+          end
 
-      exec_with_cache(opts[:cache], profile, key, tags, fn ->
-        try do
-          raw_relations = Source.list_tables(repo, schemas, include_views?)
+        exec_with_cache(opts[:cache], profile, key, tags, fn ->
+          try do
+            raw_relations = Source.list_tables(repo, schemas, include_views?)
 
-          filtered =
-            raw_relations
-            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+            filtered =
+              raw_relations
+              |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
 
-          result =
-            if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
-              # Schema-less database - return just table names
-              Enum.map(filtered, fn {nil, table} -> table end)
-            else
-              # Schema-aware database - return {schema, table} tuples
-              filtered
-            end
+            result =
+              if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
+                # Schema-less database - return just table names
+                Enum.map(filtered, fn {nil, table} -> table end)
+              else
+                # Schema-aware database - return {schema, table} tuples
+                filtered
+              end
 
-          {:ok, result}
-        rescue
-          e -> {:error, Exception.message(e)}
-        end
-      end)
-    else
+            {:ok, result}
+          rescue
+            e -> {:error, Exception.message(e)}
+          end
+        end)
+
       {:error, :schema_not_visible, denied: denied} ->
         {:error, "Schema(s) not visible: #{Enum.join(denied, ", ")}"}
     end
