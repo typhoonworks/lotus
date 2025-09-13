@@ -79,6 +79,7 @@ defmodule Lotus.Config do
           default_repo: String.t() | nil,
           default_page_size: pos_integer() | nil,
           table_visibility: map(),
+          column_visibility: map(),
           schema_visibility: map(),
           cache: cache_config()
         }
@@ -129,6 +130,31 @@ defmodule Lotus.Config do
       doc:
         "Configuration for table visibility rules. Controls which tables are accessible through Lotus queries and discovery."
     ],
+    column_visibility: [
+      type: :map,
+      default: %{},
+      doc: """
+      Column-level visibility rules. Lets you hide or mask specific columns per table.
+
+      Format: %{repo_key | :default => [rules...]}
+
+      Each rule can be specified using flexible patterns:
+      - {schema_pattern | "*" | nil | ~r/.../, table_pattern | "*" | ~r/.../, column_pattern | ~r/.../ | String.t(), policy}
+      - {table_pattern | "*" | ~r/.../, column_pattern | ~r/.../ | String.t(), policy} (any schema)
+      - {column_pattern | String.t() | ~r/.../, policy} (any schema/table)
+
+      Policy options:
+      - Simple atoms: :allow, :omit, :error, :mask (with :null strategy)
+      - Keyword list: [action: :mask, mask: :sha256, show_in_schema?: false]
+      - Builder functions: Policy.column_mask(:sha256), Policy.column_omit()
+
+      Actions: :allow (show normally), :omit (remove from results), :mask (transform values), :error (fail query)
+      Mask strategies: :null, :sha256, {:fixed, value}, {:partial, [keep_last: 4, replacement: "*"]}
+      Options: show_in_schema? (default true) — whether column appears in schema introspection
+
+      See Lotus.Visibility.Policy for builder functions and examples.
+      """
+    ],
     schema_visibility: [
       type: :map,
       default: %{},
@@ -170,6 +196,7 @@ defmodule Lotus.Config do
       :default_repo,
       :default_page_size,
       :table_visibility,
+      :column_visibility,
       :schema_visibility,
       :cache
     ])
@@ -290,6 +317,26 @@ defmodule Lotus.Config do
     ArgumentError ->
       config = load!()
       visibility_config = config[:schema_visibility] || %{}
+      visibility_config[:default] || []
+  end
+
+  @doc """
+  Returns column visibility rules for a specific repository.
+
+  Falls back to default rules if repo-specific rules are not configured.
+  """
+  @spec column_rules_for_repo_name(String.t()) :: list()
+  def column_rules_for_repo_name(repo_name) do
+    config = load!()
+    visibility_config = config[:column_visibility] || %{}
+
+    repo_key = String.to_existing_atom(repo_name)
+
+    visibility_config[repo_key] || visibility_config[:default] || []
+  rescue
+    ArgumentError ->
+      config = load!()
+      visibility_config = config[:column_visibility] || %{}
       visibility_config[:default] || []
   end
 

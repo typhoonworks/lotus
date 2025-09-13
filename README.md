@@ -48,7 +48,7 @@ While Lotus can be used standalone, it pairs naturally with [Lotus Web](https://
 Learn more about setting up Lotus Web in the [installation guide](guides/installation.md#lotus-web-setup).
 
 ## Current Features
-- 🔐 **Enhanced security** with read-only execution, table visibility controls, and automatic session state management
+- 🔐 **Enhanced security** with read-only execution, schema/table/column visibility controls, and automatic session state management
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
 - 🏗️ **Multi-database support** - PostgreSQL, MySQL, and SQLite with flexible repository architecture
 - ⚡ **Configurable execution** with timeout controls and connection management
@@ -61,15 +61,17 @@ Lotus automatically preserves your database session state to prevent connection 
 
 ## What's planned?
 - [ ] Query versioning and change tracking
-- [ ] Export functionality for query results (CSV, JSON)
-- [ ] Column-level visibility and access control
+- [X] Export functionality for query results (CSV)
+- [x] Column-level visibility and access control
+- [ ] Charts visualization (bar, pie, geo, etc.)
+- [ ] Dashboards
 - [ ] Cache statistics and monitoring (`Lotus.Cache.stats()`)
 - [ ] Additional cache backends (Redis, Memcached)
 - [ ] Telemetry integration for cache metrics and query performance
 - [x] Query result caching with ETS backend
 - [x] MySQL support
 - [x] Multi-database support (PostgreSQL, MySQL, SQLite)
-- [x] Table visibility and access controls
+- [x] Schema/table/column visibility and access controls
 - [x] Query templates with parameter substitution using `{{var}}` placeholders
 
 ## Installation
@@ -78,7 +80,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.9.0"}
+    {:lotus, "~> 0.9.2"}
   ]
 end
 ```

@@ -191,6 +191,7 @@ defmodule Lotus.Visibility do
   """
 
   alias Lotus.Config
+  alias Lotus.Visibility.Policy
 
   @doc """
   Checks if a schema is visible for the given data repo.
@@ -371,4 +372,77 @@ defmodule Lotus.Visibility do
   defp pattern_match?(nil, s) when s in [nil, ""], do: true
   defp pattern_match?(nil, _), do: false
   defp pattern_match?(_, _), do: false
+
+  @doc """
+  Resolves the column policy for a given result column name in the context of
+  accessed relations and repo.
+
+  Rules are taken from `Config.column_rules_for_repo_name/1` and support patterns
+  on schema, table, and column names. Returns a normalized policy map or nil.
+  """
+  @spec column_policy_for(String.t(), [{String.t() | nil, String.t()}], String.t()) ::
+          nil | %{action: atom(), mask: any(), show_in_schema?: boolean()}
+  def column_policy_for(repo_name, relations, result_column_name) do
+    rules = Config.column_rules_for_repo_name(repo_name)
+
+    rels = relations || []
+
+    specific =
+      Enum.find_value(rules, fn
+        {schema_pat, table_pat, col_pat, policy} ->
+          if rels != [] and
+               Enum.any?(rels, fn {s, t} ->
+                 cv_match?(schema_pat, s) and cv_match?(table_pat, t) and
+                   cv_match?(col_pat, result_column_name)
+               end) do
+            normalize_policy(policy)
+          end
+
+        _ ->
+          nil
+      end)
+
+    cond do
+      specific ->
+        specific
+
+      true ->
+        table_scoped =
+          Enum.find_value(rules, fn
+            {table_pat, col_pat, policy} ->
+              if rels != [] and
+                   Enum.any?(rels, fn {_s, t} ->
+                     cv_match?(table_pat, t) and cv_match?(col_pat, result_column_name)
+                   end) do
+                normalize_policy(policy)
+              end
+
+            _ ->
+              nil
+          end)
+
+        case table_scoped do
+          nil ->
+            Enum.find_value(rules, fn
+              {col_pat, policy} ->
+                if cv_match?(col_pat, result_column_name), do: normalize_policy(policy)
+
+              _ ->
+                nil
+            end)
+
+          other ->
+            other
+        end
+    end
+  end
+
+  defp cv_match?(%Regex{} = rx, val) when is_binary(val), do: Regex.match?(rx, val)
+  defp cv_match?(%Regex{}, _), do: false
+  defp cv_match?("*", _), do: true
+  defp cv_match?(str, val) when is_binary(str) and is_binary(val), do: str == val
+  defp cv_match?(nil, s) when s in [nil, ""], do: true
+  defp cv_match?(_, _), do: false
+
+  defp normalize_policy(policy), do: Policy.normalize_column_policy(policy)
 end
