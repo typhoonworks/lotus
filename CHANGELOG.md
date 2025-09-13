@@ -8,6 +8,18 @@
 - **NEW:** `Lotus.Visibility.Policy` module for policy creation and validation
 - **NEW:** `Lotus.Preflight.Relations` module for cleaner preflight relation management
 
+### Changed
+
+- **INTERNAL:** Comprehensive Credo-based code quality improvements:
+  - Eliminated deeply nested functions by extracting helper functions
+  - Reduced cyclomatic complexity across multiple modules
+  - Replaced `unless/else` patterns with cleaner `if/else` structures
+  - Converted single-clause `with` statements to more appropriate `case` statements
+  - Refactored complex `cond` statements to use pattern matching
+  - Improved function naming conventions (e.g., `is_repo_module?` → `repo_module?`)
+  - Configured selective exclusions for `MapJoin` warnings where readability is prioritized
+  - Enhanced code maintainability and testability without changing public APIs
+
 ## [0.9.2] - 2025-09-07
 
 - Added `Lotus.Export.stream_csv/2` to export the full result page by page
