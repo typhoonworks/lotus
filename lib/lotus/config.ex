@@ -365,27 +365,28 @@ defmodule Lotus.Config do
   @spec cache_profile_settings(atom()) :: keyword()
   def cache_profile_settings(profile_name) do
     case cache_config() do
-      nil ->
-        # built-in defaults
-        case profile_name do
-          :results -> [ttl_ms: :timer.seconds(60)]
-          :schema -> [ttl_ms: :timer.hours(1)]
-          :options -> [ttl_ms: :timer.minutes(5)]
-          _ -> []
-        end
-
-      config ->
-        profiles = config[:profiles] || %{}
-
-        profiles[profile_name] ||
-          case profile_name do
-            :results -> [ttl_ms: config[:default_ttl_ms] || :timer.seconds(60)]
-            :schema -> [ttl_ms: :timer.hours(1)]
-            :options -> [ttl_ms: :timer.minutes(5)]
-            _ -> []
-          end
+      nil -> default_profile_settings(profile_name)
+      config -> configured_profile_settings(profile_name, config)
     end
   end
+
+  defp default_profile_settings(:results), do: [ttl_ms: :timer.seconds(60)]
+  defp default_profile_settings(:schema), do: [ttl_ms: :timer.hours(1)]
+  defp default_profile_settings(:options), do: [ttl_ms: :timer.minutes(5)]
+  defp default_profile_settings(_), do: []
+
+  defp configured_profile_settings(profile_name, config) do
+    profiles = config[:profiles] || %{}
+    profiles[profile_name] || fallback_profile_settings(profile_name, config)
+  end
+
+  defp fallback_profile_settings(:results, config) do
+    [ttl_ms: config[:default_ttl_ms] || :timer.seconds(60)]
+  end
+
+  defp fallback_profile_settings(:schema, _config), do: [ttl_ms: :timer.hours(1)]
+  defp fallback_profile_settings(:options, _config), do: [ttl_ms: :timer.minutes(5)]
+  defp fallback_profile_settings(_, _config), do: []
 
   @doc """
   Returns cache adapter module if configured.

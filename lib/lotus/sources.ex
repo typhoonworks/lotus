@@ -19,13 +19,13 @@ defmodule Lotus.Sources do
       is_binary(repo_opt) ->
         {Config.get_data_repo!(repo_opt), repo_opt}
 
-      is_repo_module?(repo_opt) ->
+      repo_module?(repo_opt) ->
         {repo_opt, name_from_module!(repo_opt)}
 
       is_binary(q_repo) ->
         {Config.get_data_repo!(q_repo), q_repo}
 
-      is_repo_module?(q_repo) ->
+      repo_module?(q_repo) ->
         {q_repo, name_from_module!(q_repo)}
 
       true ->
@@ -50,10 +50,10 @@ defmodule Lotus.Sources do
     end
   end
 
-  defp is_repo_module?(mod) when is_atom(mod),
+  defp repo_module?(mod) when is_atom(mod),
     do: function_exported?(mod, :__adapter__, 0)
 
-  defp is_repo_module?(_), do: false
+  defp repo_module?(_), do: false
 
   @doc """
   Detect the source type from a repository module or name.

@@ -185,22 +185,21 @@ defmodule Lotus.Sources.Postgres do
     end
   end
 
-  defp format_postgres_type(type, char_len, num_prec, num_scale) do
-    cond do
-      type in ["character varying", "varchar"] && char_len ->
-        "varchar(#{char_len})"
+  defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),
+    do: "varchar(#{char_len})"
 
-      type == "character" && char_len ->
-        "char(#{char_len})"
+  defp format_postgres_type("varchar", char_len, _, _) when not is_nil(char_len),
+    do: "varchar(#{char_len})"
 
-      type == "numeric" && num_prec && num_scale ->
-        "numeric(#{num_prec},#{num_scale})"
+  defp format_postgres_type("character", char_len, _, _) when not is_nil(char_len),
+    do: "char(#{char_len})"
 
-      type == "numeric" && num_prec ->
-        "numeric(#{num_prec})"
+  defp format_postgres_type("numeric", _, num_prec, num_scale)
+       when not is_nil(num_prec) and not is_nil(num_scale),
+       do: "numeric(#{num_prec},#{num_scale})"
 
-      true ->
-        type
-    end
-  end
+  defp format_postgres_type("numeric", _, num_prec, _) when not is_nil(num_prec),
+    do: "numeric(#{num_prec})"
+
+  defp format_postgres_type(type, _, _, _), do: type
 end

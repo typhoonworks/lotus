@@ -187,6 +187,23 @@ defmodule Lotus do
   def run_query(query_or_id, opts \\ [])
 
   def run_query(%Query{} = q, opts) do
+    vars = prepare_variables(q, opts)
+
+    case build_sql_params(q, vars) do
+      {:error, msg} ->
+        {:error, msg}
+
+      {sql, params} ->
+        execute_query(q, sql, params, vars, opts)
+    end
+  end
+
+  def run_query(id, opts) do
+    q = Storage.get_query!(id)
+    run_query(q, opts)
+  end
+
+  defp prepare_variables(q, opts) do
     supplied_vars = Keyword.get(opts, :vars, %{}) || %{}
 
     defaults =
@@ -194,59 +211,63 @@ defmodule Lotus do
       |> Enum.filter(& &1.default)
       |> Map.new(fn v -> {v.name, v.default} end)
 
-    vars = Map.merge(defaults, supplied_vars)
+    Map.merge(defaults, supplied_vars)
+  end
 
-    {sql, params} =
-      try do
-        Query.to_sql_params(q, vars)
-      rescue
-        e in ArgumentError ->
-          {:error, e.message}
-      end
-
-    case {sql, params} do
-      {:error, msg} ->
-        {:error, msg}
-
-      {sql, params} ->
-        {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
-
-        search_path = Keyword.get(opts, :search_path) || q.search_path
-        final_opts = if search_path, do: Keyword.put(opts, :search_path, search_path), else: opts
-
-        {sql, params, window_meta, cache_bound} =
-          maybe_apply_window(
-            sql,
-            params,
-            repo_mod || repo_name,
-            search_path,
-            Keyword.get(opts, :window)
-          )
-
-        key = result_key(sql, cache_bound || vars, repo_name, search_path)
-
-        tags =
-          ["query:#{q.id}", "repo:#{repo_name}"] ++
-            if is_list(opts[:cache]), do: Keyword.get(opts[:cache], :tags, []), else: []
-
-        profile =
-          if is_list(opts[:cache]) do
-            Keyword.get(opts[:cache], :profile, Config.default_cache_profile())
-          else
-            Config.default_cache_profile()
-          end
-
-        exec_with_cache(opts[:cache], profile, key, tags, fn ->
-          with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, final_opts) do
-            {:ok, merge_window_meta(res, window_meta)}
-          end
-        end)
+  defp build_sql_params(q, vars) do
+    try do
+      Query.to_sql_params(q, vars)
+    rescue
+      e in ArgumentError -> {:error, e.message}
     end
   end
 
-  def run_query(id, opts) do
-    q = Storage.get_query!(id)
-    run_query(q, opts)
+  defp execute_query(q, sql, params, vars, opts) do
+    {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
+
+    search_path = Keyword.get(opts, :search_path) || q.search_path
+    final_opts = prepare_final_opts(opts, search_path)
+
+    {sql, params, window_meta, cache_bound} =
+      maybe_apply_window(
+        sql,
+        params,
+        repo_mod || repo_name,
+        search_path,
+        Keyword.get(opts, :window)
+      )
+
+    key = result_key(sql, cache_bound || vars, repo_name, search_path)
+    tags = build_cache_tags(q.id, repo_name, opts)
+    profile = determine_cache_profile(opts)
+
+    exec_with_cache(opts[:cache], profile, key, tags, fn ->
+      with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, final_opts) do
+        {:ok, merge_window_meta(res, window_meta)}
+      end
+    end)
+  end
+
+  defp prepare_final_opts(opts, nil), do: opts
+  defp prepare_final_opts(opts, search_path), do: Keyword.put(opts, :search_path, search_path)
+
+  defp build_cache_tags(query_id, repo_name, opts) do
+    base_tags = ["query:#{query_id}", "repo:#{repo_name}"]
+
+    case opts[:cache] do
+      cache_opts when is_list(cache_opts) -> base_tags ++ Keyword.get(cache_opts, :tags, [])
+      _ -> base_tags
+    end
+  end
+
+  defp determine_cache_profile(opts) do
+    case opts[:cache] do
+      cache_opts when is_list(cache_opts) ->
+        Keyword.get(cache_opts, :profile, Config.default_cache_profile())
+
+      _ ->
+        Config.default_cache_profile()
+    end
   end
 
   @doc """
@@ -451,31 +472,34 @@ defmodule Lotus do
   end
 
   defp choose_ttl(cache_opts, default_profile) do
-    cond do
-      # caller explicitly passed a ttl override
-      is_list(cache_opts) and Keyword.has_key?(cache_opts, :ttl_ms) ->
-        Keyword.fetch!(cache_opts, :ttl_ms)
+    get_explicit_ttl(cache_opts) || get_profile_ttl(cache_opts, default_profile)
+  end
 
-      true ->
-        # resolve profile in this order:
-        # 1. caller passed `:profile`
-        # 2. fallback from caller (e.g. :results / :schema)
-        # 3. globally configured default profile
-        prof =
-          cond do
-            is_list(cache_opts) and Keyword.has_key?(cache_opts, :profile) ->
-              Keyword.fetch!(cache_opts, :profile)
+  defp get_explicit_ttl(cache_opts) when is_list(cache_opts) do
+    Keyword.get(cache_opts, :ttl_ms)
+  end
 
-            not is_nil(default_profile) ->
-              default_profile
+  defp get_explicit_ttl(_), do: nil
 
-            true ->
-              Config.default_cache_profile()
-          end
+  defp get_profile_ttl(cache_opts, default_profile) do
+    profile = determine_profile(cache_opts, default_profile)
 
-        Config.cache_profile_settings(prof)[:ttl_ms] ||
-          (Config.cache_config() && Config.cache_config()[:default_ttl_ms]) ||
-          :timer.seconds(60)
+    Config.cache_profile_settings(profile)[:ttl_ms] ||
+      get_default_ttl() ||
+      :timer.seconds(60)
+  end
+
+  defp determine_profile(cache_opts, default_profile) when is_list(cache_opts) do
+    Keyword.get(cache_opts, :profile, default_profile || Config.default_cache_profile())
+  end
+
+  defp determine_profile(_cache_opts, nil), do: Config.default_cache_profile()
+  defp determine_profile(_cache_opts, default_profile), do: default_profile
+
+  defp get_default_ttl do
+    case Config.cache_config() do
+      nil -> nil
+      config -> config[:default_ttl_ms]
     end
   end
 
@@ -500,28 +524,29 @@ defmodule Lotus do
         end
 
       :use ->
-        ttl = choose_ttl(cache_opts, ttl_default_profile)
+        exec_with_cache_use(cache_opts, ttl_default_profile, key, tags, fun)
+    end
+  end
 
-        try do
-          cache_options = build_cache_options(cache_opts, tags)
+  defp exec_with_cache_use(cache_opts, ttl_default_profile, key, tags, fun) do
+    ttl = choose_ttl(cache_opts, ttl_default_profile)
 
-          case Lotus.Cache.get_or_store(
-                 key,
-                 ttl,
-                 fn ->
-                   case fun.() do
-                     {:ok, val} -> val
-                     {:error, e} -> throw({:lotus_cache_error, e})
-                   end
-                 end,
-                 cache_options
-               ) do
-            {:ok, val, _} -> {:ok, val}
-            {:error, _} -> fun.()
-          end
-        catch
-          {:lotus_cache_error, e} -> {:error, e}
-        end
+    try do
+      cache_options = build_cache_options(cache_opts, tags)
+
+      case Lotus.Cache.get_or_store(key, ttl, fn -> cache_value_or_throw(fun) end, cache_options) do
+        {:ok, val, _} -> {:ok, val}
+        {:error, _} -> fun.()
+      end
+    catch
+      {:lotus_cache_error, e} -> {:error, e}
+    end
+  end
+
+  defp cache_value_or_throw(fun) do
+    case fun.() do
+      {:ok, val} -> val
+      {:error, e} -> throw({:lotus_cache_error, e})
     end
   end
 
@@ -646,32 +671,33 @@ defmodule Lotus do
          %{count_sql: count_sql, count_params: count_params, repo_or_name: repo_or_name} = meta
        ) do
     {repo_mod, _repo_name} = Sources.resolve!(repo_or_name, nil)
+    runner_opts = build_runner_opts(meta)
 
-    runner_opts = []
+    repo_mod
+    |> Runner.run_sql(count_sql, count_params, runner_opts)
+    |> parse_count_result()
+  end
 
-    runner_opts =
-      case Map.get(meta, :search_path) do
-        sp when is_binary(sp) and byte_size(sp) > 0 -> Keyword.put(runner_opts, :search_path, sp)
-        _ -> runner_opts
-      end
-
-    case Runner.run_sql(repo_mod, count_sql, count_params, runner_opts) do
-      {:ok, %Result{rows: [[n]]}} when is_integer(n) ->
-        {:ok, n}
-
-      {:ok, %Result{rows: [[n]]}} when is_binary(n) ->
-        case Integer.parse(n) do
-          {v, _} -> {:ok, v}
-          _ -> {:error, :invalid_count}
-        end
-
-      {:ok, %Result{rows: _}} ->
-        {:error, :invalid_count}
-
-      other ->
-        other
+  defp build_runner_opts(meta) do
+    case Map.get(meta, :search_path) do
+      sp when is_binary(sp) and byte_size(sp) > 0 -> [search_path: sp]
+      _ -> []
     end
   end
+
+  defp parse_count_result({:ok, %Result{rows: [[n]]}} = _result) when is_integer(n) do
+    {:ok, n}
+  end
+
+  defp parse_count_result({:ok, %Result{rows: [[n]]}} = _result) when is_binary(n) do
+    case Integer.parse(n) do
+      {v, _} -> {:ok, v}
+      _ -> {:error, :invalid_count}
+    end
+  end
+
+  defp parse_count_result({:ok, %Result{rows: _}}), do: {:error, :invalid_count}
+  defp parse_count_result(other), do: other
 
   defp trim_trailing_semicolon(sql) do
     s = String.trim(sql)

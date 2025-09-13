@@ -12,49 +12,60 @@ defmodule Lotus.Sources.SQLite3 do
     read_only? = Keyword.get(opts, :read_only, true)
     timeout = Keyword.get(opts, :timeout, 15_000)
 
-    # Snapshot whether PRAGMA is supported and the previous value
-    {pragma_supported?, prev_state} =
-      if read_only? do
-        try do
-          case repo.query("PRAGMA query_only") do
-            {:ok, %{rows: [[prev]]}} ->
-              repo.query!("PRAGMA query_only = ON")
-              {true, prev}
-
-            _ ->
-              {false, nil}
-          end
-        rescue
-          error in [Exqlite.Error] ->
-            msg = error.message || Exception.message(error)
-
-            if msg =~ "no such pragma" or msg =~ "unknown pragma" do
-              Logger.warning("""
-              SQLite version does not support PRAGMA query_only.
-              Consider opening the DB in read-only mode
-              (e.g., database=...&mode=ro or database=...&immutable=1).
-              """)
-
-              {false, nil}
-            else
-              reraise error, __STACKTRACE__
-            end
-        end
-      else
-        {false, nil}
-      end
+    {pragma_supported?, prev_state} = setup_read_only_pragma(repo, read_only?)
 
     try do
       repo.transaction(fun, timeout: timeout)
     after
-      if pragma_supported? do
-        try do
-          restore = if prev_state in [0, 1], do: prev_state, else: 0
-          repo.query!("PRAGMA query_only = #{restore}")
-        rescue
-          _ -> :ok
+      restore_pragma_state(repo, pragma_supported?, prev_state)
+    end
+  end
+
+  defp setup_read_only_pragma(_repo, false), do: {false, nil}
+
+  defp setup_read_only_pragma(repo, true) do
+    try do
+      check_and_set_pragma(repo)
+    rescue
+      error in [Exqlite.Error] ->
+        msg = error.message || Exception.message(error)
+
+        if msg =~ "no such pragma" or msg =~ "unknown pragma" do
+          log_pragma_warning()
+          {false, nil}
+        else
+          reraise error, __STACKTRACE__
         end
-      end
+    end
+  end
+
+  defp check_and_set_pragma(repo) do
+    case repo.query("PRAGMA query_only") do
+      {:ok, %{rows: [[prev]]}} ->
+        repo.query!("PRAGMA query_only = ON")
+        {true, prev}
+
+      _ ->
+        {false, nil}
+    end
+  end
+
+  defp log_pragma_warning do
+    Logger.warning("""
+    SQLite version does not support PRAGMA query_only.
+    Consider opening the DB in read-only mode
+    (e.g., database=...&mode=ro or database=...&immutable=1).
+    """)
+  end
+
+  defp restore_pragma_state(_repo, false, _prev_state), do: :ok
+
+  defp restore_pragma_state(repo, true, prev_state) do
+    try do
+      restore = if prev_state in [0, 1], do: prev_state, else: 0
+      repo.query!("PRAGMA query_only = #{restore}")
+    rescue
+      _ -> :ok
     end
   end
 

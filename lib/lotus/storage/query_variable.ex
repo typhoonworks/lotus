@@ -104,21 +104,18 @@ defmodule Lotus.Storage.QueryVariable do
   end
 
   defp validate_select_options(changeset) do
-    if get_field(changeset, :widget) == :select do
-      static_opts = get_field(changeset, :static_options, [])
-      query = get_field(changeset, :options_query)
+    case get_field(changeset, :widget) do
+      :select -> validate_select_has_options(changeset)
+      _ -> changeset
+    end
+  end
 
-      cond do
-        (static_opts == [] or is_nil(static_opts)) and is_nil(query) ->
-          add_error(
-            changeset,
-            :widget,
-            "select must define either static_options or options_query"
-          )
+  defp validate_select_has_options(changeset) do
+    static_opts = get_field(changeset, :static_options, [])
+    query = get_field(changeset, :options_query)
 
-        true ->
-          changeset
-      end
+    if (static_opts == [] or is_nil(static_opts)) and is_nil(query) do
+      add_error(changeset, :widget, "select must define either static_options or options_query")
     else
       changeset
     end
