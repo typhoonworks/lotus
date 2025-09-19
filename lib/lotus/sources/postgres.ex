@@ -3,6 +3,8 @@ defmodule Lotus.Sources.Postgres do
 
   @behaviour Lotus.Source
 
+  alias Lotus.Sources.Default
+
   @postgrex_error Module.concat([:Postgrex, :Error])
 
   @impl true
@@ -57,7 +59,7 @@ defmodule Lotus.Sources.Postgres do
     end
   end
 
-  def format_error(other), do: Lotus.Sources.Default.format_error(other)
+  def format_error(other), do: Default.format_error(other)
 
   @impl true
   def param_placeholder(idx, _var, :date), do: "$#{idx}::date"

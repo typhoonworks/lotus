@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest an idea to improve Lotus
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement!
+        Before you open a pull request, please make sure there is an issue tracking the change.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and why this matters
+      description: Explain the context behind this request. Why is this important? Who benefits? What problems does it solve?
+      placeholder: Describe the use case, the pain today, constraints, and impact.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the problem or use case you're trying to address.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe your proposal at a high level. Highlight breaking changes if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you try? Why is your proposal preferable?
+    validations:
+      required: false
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / trade-offs
+      description: Any risks or trade-offs to be aware of?
+    validations:
+      required: false
+  - type: textarea
+    id: docs
+    attributes:
+      label: Documentation impact
+      description: Does this change require updates to guides, README, or API docs?
+    validations:
+      required: false

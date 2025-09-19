@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Sqlite.QuotedVarsTest do
 
   @moduletag :sqlite
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.SqliteRepo
-  alias Lotus.Fixtures
 
   setup do
     user1 = Fixtures.insert_user(%{name: "Test User", email: "test@example.com"}, SqliteRepo)

@@ -2,8 +2,8 @@ defmodule Lotus.ColumnVisibilityTest do
   use ExUnit.Case
   use Mimic
 
-  alias Lotus.Visibility
   alias Lotus.Schema
+  alias Lotus.Visibility
 
   setup do
     Mimic.copy(Lotus.Config)

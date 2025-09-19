@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
 
   @moduletag :sqlite
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.SqliteRepo, as: Repo
-  alias Lotus.Fixtures
 
   setup do
     u1 = Fixtures.insert_user(%{name: "Window A", email: "window_sqlite_1@example.com"}, Repo)

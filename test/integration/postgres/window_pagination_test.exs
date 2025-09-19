@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Postgres.WindowPaginationTest do
 
   @moduletag :postgres
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.Repo
-  alias Lotus.Fixtures
 
   setup do
     u1 = Fixtures.insert_user(%{name: "Window A", email: "window_pg_1@example.com"}, Repo)

@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
 
   @moduletag :postgres
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.Repo
-  alias Lotus.Fixtures
 
   setup do
     user = Fixtures.insert_user(%{name: "Test User"}, Repo)

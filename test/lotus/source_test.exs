@@ -2,15 +2,16 @@ defmodule Lotus.SourceTest do
   use Lotus.Case, async: true
 
   alias Lotus.Source
+  alias Lotus.Test.{MysqlRepo, Repo, SqliteRepo}
 
   describe "execute_in_transaction/3" do
     @tag :postgres
     test "executes PostgreSQL transaction with read-only mode" do
       result =
         Source.execute_in_transaction(
-          Lotus.Test.Repo,
+          Repo,
           fn ->
-            Lotus.Test.Repo.query!("SELECT 1 as test_value")
+            Repo.query!("SELECT 1 as test_value")
           end,
           read_only: true
         )
@@ -22,9 +23,9 @@ defmodule Lotus.SourceTest do
     test "executes SQLite transaction with read-only mode" do
       result =
         Source.execute_in_transaction(
-          Lotus.Test.SqliteRepo,
+          SqliteRepo,
           fn ->
-            Lotus.Test.SqliteRepo.query!("SELECT 1 as test_value")
+            SqliteRepo.query!("SELECT 1 as test_value")
           end,
           read_only: true
         )
@@ -36,9 +37,9 @@ defmodule Lotus.SourceTest do
     test "executes MySQL transaction with read-only mode" do
       result =
         Source.execute_in_transaction(
-          Lotus.Test.MysqlRepo,
+          MysqlRepo,
           fn ->
-            Lotus.Test.MysqlRepo.query!("SELECT 1 as test_value")
+            MysqlRepo.query!("SELECT 1 as test_value")
           end,
           read_only: true
         )
@@ -50,42 +51,42 @@ defmodule Lotus.SourceTest do
   describe "set_statement_timeout/2" do
     @tag :postgres
     test "sets statement timeout for PostgreSQL" do
-      assert :ok = Source.set_statement_timeout(Lotus.Test.Repo, 5000)
+      assert :ok = Source.set_statement_timeout(Repo, 5000)
     end
 
     @tag :sqlite
     test "is a no-op for SQLite" do
-      assert :ok = Source.set_statement_timeout(Lotus.Test.SqliteRepo, 5000)
+      assert :ok = Source.set_statement_timeout(SqliteRepo, 5000)
     end
 
     @tag :mysql
     test "sets max_execution_time for MySQL" do
-      assert :ok = Source.set_statement_timeout(Lotus.Test.MysqlRepo, 5000)
+      assert :ok = Source.set_statement_timeout(MysqlRepo, 5000)
     end
   end
 
   describe "set_search_path/2" do
     @tag :postgres
     test "sets search_path for PostgreSQL" do
-      assert :ok = Source.set_search_path(Lotus.Test.Repo, "public")
+      assert :ok = Source.set_search_path(Repo, "public")
     end
 
     @tag :sqlite
     test "is a no-op for SQLite" do
-      assert :ok = Source.set_search_path(Lotus.Test.SqliteRepo, "ignored")
+      assert :ok = Source.set_search_path(SqliteRepo, "ignored")
     end
 
     @tag :mysql
     test "is a no-op for MySQL" do
-      assert :ok = Source.set_search_path(Lotus.Test.MysqlRepo, "ignored")
+      assert :ok = Source.set_search_path(MysqlRepo, "ignored")
     end
 
     test "handles nil search_path" do
-      assert :ok = Source.set_search_path(Lotus.Test.Repo, nil)
+      assert :ok = Source.set_search_path(Repo, nil)
     end
 
     test "handles non-binary search_path" do
-      assert :ok = Source.set_search_path(Lotus.Test.Repo, 123)
+      assert :ok = Source.set_search_path(Repo, 123)
     end
   end
 
@@ -152,22 +153,22 @@ defmodule Lotus.SourceTest do
   describe "param_placeholder/4" do
     @tag :postgres
     test "returns postgres placeholders with $N" do
-      assert Source.param_placeholder(Lotus.Test.Repo, 1, "id", :integer) == "$1::integer"
-      assert Source.param_placeholder(Lotus.Test.Repo, 2, "id", :integer) == "$2::integer"
+      assert Source.param_placeholder(Repo, 1, "id", :integer) == "$1::integer"
+      assert Source.param_placeholder(Repo, 2, "id", :integer) == "$2::integer"
     end
 
     @tag :sqlite
     test "returns sqlite placeholders with ?" do
-      assert Source.param_placeholder(Lotus.Test.SqliteRepo, 1, "id", :integer) == "?"
-      assert Source.param_placeholder(Lotus.Test.SqliteRepo, 2, "id", :integer) == "?"
+      assert Source.param_placeholder(SqliteRepo, 1, "id", :integer) == "?"
+      assert Source.param_placeholder(SqliteRepo, 2, "id", :integer) == "?"
     end
 
     @tag :mysql
     test "returns mysql placeholders with ?" do
-      assert Source.param_placeholder(Lotus.Test.MysqlRepo, 1, "id", :integer) ==
+      assert Source.param_placeholder(MysqlRepo, 1, "id", :integer) ==
                "CAST(? AS SIGNED)"
 
-      assert Source.param_placeholder(Lotus.Test.MysqlRepo, 2, "id", :integer) ==
+      assert Source.param_placeholder(MysqlRepo, 2, "id", :integer) ==
                "CAST(? AS SIGNED)"
     end
 

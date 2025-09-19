@@ -3,7 +3,7 @@ defmodule Lotus.Runner do
   Read-only SQL execution with safety checks, param binding, and result shaping.
   """
 
-  alias Lotus.{Source, Sources, Result, Preflight, Visibility}
+  alias Lotus.{Preflight, Result, Source, Sources, Visibility}
   alias Lotus.Preflight.Relations
   alias Lotus.Visibility.Policy
 

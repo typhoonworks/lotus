@@ -6,6 +6,9 @@ defmodule Lotus.Case do
 
   use ExUnit.CaseTemplate
 
+  alias Ecto.Adapters.SQL
+  alias Lotus.Test.{MysqlRepo, Repo, SqliteRepo}
+
   using do
     quote do
       alias Lotus.Test.Repo
@@ -21,19 +24,19 @@ defmodule Lotus.Case do
     shared = not context[:async]
 
     # Always setup PostgreSQL sandbox (for Lotus storage)
-    pid1 = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.Repo, shared: shared)
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid1) end)
+    pid1 = SQL.Sandbox.start_owner!(Repo, shared: shared)
+    on_exit(fn -> SQL.Sandbox.stop_owner(pid1) end)
 
     # If test needs SQLite, set up SQLite sandbox too
     if context[:sqlite] do
-      pid2 = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.SqliteRepo, shared: shared)
-      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid2) end)
+      pid2 = SQL.Sandbox.start_owner!(SqliteRepo, shared: shared)
+      on_exit(fn -> SQL.Sandbox.stop_owner(pid2) end)
     end
 
     # If test needs MySQL, set up MySQL sandbox too
     if context[:mysql] do
-      pid3 = Ecto.Adapters.SQL.Sandbox.start_owner!(Lotus.Test.MysqlRepo, shared: shared)
-      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid3) end)
+      pid3 = SQL.Sandbox.start_owner!(MysqlRepo, shared: shared)
+      on_exit(fn -> SQL.Sandbox.stop_owner(pid3) end)
     end
 
     :ok

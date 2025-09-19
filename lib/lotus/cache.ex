@@ -5,7 +5,7 @@ defmodule Lotus.Cache do
 
   alias Lotus.Config
 
-  def enabled?(), do: match?({:ok, _}, adapter())
+  def enabled?, do: match?({:ok, _}, adapter())
 
   def get(key) do
     case adapter() do

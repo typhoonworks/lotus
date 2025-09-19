@@ -9,9 +9,9 @@ defmodule Lotus.Preflight do
   denied tables, even if they're accessed through views or complex subqueries.
   """
 
-  alias Lotus.Visibility
-  alias Lotus.Sources
   alias Lotus.Preflight.Relations
+  alias Lotus.Sources
+  alias Lotus.Visibility
 
   @doc """
   Authorizes a SQL query by checking all relations it would access.

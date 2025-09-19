@@ -33,7 +33,7 @@ defmodule Lotus.PreflightTest do
   describe "fallback behavior" do
     test "allows queries for unknown adapters" do
       defmodule UnknownRepo do
-        def __adapter__(), do: Some.Unknown.Adapter
+        def __adapter__, do: Some.Unknown.Adapter
       end
 
       assert :ok = Preflight.authorize(UnknownRepo, "postgres", "SELECT * FROM anything", [])

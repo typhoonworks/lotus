@@ -105,7 +105,9 @@
           {Credo.Check.Readability.ParenthesesOnZeroArityDefs, []},
           {Credo.Check.Readability.PipeIntoAnonymousFunctions, []},
           {Credo.Check.Readability.PredicateFunctionNames, []},
-          {Credo.Check.Readability.PreferImplicitTry, []},
+          {Credo.Check.Readability.PreferImplicitTry, [
+            files: %{excluded: ["lib/lotus/sources/sqlite.ex", "lib/lotus/source.ex", "lib/lotus.ex"]}
+          ]},
           {Credo.Check.Readability.RedundantBlankLines, []},
           {Credo.Check.Readability.Semicolons, []},
           {Credo.Check.Readability.SpaceAfterCommas, []},

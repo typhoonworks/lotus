@@ -4,9 +4,9 @@ defmodule Lotus.Integration.StreamtToCSVTest do
   @moduletag :postgres
 
   alias Lotus.Export
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.Repo
-  alias Lotus.Fixtures
 
   setup do
     u1 = Fixtures.insert_user(%{name: "Stream A", email: "stream_pg_1@example.com"}, Repo)

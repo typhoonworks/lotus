@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Mysql.WindowPaginationTest do
 
   @moduletag :mysql
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.MysqlRepo, as: Repo
-  alias Lotus.Fixtures
 
   setup do
     u1 = Fixtures.insert_user(%{name: "Window A", email: "window_mysql_1@example.com"}, Repo)
