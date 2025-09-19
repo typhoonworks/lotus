@@ -5,6 +5,8 @@ defmodule Lotus.Sources.SQLite3 do
 
   require Logger
 
+  alias Lotus.Sources.Default
+
   @exlite_error Module.concat([:Exqlite, :Error])
 
   @impl true
@@ -24,19 +26,17 @@ defmodule Lotus.Sources.SQLite3 do
   defp setup_read_only_pragma(_repo, false), do: {false, nil}
 
   defp setup_read_only_pragma(repo, true) do
-    try do
-      check_and_set_pragma(repo)
-    rescue
-      error in [Exqlite.Error] ->
-        msg = error.message || Exception.message(error)
+    check_and_set_pragma(repo)
+  rescue
+    error in [Exqlite.Error] ->
+      msg = error.message || Exception.message(error)
 
-        if msg =~ "no such pragma" or msg =~ "unknown pragma" do
-          log_pragma_warning()
-          {false, nil}
-        else
-          reraise error, __STACKTRACE__
-        end
-    end
+      if msg =~ "no such pragma" or msg =~ "unknown pragma" do
+        log_pragma_warning()
+        {false, nil}
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
   defp check_and_set_pragma(repo) do
@@ -61,12 +61,10 @@ defmodule Lotus.Sources.SQLite3 do
   defp restore_pragma_state(_repo, false, _prev_state), do: :ok
 
   defp restore_pragma_state(repo, true, prev_state) do
-    try do
-      restore = if prev_state in [0, 1], do: prev_state, else: 0
-      repo.query!("PRAGMA query_only = #{restore}")
-    rescue
-      _ -> :ok
-    end
+    restore = if prev_state in [0, 1], do: prev_state, else: 0
+    repo.query!("PRAGMA query_only = #{restore}")
+  rescue
+    _ -> :ok
   end
 
   @impl true
@@ -80,7 +78,7 @@ defmodule Lotus.Sources.SQLite3 do
     "SQLite Error: " <> (Map.get(e, :message) || Exception.message(e))
   end
 
-  def format_error(other), do: Lotus.Sources.Default.format_error(other)
+  def format_error(other), do: Default.format_error(other)
 
   @impl true
   def param_placeholder(_idx, _var, _type), do: "?"

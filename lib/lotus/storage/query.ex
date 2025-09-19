@@ -13,9 +13,9 @@ defmodule Lotus.Storage.Query do
   import Ecto.Changeset
 
   alias Lotus.Config
-  alias Lotus.Storage.QueryVariable
   alias Lotus.Sources
   alias Lotus.SQL.Transformer
+  alias Lotus.Storage.QueryVariable
 
   @type t :: %__MODULE__{
           id: term(),

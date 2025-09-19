@@ -1,10 +1,10 @@
 defmodule Lotus.RunnerTest do
   use Lotus.Case, async: true
 
+  alias Lotus.Fixtures
   alias Lotus.Runner
   alias Lotus.Test.Repo
   alias Lotus.Test.SqliteRepo
-  alias Lotus.Fixtures
 
   setup do
     fixtures = Fixtures.setup_test_data()

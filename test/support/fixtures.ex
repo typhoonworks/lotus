@@ -3,9 +3,9 @@ defmodule Lotus.Fixtures do
   Test fixtures for database tests.
   """
 
+  alias Lotus.Storage
   alias Lotus.Test.Repo
   alias Lotus.Test.Schemas
-  alias Lotus.Storage
 
   def insert_user(attrs \\ %{}, repo \\ Repo) do
     defaults = %{

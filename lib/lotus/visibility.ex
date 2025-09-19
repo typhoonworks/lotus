@@ -191,6 +191,8 @@ defmodule Lotus.Visibility do
   """
 
   alias Lotus.Config
+  alias Lotus.Source
+  alias Lotus.Sources.Default
   alias Lotus.Visibility.Policy
 
   @doc """
@@ -277,9 +279,9 @@ defmodule Lotus.Visibility do
     repo = Config.data_repos() |> Map.get(repo_name)
 
     if is_nil(repo) do
-      Lotus.Sources.Default.builtin_schema_denies(nil)
+      Default.builtin_schema_denies(nil)
     else
-      Lotus.Source.builtin_schema_denies(repo)
+      Source.builtin_schema_denies(repo)
     end
   end
 
@@ -316,9 +318,9 @@ defmodule Lotus.Visibility do
     repo = Config.data_repos() |> Map.get(repo_name)
 
     if is_nil(repo) do
-      Lotus.Sources.Default.builtin_denies(nil)
+      Default.builtin_denies(nil)
     else
-      Lotus.Source.builtin_denies(repo)
+      Source.builtin_denies(repo)
     end
   end
 

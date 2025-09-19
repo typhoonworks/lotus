@@ -5,6 +5,8 @@ defmodule Lotus.CacheCase do
 
   use ExUnit.CaseTemplate
 
+  alias Lotus.Cache.ETS
+
   using do
     quote do
       import Lotus.CacheCase
@@ -14,7 +16,7 @@ defmodule Lotus.CacheCase do
   setup do
     cleanup_cache_tables()
 
-    {:ok, _} = Lotus.Cache.ETS.start_link([])
+    {:ok, _} = ETS.start_link([])
 
     on_exit(fn -> cleanup_cache_tables() end)
 

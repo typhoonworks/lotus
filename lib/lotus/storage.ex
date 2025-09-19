@@ -6,8 +6,8 @@ defmodule Lotus.Storage do
   """
 
   import Ecto.Query
-  alias Lotus.Storage.Query
   alias Lotus.Result
+  alias Lotus.Storage.Query
 
   @type id :: integer() | binary()
   @type attrs :: map()

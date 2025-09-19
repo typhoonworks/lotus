@@ -289,11 +289,9 @@ defmodule Lotus.Source do
   defp resolve_repo_safe(repo) when is_atom(repo), do: repo
 
   defp resolve_repo_safe(repo_name) when is_binary(repo_name) do
-    try do
-      Lotus.Config.get_data_repo!(repo_name)
-    rescue
-      _ -> nil
-    end
+    Lotus.Config.get_data_repo!(repo_name)
+  rescue
+    _ -> nil
   end
 
   defp impl_for(repo) do

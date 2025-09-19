@@ -50,25 +50,25 @@ defmodule Lotus.Visibility.Policy do
   Creates an allow policy for schemas.
   """
   @spec schema_allow() :: :allow
-  def schema_allow(), do: :allow
+  def schema_allow, do: :allow
 
   @doc """
   Creates a deny policy for schemas.
   """
-  @spec schema_deny() :: :deny
-  def schema_deny(), do: :deny
+  @spec schema_deny :: :deny
+  def schema_deny, do: :deny
 
   @doc """
   Creates an allow policy for tables.
   """
-  @spec table_allow() :: :allow
-  def table_allow(), do: :allow
+  @spec table_allow :: :allow
+  def table_allow, do: :allow
 
   @doc """
   Creates a deny policy for tables.
   """
-  @spec table_deny() :: :deny
-  def table_deny(), do: :deny
+  @spec table_deny :: :deny
+  def table_deny, do: :deny
 
   @doc """
   Creates a policy that allows a column to be shown normally.

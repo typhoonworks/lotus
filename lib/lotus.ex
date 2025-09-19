@@ -63,8 +63,9 @@ defmodule Lotus do
           window: window_opts
         ]
 
-  alias Lotus.{Config, Storage, Runner, Result, Schema, Sources}
+  alias Lotus.Cache.Key
   alias Lotus.Storage.Query
+  alias Lotus.{Config, Result, Runner, Schema, Sources, Storage}
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
   def start_link(opts \\ []), do: Lotus.Supervisor.start_link(opts)
@@ -215,11 +216,9 @@ defmodule Lotus do
   end
 
   defp build_sql_params(q, vars) do
-    try do
-      Query.to_sql_params(q, vars)
-    rescue
-      e in ArgumentError -> {:error, e.message}
-    end
+    Query.to_sql_params(q, vars)
+  rescue
+    e in ArgumentError -> {:error, e.message}
   end
 
   defp execute_query(q, sql, params, vars, opts) do
@@ -569,7 +568,7 @@ defmodule Lotus do
   end
 
   defp result_key(sql, bound_vars_map, repo_name, search_path) do
-    Lotus.Cache.Key.result(sql, bound_vars_map,
+    Key.result(sql, bound_vars_map,
       data_repo: repo_name,
       search_path: search_path,
       lotus_version: Lotus.version()

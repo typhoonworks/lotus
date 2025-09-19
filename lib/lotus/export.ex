@@ -3,10 +3,10 @@ defmodule Lotus.Export do
   Export functionality for Lotus.Result to various formats.
   """
 
-  alias Lotus.Result
-  alias Lotus.Value
-  alias Lotus.Storage.Query
   alias Lotus.Config
+  alias Lotus.Result
+  alias Lotus.Storage.Query
+  alias Lotus.Value
 
   @default_page_size 1000
 

@@ -3,9 +3,9 @@ defmodule Lotus.Integration.Mysql.IntervalQueryTest do
 
   @moduletag :mysql
 
+  alias Lotus.Fixtures
   alias Lotus.Storage.Query
   alias Lotus.Test.MysqlRepo
-  alias Lotus.Fixtures
 
   setup do
     user = Fixtures.insert_user(%{name: "Test User"}, MysqlRepo)

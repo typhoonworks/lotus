@@ -3,21 +3,23 @@ defmodule Lotus.Integration.CachingTest do
   use Mimic
 
   alias Lotus.{Cache, Config, Fixtures}
+  alias Lotus.Cache.ETS
   alias Lotus.Storage.Query
+  alias Repo
 
   setup do
     Mimic.copy(Lotus.Config)
     Mimic.copy(Lotus.Cache)
 
     cleanup_cache_tables()
-    {:ok, _} = Lotus.Cache.ETS.start_link([])
+    {:ok, _} = ETS.start_link([])
 
     Config
-    |> stub(:cache_adapter, fn -> {:ok, Lotus.Cache.ETS} end)
+    |> stub(:cache_adapter, fn -> {:ok, ETS} end)
     |> stub(:cache_namespace, fn -> "integration_test" end)
     |> stub(:cache_config, fn ->
       %{
-        adapter: Lotus.Cache.ETS,
+        adapter: ETS,
         namespace: "integration_test",
         profiles: %{
           results: [ttl_ms: 30_000],
@@ -72,7 +74,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
       assert [["Cache Test User", "cache@test.com"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id])
 
@@ -92,7 +94,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [profile: :options])
       assert [["Cache Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [profile: :options])
 
@@ -112,7 +114,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [ttl_ms: 5_000])
       assert [["cache@test.com"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [ttl_ms: 5_000])
 
@@ -127,7 +129,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
       assert [["Cache Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: :refresh)
       assert [] = result2.rows
@@ -154,7 +156,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
       assert [["Cache Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
       assert result1.rows == result2.rows
@@ -171,7 +173,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
       assert [["Cache Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: :bypass)
       assert [] = result2.rows
@@ -217,7 +219,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
       assert [["Query Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.run_query(query, vars: %{"user_id" => user.id})
       assert result1.rows == result2.rows
@@ -234,7 +236,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
       assert [["Query Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} =
                Lotus.run_query(query, vars: %{"user_id" => user.id}, cache: :refresh)
@@ -256,7 +258,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
       assert [["Query Test User"]] = result1.rows
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} =
                Lotus.run_query(query, vars: %{"user_id" => user.id}, cache: :bypass)
@@ -297,7 +299,7 @@ defmodule Lotus.Integration.CachingTest do
       assert %{row_count: count1} = result1
       assert count1 >= 1
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users")
       assert result1.row_count == result2.row_count
@@ -311,7 +313,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.get_table_stats("postgres", "test_users")
       assert %{row_count: count1} = result1
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users", cache: :bypass)
       assert result2.row_count == count1 - 1
@@ -326,7 +328,7 @@ defmodule Lotus.Integration.CachingTest do
       assert {:ok, result1} = Lotus.get_table_stats("postgres", "test_users")
       assert %{row_count: count1} = result1
 
-      Lotus.Test.Repo.delete!(user)
+      Repo.delete!(user)
 
       assert {:ok, result2} = Lotus.get_table_stats("postgres", "test_users", cache: :refresh)
       assert result2.row_count == count1 - 1

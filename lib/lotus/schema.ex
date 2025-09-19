@@ -24,7 +24,7 @@ defmodule Lotus.Schema do
   - **SQLite**: Returns table names as strings (schema-less)
   """
 
-  alias Lotus.{Visibility, Config, Source, Sources}
+  alias Lotus.{Config, Source, Sources, Visibility}
   alias Lotus.Visibility.Policy
 
   @doc """
