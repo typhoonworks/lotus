@@ -1,0 +1,107 @@
+name: "🐛 Bug Report"
+description: "Something isn't working as expected"
+title: "[Bug] "
+labels: ["bug"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+  - type: input
+    id: elixir_version
+    attributes:
+      label: "Elixir & OTP versions"
+      placeholder: "Elixir 1.18.3, OTP 27"
+    validations:
+      required: true
+
+  - type: input
+    id: lotus_version
+    attributes:
+      label: "Lotus version"
+      description: "Paste the relevant dependency line from your `mix.exs`"
+      placeholder: '{:lotus, "~> 0.9.2"}'
+    validations:
+      required: true
+
+  - type: input
+    id: ecto_version
+    attributes:
+      label: "Ecto version"
+      description: "From `mix.exs` or `mix hex.info ecto`"
+      placeholder: "ecto 3.11.2"
+    validations:
+      required: true
+
+  - type: input
+    id: db_adapter
+    attributes:
+      label: "Database & adapter"
+      description: "Database type and adapter version"
+      placeholder: "PostgreSQL 16, postgrex 0.17"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: "Operating System"
+      placeholder: "macOS 14.6.1, Ubuntu 22.04, Windows 11"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      description: "Exact steps and commands to reproduce the issue"
+      placeholder: |
+        1. mix deps.get
+        2. Add lotus configuration to mix.exs
+        3. Run mix ecto.gen.migration create_lotus_tables
+        4. mix ecto.migrate
+        5. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: minimal_repro
+    attributes:
+      label: "Minimal repro code / snippet"
+      description: "A code snippet or link to a minimal repo that reproduces the problem"
+      placeholder: "Paste the smallest snippet that reproduces the problem"
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "What actually happened?"
+      description: "Paste the full error message / stacktrace"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: "Lotus configuration (optional)"
+      description: "Relevant parts of your Lotus configuration"
+      placeholder: |
+        config :my_app, Lotus,
+          visibility_rules: [...],
+          ...
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: "Confirm"
+      options:
+        - label: "I am using a **tagged release**, not the `main` branch."
+          required: true
+        - label: "I searched existing issues and discussions for this problem."
+          required: true

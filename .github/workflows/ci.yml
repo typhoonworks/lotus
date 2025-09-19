@@ -81,6 +81,8 @@ jobs:
 
       - run: mix compile --warnings-as-errors
 
+      - run: mix credo --strict
+
       - run: mix test.setup
         env:
           MYSQL_URL: mysql://root:mysql@localhost:${{job.services.mysql.ports[3306]}}/lotus_test
