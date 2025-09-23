@@ -1,5 +1,11 @@
 defmodule Lotus.Cache.ETS do
-  @moduledoc false
+  @moduledoc """
+  An ETS-based, local, in-memory cache adapter for Lotus.
+
+  This is the default cache adapter if none is specified.
+
+  If you want a distributed cache, consider using `Lotus.Cache.Cachex`.
+  """
 
   @behaviour Lotus.Cache.Adapter
 

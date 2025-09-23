@@ -1,5 +1,8 @@
 defmodule Lotus.Supervisor do
-  @moduledoc false
+  @moduledoc """
+  Top-level supervisor for Lotus.
+  """
+
   use Supervisor
 
   @spec start_link(keyword) :: Supervisor.on_start()
@@ -18,6 +21,7 @@ defmodule Lotus.Supervisor do
       case cache_conf do
         nil -> []
         %{adapter: Lotus.Cache.ETS} -> [{Lotus.Cache.ETS, []}]
+        %{adapter: Lotus.Cache.Cachex} -> cachex_config(cache_conf)
         %{adapter: _other} -> []
       end
 
@@ -31,5 +35,16 @@ defmodule Lotus.Supervisor do
       start: {__MODULE__, :start_link, [opts]},
       type: :supervisor
     }
+  end
+
+  defp cachex_config(cache_conf) do
+    Code.ensure_loaded?(Cachex) or
+      raise """
+      Cachex is not available. Please add {:cachex, "~> 4.0"} to your dependencies.
+      """
+
+    cachex_opts = Keyword.get(cache_conf, :cachex_opts, [])
+
+    [{Cachex, [:lotus_cache, cachex_opts]}]
   end
 end

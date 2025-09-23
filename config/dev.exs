@@ -42,6 +42,10 @@ config :lotus,
         "information"
       ]
     ]
+  },
+  cache: %{
+    adapter: Lotus.Cache.ETS,
+    namespace: "lotus_dev"
   }
 
 config :lotus, Lotus.Test.Repo,
