@@ -108,7 +108,8 @@ defmodule Lotus.Cache.Cachex do
   end
 
   defp do_put(cache, key, value, ttl_ms, opts) do
-    encoded = encode(value)
+    compress = Keyword.get(opts, :compress, true)
+    encoded = encode(value, compress)
     max_bytes = Keyword.get(opts, :max_bytes, 5_000_000)
 
     if byte_size(encoded) <= max_bytes do
