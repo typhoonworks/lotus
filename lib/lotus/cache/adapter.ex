@@ -37,13 +37,13 @@ defmodule Lotus.Cache.Adapter do
   @type opts :: Keyword.t()
 
   @doc """
-  Returns the adapter specification.
+  Returns the adapter specification configuration.
 
   This should return a keyword list of configuration options specific to the adapter.
 
-  Called by `Lotus.Supervisor` to start the cache adapter.
+  Called by `Lotus.Supervisor` to start the cache adapter under the supervisor.
   """
-  @callback spec :: keyword()
+  @callback spec_config :: keyword()
 
   @doc """
   Retrieves a value from the cache by key.

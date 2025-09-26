@@ -26,6 +26,12 @@ defmodule Lotus.Cache.ETS do
     {:ok, self()}
   end
 
+  @impl Lotus.Cache.Adapter
+  def spec_config do
+    [{Lotus.Cache.ETS, []}]
+  end
+
+  @impl Lotus.Cache.Adapter
   def get(key) do
     case :ets.lookup(@table, key) do
       [{^key, value_bin, expires_at}] ->
@@ -41,6 +47,7 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def put(key, value, ttl_ms, opts) do
     encoded =
       if Keyword.get(opts, :compress, true),
@@ -58,11 +65,13 @@ defmodule Lotus.Cache.ETS do
     :ok
   end
 
+  @impl Lotus.Cache.Adapter
   def delete(key) do
     :ets.delete(@table, key)
     :ok
   end
 
+  @impl Lotus.Cache.Adapter
   def touch(key, ttl_ms) do
     case :ets.lookup(@table, key) do
       [{^key, v, _old}] ->
@@ -74,6 +83,7 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def get_or_store(key, ttl_ms, fun, opts) do
     case get(key) do
       {:ok, v} ->
@@ -105,6 +115,7 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def invalidate_tags(tags) do
     for tag <- tags do
       for {^tag, key} <- :ets.lookup(@tag_table, tag) do
