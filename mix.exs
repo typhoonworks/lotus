@@ -41,6 +41,7 @@ defmodule Lotus.MixProject do
 
   defp deps do
     [
+      {:cachex, "~> 4.0", optional: true},
       {:ecto, "~> 3.10"},
       {:ecto_sql, "~> 3.10"},
       {:ecto_sqlite3, "~> 0.21", optional: true},
