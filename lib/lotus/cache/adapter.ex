@@ -118,5 +118,5 @@ defmodule Lotus.Cache.Adapter do
   @doc """
   Decodes a binary back into its original term.
   """
-  def decode(bin), do: :erlang.binary_to_term(bin)
+  def decode(bin), do: :erlang.binary_to_term(bin, [:safe])
 end
