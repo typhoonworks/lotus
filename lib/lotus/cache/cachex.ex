@@ -15,7 +15,11 @@ defmodule Lotus.Cache.Cachex do
   choose your preferred router by [following the instructions in the Cachex docs](https://hexdocs.pm/cachex/cache-routers.html#default-routers).
   """
 
-  @behaviour Lotus.Cache.Adapter
+  use Lotus.Cache.Adapter
+
+  import Cachex.Spec
+
+  alias Lotus.Config
 
   @cache_name :lotus_cache
   @tag_cache_name :lotus_cache_tags
@@ -38,10 +42,26 @@ defmodule Lotus.Cache.Cachex do
   end
 
   @impl Lotus.Cache.Adapter
+  def spec_config do
+    Code.ensure_loaded?(Cachex) or
+      raise """
+      Cachex is not available. Please add {:cachex, "~> 4.0"} to your dependencies.
+      """
+
+    cachex_opts =
+      case Config.cache_config() do
+        %{cachex_opts: opts} when is_list(opts) -> opts
+        _ -> [router: router(module: Cachex.Router.Ring, options: [monitor: true])]
+      end
+
+    [{Cachex, [:lotus_cache, cachex_opts]}]
+  end
+
+  @impl Lotus.Cache.Adapter
   def get(key) do
     case Cachex.get(@cache_name, key) do
       {:ok, nil} -> :miss
-      {:ok, value} -> {:ok, value}
+      {:ok, value} -> {:ok, decode(value)}
     end
   end
 

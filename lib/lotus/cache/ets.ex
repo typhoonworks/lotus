@@ -7,7 +7,7 @@ defmodule Lotus.Cache.ETS do
   If you want a distributed cache, consider using `Lotus.Cache.Cachex`.
   """
 
-  @behaviour Lotus.Cache.Adapter
+  use Lotus.Cache.Adapter
 
   @table :lotus_cache
   @tag_table :lotus_cache_tags
@@ -160,5 +160,4 @@ defmodule Lotus.Cache.ETS do
 
   defp expired?(ts), do: ts <= now_ms()
   defp now_ms, do: System.monotonic_time(:millisecond)
-  defp decode(bin), do: :erlang.binary_to_term(bin)
 end

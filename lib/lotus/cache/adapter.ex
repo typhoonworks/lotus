@@ -12,6 +12,16 @@ defmodule Lotus.Cache.Adapter do
   - `Lotus.Cache.ETS` - Default ETS-based local in-memory cache
   - `Lotus.Cache.Cachex` - Cachex-based cache supporting local and distributed modes
 
+  ## Usage
+
+  Simply `use` the behavior in your adapter implementation:
+
+      defmodule MyApp.CustomCacheAdapter do
+        use Lotus.Cache.Adapter
+
+        # Implement required callbacks...
+      end
+
   ## Configuration
 
   Configure your chosen adapter in your application config:
@@ -23,6 +33,14 @@ defmodule Lotus.Cache.Adapter do
         }
 
   """
+
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour Lotus.Cache.Adapter
+
+      defdelegate decode(bin), to: Lotus.Cache.Adapter
+    end
+  end
 
   @typedoc false
   @type key :: binary()
@@ -82,4 +100,9 @@ defmodule Lotus.Cache.Adapter do
   Updates the TTL of an existing cache entry without modifying its value.
   """
   @callback touch(key, ttl_ms) :: :ok | {:error, term}
+
+  @doc """
+  Decodes a binary back into its original term.
+  """
+  def decode(bin), do: :erlang.binary_to_term(bin)
 end

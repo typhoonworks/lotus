@@ -5,6 +5,7 @@ defmodule Lotus.Supervisor do
 
   use Supervisor
 
+  alias Lotus.Cache.Cachex
   alias Lotus.Cache.ETS
 
   @spec start_link(keyword) :: Supervisor.on_start()
@@ -21,9 +22,8 @@ defmodule Lotus.Supervisor do
 
     children =
       case cache_conf do
+        %{adapter: adapter} when adapter in [ETS, Cachex] -> adapter.spec_config()
         nil -> []
-        %{adapter: Lotus.Cache.Cachex} -> cachex_config(cache_conf)
-        %{adapter: adapter} when adapter in [ETS] -> adapter.spec_config()
       end
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -36,16 +36,5 @@ defmodule Lotus.Supervisor do
       start: {__MODULE__, :start_link, [opts]},
       type: :supervisor
     }
-  end
-
-  defp cachex_config(cache_conf) do
-    Code.ensure_loaded?(Cachex) or
-      raise """
-      Cachex is not available. Please add {:cachex, "~> 4.0"} to your dependencies.
-      """
-
-    cachex_opts = Keyword.get(cache_conf, :cachex_opts, [])
-
-    [{Cachex, [:lotus_cache, cachex_opts]}]
   end
 end
