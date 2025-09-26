@@ -102,20 +102,24 @@ defmodule Lotus.Cache.Cachex do
   def invalidate_tags(tags) do
     Cachex.transaction(@tag_cache_name, tags, fn tag_cache ->
       for tag <- tags do
-        {:ok, keys} = Cachex.get(tag_cache, tag)
-
-        if is_list(keys) do
-          Cachex.transaction(@cache_name, keys, fn key_cache ->
-            for key <- keys do
-              Cachex.del(key_cache, key)
-            end
-          end)
-        end
+        tag_cache
+        |> Cachex.get(tag)
+        |> delete_tagged_keys()
       end
     end)
 
     :ok
   end
+
+  defp delete_tagged_keys({:ok, keys}) when is_list(keys) do
+    Cachex.transaction(@cache_name, keys, fn key_cache ->
+      for key <- keys do
+        Cachex.del(key_cache, key)
+      end
+    end)
+  end
+
+  defp delete_tagged_keys(_), do: :noop
 
   @impl Lotus.Cache.Adapter
   def touch(key, ttl_ms) do
