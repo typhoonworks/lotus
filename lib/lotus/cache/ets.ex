@@ -49,10 +49,7 @@ defmodule Lotus.Cache.ETS do
 
   @impl Lotus.Cache.Adapter
   def put(key, value, ttl_ms, opts) do
-    encoded =
-      if Keyword.get(opts, :compress, true),
-        do: :erlang.term_to_binary(value, [:compressed]),
-        else: :erlang.term_to_binary(value)
+    encoded = encode(value)
 
     max_bytes = Keyword.get(opts, :max_bytes, 5_000_000)
     if byte_size(encoded) > max_bytes, do: :ok, else: do_put(key, encoded, ttl_ms, opts)

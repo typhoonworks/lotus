@@ -38,6 +38,7 @@ defmodule Lotus.Cache.Adapter do
     quote do
       @behaviour Lotus.Cache.Adapter
 
+      defdelegate encode(value, compress \\ true), to: Lotus.Cache.Adapter
       defdelegate decode(bin), to: Lotus.Cache.Adapter
     end
   end
@@ -100,6 +101,19 @@ defmodule Lotus.Cache.Adapter do
   Updates the TTL of an existing cache entry without modifying its value.
   """
   @callback touch(key, ttl_ms) :: :ok | {:error, term}
+
+  @doc """
+  Encodes a value into a binary for storage.
+
+  The `compress` flag indicates whether to use compression.
+  """
+  def encode(value, compress) do
+    if compress do
+      :erlang.term_to_binary(value, [:compressed])
+    else
+      :erlang.term_to_binary(value)
+    end
+  end
 
   @doc """
   Decodes a binary back into its original term.
