@@ -62,7 +62,7 @@ defmodule Lotus.Cache.Adapter do
 
   Called by `Lotus.Supervisor` to start the cache adapter under the supervisor.
   """
-  @callback spec_config :: keyword()
+  @callback spec_config :: list(Supervisor.child_spec())
 
   @doc """
   Retrieves a value from the cache by key.

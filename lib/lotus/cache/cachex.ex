@@ -24,23 +24,6 @@ defmodule Lotus.Cache.Cachex do
   @cache_name :lotus_cache
   @tag_cache_name :lotus_cache_tags
 
-  def child_spec(_opts \\ []) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [[]]},
-      type: :supervisor
-    }
-  end
-
-  def start_link(_opts) do
-    Code.ensure_loaded?(Cachex) or
-      raise """
-      Cachex is not available. Please add {:cachex, "~> 4.0"} to your dependencies.
-      """
-
-    {:ok, self()}
-  end
-
   @impl Lotus.Cache.Adapter
   def spec_config do
     Code.ensure_loaded?(Cachex) or
@@ -54,7 +37,14 @@ defmodule Lotus.Cache.Cachex do
         _ -> [router: router(module: Cachex.Router.Ring, options: [monitor: true])]
       end
 
-    [{Cachex, [:lotus_cache, cachex_opts]}]
+    [
+      Supervisor.child_spec({Cachex, [name: @cache_name] ++ [cachex_opts]},
+        id: {Cachex, @cache_name}
+      ),
+      Supervisor.child_spec({Cachex, [name: @tag_cache_name] ++ [cachex_opts]},
+        id: {Cachex, @tag_cache_name}
+      )
+    ]
   end
 
   @impl Lotus.Cache.Adapter
@@ -67,53 +57,12 @@ defmodule Lotus.Cache.Cachex do
 
   @impl Lotus.Cache.Adapter
   def put(key, value, ttl_ms, opts) do
-    do_put(@cache_name, key, value, ttl_ms, opts)
-  end
-
-  @impl Lotus.Cache.Adapter
-  def delete(key) do
-    Cachex.del(@cache_name, key)
-
-    :ok
-  end
-
-  @impl Lotus.Cache.Adapter
-  def get_or_store(key, ttl_ms, fun, opts) do
-    Cachex.transaction(@cache_name, [key], fn cache ->
-      case get(key) do
-        {:ok, value} ->
-          {:ok, value, :hit}
-
-        :miss ->
-          value = fun.()
-          do_put(cache, key, value, ttl_ms, opts)
-      end
-    end)
-  end
-
-  @impl Lotus.Cache.Adapter
-  def invalidate_tags(tags) do
-    Cachex.transaction(@tag_cache_name, tags, fn cache ->
-      Enum.each(tags, fn tag ->
-        Cachex.del(cache, tag)
-      end)
-    end)
-
-    :ok
-  end
-
-  @impl Lotus.Cache.Adapter
-  def touch(key, ttl_ms) do
-    Cachex.expire(@cache_name, key, ttl_ms)
-  end
-
-  defp do_put(cache, key, value, ttl_ms, opts) do
     compress = Keyword.get(opts, :compress, true)
     encoded = encode(value, compress)
     max_bytes = Keyword.get(opts, :max_bytes, 5_000_000)
 
     if byte_size(encoded) <= max_bytes do
-      case Cachex.put(cache, key, encoded, expire: ttl_ms) do
+      case Cachex.put(@cache_name, key, encoded, expire: ttl_ms) do
         {:ok, true} ->
           tags = Keyword.get(opts, :tags)
           store_tags(tags, key)
@@ -128,11 +77,62 @@ defmodule Lotus.Cache.Cachex do
     end
   end
 
-  defp store_tags([tag], key), do: Cachex.put(@tag_cache_name, tag, key)
+  @impl Lotus.Cache.Adapter
+  def delete(key) do
+    Cachex.del(@cache_name, key)
+
+    :ok
+  end
+
+  @impl Lotus.Cache.Adapter
+  def get_or_store(key, ttl_ms, fun, opts) do
+    case get(key) do
+      {:ok, value} ->
+        {:ok, value, :hit}
+
+      :miss ->
+        value = fun.()
+        put(key, value, ttl_ms, opts)
+
+        {:ok, value, :miss}
+    end
+  end
+
+  @impl Lotus.Cache.Adapter
+  def invalidate_tags(tags) do
+    Cachex.transaction(@tag_cache_name, tags, fn tag_cache ->
+      for tag <- tags do
+        {:ok, keys} = Cachex.get(tag_cache, tag)
+
+        if is_list(keys) do
+          Cachex.transaction(@cache_name, keys, fn key_cache ->
+            for key <- keys do
+              Cachex.del(key_cache, key)
+            end
+          end)
+        end
+      end
+    end)
+
+    :ok
+  end
+
+  @impl Lotus.Cache.Adapter
+  def touch(key, ttl_ms) do
+    Cachex.expire(@cache_name, key, ttl_ms)
+
+    :ok
+  end
 
   defp store_tags(tags, key) when is_list(tags) do
-    key_value_pairs = Enum.map(tags, fn tag -> {tag, key} end)
-    Cachex.put_many(@tag_cache_name, key_value_pairs)
+    Cachex.transaction(@tag_cache_name, tags, fn cache ->
+      for tag <- tags do
+        Cachex.get_and_update(cache, tag, fn
+          nil -> {:commit, [key]}
+          existing_keys -> {:commit, [key | existing_keys]}
+        end)
+      end
+    end)
   end
 
   defp store_tags(nil, _key), do: :ok
