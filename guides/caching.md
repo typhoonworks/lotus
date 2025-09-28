@@ -2,11 +2,13 @@
 
 This guide covers Lotus's comprehensive caching system, which improves query performance by storing and reusing results from expensive database operations.
 
+Lotus by default does not start the cache system. To enable caching, you must configure a cache adapter and add Lotus to your application's supervision tree.
+
 ## Overview
 
 Lotus provides a flexible caching system with the following features:
 
-- **Pluggable adapters** - Support for different cache backends (currently only ETS supported)
+- **Pluggable adapters** - Support for different cache backends
 - **TTL-based expiration** - Automatic cache invalidation based on time-to-live
 - **Cache profiles** - Different caching strategies for different use cases
 - **Tag-based invalidation** - Selective cache clearing using tags
@@ -33,8 +35,9 @@ config :lotus,
 ```
 
 **Note**: Even with minimal configuration, you get sensible caching defaults:
+
 - Query results cached for 60 seconds (`:results` profile)
-- Schema information cached for 1 hour (`:schema` profile)  
+- Schema information cached for 1 hour (`:schema` profile)
 - Options/reference data cached for 5 minutes (`:options` profile)
 
 ### OTP Application Setup
@@ -54,7 +57,7 @@ def start(_type, _args) do
     # {Lotus, cache: [adapter: Lotus.Cache.ETS, namespace: "prod_cache"]},
     MyAppWeb.Endpoint
   ]
-  
+
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
 end
@@ -76,7 +79,10 @@ Once configured and started, caching works automatically:
 
 ### Cache Adapter
 
-Currently, Lotus supports one cache adapter:
+Currently, Lotus supports two cache adapters:
+
+1. `Lotus.Cache.ETS` - Local-only in-memory caching using ETS
+2. `Lotus.Cache.Cachex` - Distributed caching using [Cachex](https://hexdocs.pm/cachex)
 
 #### ETS Adapter
 
@@ -92,12 +98,35 @@ config :lotus,
   }
 ```
 
-**Characteristics:**
-- **Performance**: Very fast reads and writes
-- **Persistence**: In-memory only (data lost on application restart)
-- **Scalability**: Single-node only (not distributed)
-- **TTL**: Automatic expiration with background cleanup
-- **Size limits**: Entries exceeding `max_bytes` are automatically rejected
+#### Cachex Adapter
+
+The `Lotus.Cache.Cachex` adapter uses the Cachex library for distributed setups.
+
+First, add Cachex to your dependencies in `mix.exs`:
+
+```elixir
+{:cachex, "~> 4.0"}
+```
+
+Then, configure Lotus to use Cachex in `config/runtime.exs` (or wherever your runtime config is located):
+
+```elixir
+config :lotus,
+  cache: %{
+    adapter: Lotus.Cache.Cachex,
+    namespace: "myapp_lotus",    # Optional namespace
+    cachex_opts: [] # Optional Cachex options (see Cachex docs)
+    # You can set other Lotus cache config options here as well
+  }
+```
+
+**Note: You MUST configure Cachex at runtime. This is because Cachex uses Records, which are not available in compile-time configuration.**
+
+`cachex_opts` [accepts all options supported by Cachex](https://hexdocs.pm/cachex/cache-routers.html#default-routers). If not specified, the default Cachex configuration is used is:
+
+```elixir
+[router: router(module: Cachex.Router.Ring, options: [monitor: true])]
+```
 
 ### Cache Profiles
 
@@ -108,7 +137,7 @@ Profiles allow you to configure different TTL strategies for different types of 
 Lotus ships with these built-in cache profiles:
 
 - **`:results`** - 60 seconds TTL - For query results and fast-changing data
-- **`:schema`** - 1 hour TTL - For database schema information that changes rarely  
+- **`:schema`** - 1 hour TTL - For database schema information that changes rarely
 - **`:options`** - 5 minutes TTL - For dropdown options and reference data
 
 These profiles are always available, even without any cache configuration. You can override their settings or add custom profiles:
@@ -122,7 +151,7 @@ config :lotus,
       results: [ttl_ms: 30_000],      # Override default 60s to 30s
       schema: [ttl_ms: 7_200_000],    # Override default 1h to 2h
       options: [ttl_ms: 600_000],     # Override default 5m to 10m
-      
+
       # Add custom profiles
       reports: [ttl_ms: 1_800_000]    # 30 minutes - business reports
     },
@@ -134,11 +163,13 @@ config :lotus,
 #### Profile Fallback Behavior
 
 When you don't configure cache profiles:
+
 - `:results` uses 60 seconds TTL
-- `:schema` uses 1 hour TTL  
+- `:schema` uses 1 hour TTL
 - `:options` uses 5 minutes TTL
 
 When you configure `default_ttl_ms` but don't specify `:results` profile:
+
 - `:results` uses your `default_ttl_ms` value
 - `:schema` and `:options` keep their built-in defaults
 
@@ -177,6 +208,7 @@ Skip cache entirely - always query the database:
 ```
 
 **Use cases:**
+
 - Real-time data requirements
 - Testing scenarios
 - One-off queries where cache isn't beneficial
@@ -191,6 +223,7 @@ Execute query and update cache with fresh results:
 ```
 
 **Use cases:**
+
 - Force cache refresh after data changes
 - Scheduled cache warming
 - Manual cache updates
@@ -258,7 +291,7 @@ This ensures that different queries, even with slight variations, get separate c
 All Lotus schema introspection functions are automatically cached:
 
 - `Lotus.list_tables/2` - Lists tables and views in database
-- `Lotus.get_table_schema/3` - Gets column information for tables  
+- `Lotus.get_table_schema/3` - Gets column information for tables
 - `Lotus.get_table_stats/3` - Gets row counts and table statistics
 - `Lotus.list_relations/2` - Lists tables with schema information
 
@@ -272,11 +305,12 @@ Schema functions use different cache profiles by default:
 {:ok, schema} = Lotus.get_table_schema("postgres", "users")
 {:ok, relations} = Lotus.list_relations("postgres")
 
-# Table statistics - uses :results profile (30 seconds TTL)  
+# Table statistics - uses :results profile (30 seconds TTL)
 {:ok, stats} = Lotus.get_table_stats("postgres", "users")
 ```
 
 **Why different profiles?**
+
 - **Schema metadata** (tables, columns) changes rarely, so longer caching (1 hour) is safe
 - **Table statistics** (row counts) change frequently, so shorter caching (30 seconds) keeps data fresh
 
@@ -288,11 +322,11 @@ Schema functions support all cache modes and options:
 # Bypass cache for fresh data
 {:ok, tables} = Lotus.list_tables("postgres", cache: :bypass)
 
-# Refresh cache with latest data  
+# Refresh cache with latest data
 {:ok, schema} = Lotus.get_table_schema("postgres", "users", cache: :refresh)
 
 # Use custom profile
-{:ok, stats} = Lotus.get_table_stats("postgres", "users", 
+{:ok, stats} = Lotus.get_table_stats("postgres", "users",
   cache: [profile: :options])  # 5 minute TTL
 
 # Override TTL
@@ -317,8 +351,9 @@ Lotus.Cache.invalidate_tags(["table:public.users"])
 ```
 
 **Automatic tags added:**
+
 - `"repo:#{repo_name}"` - Repository-specific data
-- `"schema:#{function_name}"` - Function-specific data  
+- `"schema:#{function_name}"` - Function-specific data
 - `"table:#{schema}.#{table}"` - Table-specific data (when applicable)
 
 ## Working with run_query
@@ -402,7 +437,7 @@ config :lotus,
     profiles: %{
       # Built-in profiles (customize as needed)
       results: [ttl_ms: 30_000],      # Default: 60s - Fast-changing data
-      options: [ttl_ms: 300_000],     # Default: 5m - Reference data  
+      options: [ttl_ms: 300_000],     # Default: 5m - Reference data
       schema: [ttl_ms: 3_600_000],    # Default: 1h - Schema information
 
       # Add custom profiles for specific use cases
@@ -412,8 +447,9 @@ config :lotus,
 ```
 
 **Default TTL Guidelines:**
+
 - **`:results` (60s)** - Query results, user data, transactional information
-- **`:options` (5m)** - Dropdown options, lookup tables, reference data  
+- **`:options` (5m)** - Dropdown options, lookup tables, reference data
 - **`:schema` (1h)** - Database schema, table structure, metadata
 
 ### Tagging Strategy

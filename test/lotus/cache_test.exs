@@ -169,6 +169,7 @@ defmodule Lotus.CacheTest do
     defmodule MockAdapter do
       @behaviour Lotus.Cache.Adapter
 
+      def spec_config, do: []
       def get(_key), do: :miss
       def put(_key, _value, _ttl, _opts), do: :ok
       def delete(_key), do: :ok
