@@ -1,7 +1,13 @@
 defmodule Lotus.Cache.ETS do
-  @moduledoc false
+  @moduledoc """
+  An ETS-based, local, in-memory cache adapter for Lotus.
 
-  @behaviour Lotus.Cache.Adapter
+  This is the default cache adapter if none is specified.
+
+  If you want a distributed cache, consider using `Lotus.Cache.Cachex`.
+  """
+
+  use Lotus.Cache.Adapter
 
   @table :lotus_cache
   @tag_table :lotus_cache_tags
@@ -20,6 +26,12 @@ defmodule Lotus.Cache.ETS do
     {:ok, self()}
   end
 
+  @impl Lotus.Cache.Adapter
+  def spec_config do
+    [{Lotus.Cache.ETS, []}]
+  end
+
+  @impl Lotus.Cache.Adapter
   def get(key) do
     case :ets.lookup(@table, key) do
       [{^key, value_bin, expires_at}] ->
@@ -35,11 +47,10 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def put(key, value, ttl_ms, opts) do
-    encoded =
-      if Keyword.get(opts, :compress, true),
-        do: :erlang.term_to_binary(value, [:compressed]),
-        else: :erlang.term_to_binary(value)
+    compress = Keyword.get(opts, :compress, true)
+    encoded = encode(value, compress)
 
     max_bytes = Keyword.get(opts, :max_bytes, 5_000_000)
     if byte_size(encoded) > max_bytes, do: :ok, else: do_put(key, encoded, ttl_ms, opts)
@@ -52,11 +63,13 @@ defmodule Lotus.Cache.ETS do
     :ok
   end
 
+  @impl Lotus.Cache.Adapter
   def delete(key) do
     :ets.delete(@table, key)
     :ok
   end
 
+  @impl Lotus.Cache.Adapter
   def touch(key, ttl_ms) do
     case :ets.lookup(@table, key) do
       [{^key, v, _old}] ->
@@ -68,6 +81,7 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def get_or_store(key, ttl_ms, fun, opts) do
     case get(key) do
       {:ok, v} ->
@@ -99,6 +113,7 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+  @impl Lotus.Cache.Adapter
   def invalidate_tags(tags) do
     for tag <- tags do
       for {^tag, key} <- :ets.lookup(@tag_table, tag) do
@@ -143,5 +158,4 @@ defmodule Lotus.Cache.ETS do
 
   defp expired?(ts), do: ts <= now_ms()
   defp now_ms, do: System.monotonic_time(:millisecond)
-  defp decode(bin), do: :erlang.binary_to_term(bin)
 end

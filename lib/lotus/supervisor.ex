@@ -1,6 +1,12 @@
 defmodule Lotus.Supervisor do
-  @moduledoc false
+  @moduledoc """
+  Top-level supervisor for Lotus.
+  """
+
   use Supervisor
+
+  alias Lotus.Cache.Cachex
+  alias Lotus.Cache.ETS
 
   @spec start_link(keyword) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -16,9 +22,8 @@ defmodule Lotus.Supervisor do
 
     children =
       case cache_conf do
+        %{adapter: adapter} when adapter in [ETS, Cachex] -> adapter.spec_config()
         nil -> []
-        %{adapter: Lotus.Cache.ETS} -> [{Lotus.Cache.ETS, []}]
-        %{adapter: _other} -> []
       end
 
     Supervisor.init(children, strategy: :one_for_one)

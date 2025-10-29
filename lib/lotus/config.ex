@@ -85,6 +85,7 @@ defmodule Lotus.Config do
         }
 
   @type cache_config :: %{
+          optional(:cachex_opts) => keyword(),
           adapter: module() | nil,
           namespace: String.t(),
           profiles: %{atom() => keyword()},
