@@ -75,7 +75,9 @@ defmodule Lotus.Sources.Default do
       {nil, "schema_migrations"},
       {"public", "schema_migrations"},
       {"public", "lotus_queries"},
-      {nil, "lotus_queries"}
+      {nil, "lotus_queries"},
+      {"public", "lotus_query_visualizations"},
+      {nil, "lotus_query_visualizations"}
     ]
   end
 

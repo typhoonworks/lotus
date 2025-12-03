@@ -245,6 +245,136 @@ rescue
 end
 ```
 
+## Working with Visualizations
+
+Lotus supports saving chart configurations (visualizations) alongside your queries. Visualizations use a renderer-agnostic DSL that can be transformed by frontend applications like Lotus Web into concrete chart specs (Vega-Lite, Recharts, etc.).
+
+### Creating a Visualization
+
+```elixir
+# First, create or get a query
+{:ok, query} = Lotus.create_query(%{
+  name: "Monthly Revenue",
+  statement: "SELECT date_trunc('month', created_at) as month, SUM(amount) as revenue, region FROM orders GROUP BY 1, 2"
+})
+
+# Create a visualization for the query
+{:ok, viz} = Lotus.create_visualization(query, %{
+  name: "Revenue by Region",
+  position: 0,
+  config: %{
+    "chart" => "line",
+    "x" => %{"field" => "month", "kind" => "temporal", "timeUnit" => "month"},
+    "y" => [%{"field" => "revenue", "agg" => "sum"}],
+    "series" => %{"field" => "region"},
+    "options" => %{"legend" => true}
+  }
+})
+
+IO.inspect(viz)
+# %Lotus.Storage.QueryVisualization{
+#   id: 1,
+#   query_id: 1,
+#   name: "Revenue by Region",
+#   position: 0,
+#   config: %{...},
+#   version: 1
+# }
+```
+
+### Visualization Config DSL
+
+The config uses a neutral format that maps to common charting concepts:
+
+```elixir
+%{
+  # Chart type (required)
+  "chart" => "line",  # line | bar | area | scatter | table | number | heatmap
+
+  # X-axis configuration (optional)
+  "x" => %{
+    "field" => "month",           # Column name from query results
+    "kind" => "temporal",         # temporal | quantitative | nominal
+    "timeUnit" => "month"         # Optional: year | quarter | month | week | day
+  },
+
+  # Y-axis configuration (optional, list of fields)
+  "y" => [
+    %{"field" => "revenue", "agg" => "sum"},   # agg: sum | avg | count
+    %{"field" => "cost", "agg" => "sum"}
+  ],
+
+  # Series/color grouping (optional)
+  "series" => %{"field" => "region"},
+
+  # Client-side filters (optional)
+  "filters" => [
+    %{"field" => "region", "op" => "=", "value" => "EMEA"}  # op: = | != | < | <= | > | >= | in | not in
+  ],
+
+  # Display options (optional)
+  "options" => %{
+    "legend" => true,
+    "stack" => "none"  # none | stack | normalize
+  }
+}
+```
+
+### Listing Visualizations
+
+```elixir
+# Get all visualizations for a query (ordered by position)
+visualizations = Lotus.list_visualizations(query.id)
+
+Enum.each(visualizations, fn viz ->
+  IO.puts("#{viz.position}: #{viz.name} (#{viz.config["chart"]})")
+end)
+# 0: Revenue by Region (line)
+# 1: Revenue Table (table)
+```
+
+### Validating Against Query Results
+
+Before saving a visualization, you can validate that its config references valid columns:
+
+```elixir
+# Run the query to get results
+{:ok, result} = Lotus.run_query(query)
+
+# Validate the visualization config
+config = %{
+  "chart" => "bar",
+  "y" => [%{"field" => "nonexistent_column", "agg" => "sum"}]
+}
+
+case Lotus.validate_visualization_config(config, result) do
+  :ok ->
+    IO.puts("Config is valid")
+  {:error, msg} ->
+    IO.puts("Invalid config: #{msg}")
+    # "y[0].field references unknown column 'nonexistent_column'"
+end
+```
+
+The validation checks:
+- All referenced fields exist in the result columns
+- Numeric aggregations (`sum`, `avg`) are only applied to numeric columns
+
+### Updating and Deleting Visualizations
+
+```elixir
+# Update a visualization
+{:ok, updated_viz} = Lotus.update_visualization(viz, %{
+  name: "Updated Chart Name",
+  position: 1
+})
+
+# Delete a visualization
+{:ok, _} = Lotus.delete_visualization(viz)
+
+# Visualizations are also cascade-deleted when their parent query is deleted
+```
+
 ## PostgreSQL Schema Resolution with search_path
 
 When working with PostgreSQL databases that use multiple schemas, you can use `search_path` to resolve unqualified table names. This is especially useful for multi-tenant applications or when you have separate schemas for reporting, analytics, or different environments.

@@ -148,4 +148,26 @@ defmodule Lotus.Fixtures do
     {:ok, query} = Storage.create_query(attrs)
     query
   end
+
+  @doc """
+  Creates a visualization fixture for testing.
+
+  ## Examples
+
+      viz = visualization_fixture(query)
+      viz = visualization_fixture(query, %{name: "Custom Viz"})
+
+  """
+  def visualization_fixture(query, attrs \\ %{}) do
+    defaults = %{
+      name: "Viz #{System.unique_integer([:positive])}",
+      position: 0,
+      config: %{"chart" => "table"}
+    }
+
+    attrs = Map.merge(defaults, attrs)
+
+    {:ok, viz} = Lotus.Viz.create_visualization(query, attrs)
+    viz
+  end
 end

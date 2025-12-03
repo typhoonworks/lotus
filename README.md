@@ -50,6 +50,7 @@ Learn more about setting up Lotus Web in the [installation guide](guides/install
 ## Current Features
 - 🔐 **Enhanced security** with read-only execution, schema/table/column visibility controls, and automatic session state management
 - 📦 **Query storage and management** - save, organize, and reuse SQL queries
+- 📊 **Visualization storage** - save chart configurations per query with renderer-agnostic DSL
 - 🏗️ **Multi-database support** - PostgreSQL, MySQL, and SQLite with flexible repository architecture
 - ⚡ **Configurable execution** with timeout controls and connection management
 - 🎯 **Type-safe results** with structured query result handling
@@ -63,7 +64,7 @@ Lotus automatically preserves your database session state to prevent connection 
 - [ ] Query versioning and change tracking
 - [X] Export functionality for query results (CSV)
 - [x] Column-level visibility and access control
-- [ ] Charts visualization (bar, pie, geo, etc.)
+- [x] Charts visualization storage (renderer-agnostic config DSL)
 - [ ] Dashboards
 - [ ] Cache statistics and monitoring (`Lotus.Cache.stats()`)
 - [ ] Additional cache backends (Redis, Memcached)

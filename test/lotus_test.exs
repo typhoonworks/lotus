@@ -600,6 +600,117 @@ defmodule LotusTest do
     end
   end
 
+  describe "list_visualizations/1" do
+    test "returns empty list when no visualizations exist" do
+      query = query_fixture()
+      assert Lotus.list_visualizations(query.id) == []
+    end
+
+    test "returns all visualizations for a query" do
+      query = query_fixture()
+      cfg = %{"chart" => "table"}
+
+      {:ok, v1} = Lotus.create_visualization(query, %{name: "Viz 1", position: 0, config: cfg})
+      {:ok, v2} = Lotus.create_visualization(query, %{name: "Viz 2", position: 1, config: cfg})
+
+      visualizations = Lotus.list_visualizations(query.id)
+
+      assert length(visualizations) == 2
+      assert v1 in visualizations
+      assert v2 in visualizations
+    end
+  end
+
+  describe "create_visualization/2" do
+    test "creates visualization with valid attributes" do
+      query = query_fixture()
+
+      attrs = %{
+        name: "Revenue Chart",
+        position: 0,
+        config: %{
+          "chart" => "line",
+          "x" => %{"field" => "date", "kind" => "temporal"},
+          "y" => [%{"field" => "revenue", "agg" => "sum"}]
+        }
+      }
+
+      assert {:ok, viz} = Lotus.create_visualization(query, attrs)
+      assert viz.name == "Revenue Chart"
+      assert viz.position == 0
+      assert viz.config["chart"] == "line"
+      assert viz.query_id == query.id
+    end
+
+    test "returns error with invalid attributes" do
+      query = query_fixture()
+      attrs = %{name: "", position: -1, config: %{}}
+
+      assert {:error, changeset} = Lotus.create_visualization(query, attrs)
+      refute changeset.valid?
+    end
+  end
+
+  describe "update_visualization/2" do
+    test "updates visualization with valid attributes" do
+      query = query_fixture()
+
+      {:ok, viz} =
+        Lotus.create_visualization(query, %{
+          name: "Original",
+          position: 0,
+          config: %{"chart" => "table"}
+        })
+
+      assert {:ok, updated} = Lotus.update_visualization(viz, %{name: "Updated", position: 1})
+      assert updated.name == "Updated"
+      assert updated.position == 1
+      assert updated.id == viz.id
+    end
+  end
+
+  describe "delete_visualization/1" do
+    test "deletes existing visualization" do
+      query = query_fixture()
+
+      {:ok, viz} =
+        Lotus.create_visualization(query, %{
+          name: "ToDelete",
+          position: 0,
+          config: %{"chart" => "table"}
+        })
+
+      assert {:ok, deleted} = Lotus.delete_visualization(viz)
+      assert deleted.id == viz.id
+      assert Lotus.list_visualizations(query.id) == []
+    end
+  end
+
+  describe "validate_visualization_config/2" do
+    test "returns :ok for valid config against result" do
+      result = %Lotus.Result{
+        columns: ["date", "revenue"],
+        rows: [[~U[2024-01-01 00:00:00Z], 100]]
+      }
+
+      cfg = %{
+        "chart" => "line",
+        "x" => %{"field" => "date", "kind" => "temporal"},
+        "y" => [%{"field" => "revenue", "agg" => "sum"}]
+      }
+
+      assert :ok = Lotus.validate_visualization_config(cfg, result)
+    end
+
+    test "returns error for missing field" do
+      result = %Lotus.Result{columns: ["date"], rows: []}
+      cfg = %{"chart" => "line", "y" => [%{"field" => "missing"}]}
+
+      assert {:error, msg} = Lotus.validate_visualization_config(cfg, result)
+      assert msg =~ "unknown column"
+    end
+  end
+
   describe "basic windowed pagination" do
     test "run_sql applies windowing when window options provided" do
       sql = "SELECT name FROM test_users ORDER BY name"
