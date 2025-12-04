@@ -71,7 +71,7 @@ defmodule Lotus.MixProject do
   defp package do
     [
       name: "lotus",
-      maintainers: ["Rui Freitas"],
+      maintainers: ["Arda Can Tugay", "Rui Freitas"],
       licenses: ["MIT"],
       links: %{GitHub: @source_url},
       files: ~w[lib .formatter.exs mix.exs README* LICENSE*]
