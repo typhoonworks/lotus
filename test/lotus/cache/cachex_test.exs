@@ -27,6 +27,12 @@ defmodule Lotus.Cache.CachexTest do
     :ok
   end
 
+  setup do
+    Cachex.clear(:lotus_cache)
+    Cachex.clear(:lotus_cache_tags)
+    :ok
+  end
+
   describe "get/1" do
     test "returns :miss when key doesn't exist" do
       assert Cache.Cachex.get("nonexistent") == :miss

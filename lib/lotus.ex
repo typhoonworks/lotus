@@ -64,8 +64,8 @@ defmodule Lotus do
         ]
 
   alias Lotus.Cache.Key
+  alias Lotus.{Config, Result, Runner, Schema, Sources, Storage, Viz}
   alias Lotus.Storage.Query
-  alias Lotus.{Config, Result, Runner, Schema, Sources, Storage}
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
   def start_link(opts \\ []), do: Lotus.Supervisor.start_link(opts)
@@ -141,6 +141,40 @@ defmodule Lotus do
   Deletes a saved query.
   """
   defdelegate delete_query(query), to: Storage
+
+  # ── Visualization Functions ─────────────────────────────────────────────────
+
+  @doc """
+  Lists all visualizations for a query.
+
+  Returns visualizations ordered by position, then by id.
+  """
+  defdelegate list_visualizations(query_or_id), to: Viz
+
+  @doc """
+  Creates a new visualization for a query.
+  """
+  defdelegate create_visualization(query_or_id, attrs), to: Viz
+
+  @doc """
+  Updates an existing visualization.
+  """
+  defdelegate update_visualization(viz, attrs), to: Viz
+
+  @doc """
+  Deletes a visualization (by struct or id).
+  """
+  defdelegate delete_visualization(viz_or_id), to: Viz
+
+  @doc """
+  Validates a visualization config against query results.
+
+  Checks that all referenced fields exist in the result columns and that
+  numeric aggregations (sum, avg) are applied only to numeric columns.
+  """
+  defdelegate validate_visualization_config(config, result),
+    to: Viz,
+    as: :validate_against_result
 
   @doc """
   Run a saved query (by struct or id).

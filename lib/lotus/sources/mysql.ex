@@ -173,7 +173,8 @@ defmodule Lotus.Sources.MySQL do
       {"performance_schema", ~r/.*/},
       {"sys", ~r/.*/},
       {nil, ms},
-      {nil, "lotus_queries"}
+      {nil, "lotus_queries"},
+      {nil, "lotus_query_visualizations"}
     ]
 
     # Also deny these tables in the current database
@@ -181,7 +182,8 @@ defmodule Lotus.Sources.MySQL do
       base_denies ++
         [
           {database, ms},
-          {database, "lotus_queries"}
+          {database, "lotus_queries"},
+          {database, "lotus_query_visualizations"}
         ]
     else
       base_denies

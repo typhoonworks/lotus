@@ -99,7 +99,8 @@ defmodule Lotus.Sources.SQLite3 do
     [
       {nil, ~r/^sqlite_/},
       {nil, ms},
-      {nil, "lotus_queries"}
+      {nil, "lotus_queries"},
+      {nil, "lotus_query_visualizations"}
     ]
   end
 

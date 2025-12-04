@@ -89,7 +89,8 @@ defmodule Lotus.Sources.Postgres do
       {"pg_catalog", ~r/.*/},
       {"information_schema", ~r/.*/},
       {prefix, ms},
-      {prefix, "lotus_queries"}
+      {prefix, "lotus_queries"},
+      {prefix, "lotus_query_visualizations"}
     ]
   end
 

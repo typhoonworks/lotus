@@ -21,10 +21,10 @@ defmodule Lotus.Migrations.PostgresTest do
   end
 
   test "migrating a postgres database" do
-    start_supervised!(MigrationRepo)
-
     MigrationRepo.__adapter__().storage_down(MigrationRepo.config())
     MigrationRepo.__adapter__().storage_up(MigrationRepo.config())
+
+    start_supervised!(MigrationRepo)
 
     assert Ecto.Migrator.up(MigrationRepo, 1, Migration) in [:ok, :already_up]
     assert table_exists?("lotus_queries")

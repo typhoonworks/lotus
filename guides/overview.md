@@ -52,6 +52,9 @@ All SQL execution happens through Lotus's runner, which enforces read-only restr
 ### Results
 Query results are returned in a structured format (`Result`) that includes the data and column information.
 
+### Visualizations
+Visualizations are saved chart configurations attached to queries. They store a neutral, renderer-agnostic config that can be transformed by frontend applications (like Lotus Web) into concrete chart specs (Vega, Recharts, etc.). Each visualization includes chart type, axis mappings, series configuration, and display options.
+
 ### Schema Introspection
 Lotus provides comprehensive schema discovery tools to explore database structure, list tables across schemas, inspect column definitions, and gather table statistics.
 
