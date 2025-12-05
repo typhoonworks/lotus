@@ -17,9 +17,9 @@ defmodule Lotus.Cache.Cachex do
 
   use Lotus.Cache.Adapter
 
-  import Cachex.Spec
-
   alias Lotus.Config
+
+  @compile {:no_warn_undefined, Cachex}
 
   @cache_name :lotus_cache
   @tag_cache_name :lotus_cache_tags
@@ -34,7 +34,7 @@ defmodule Lotus.Cache.Cachex do
     cachex_opts =
       case Config.cache_config() do
         %{cachex_opts: opts} when is_list(opts) -> opts
-        _ -> [router: router(module: Cachex.Router.Ring, options: [monitor: true])]
+        _ -> [router: {Cachex.Router.Ring, [monitor: true]}]
       end
 
     [
