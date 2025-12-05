@@ -25,6 +25,11 @@
   - Configured selective exclusions for `MapJoin` warnings where readability is prioritized
   - Enhanced code maintainability and testability without changing public APIs
 
+### Fixed
+
+- Fixed Cachex v4 compatibility: removed deprecated `import Cachex.Spec` and updated router configuration to v4 tuple syntax
+- Added `@compile {:no_warn_undefined, Cachex}` to suppress compiler warnings when Cachex (optional dependency) is not installed
+
 ## [0.9.2] - 2025-09-07
 
 - Added `Lotus.Export.stream_csv/2` to export the full result page by page
