@@ -53,7 +53,7 @@ defmodule Lotus.SchemaMultiTest do
         Lotus.get_table_schema("postgres", "customers", search_path: "reporting, public")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
 
       column_names = Enum.map(schema, & &1.name)
       assert "name" in column_names
