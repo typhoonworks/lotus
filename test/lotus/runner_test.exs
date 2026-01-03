@@ -201,7 +201,7 @@ defmodule Lotus.RunnerTest do
     test "allows EXPLAIN queries" do
       result = Runner.run_sql(Repo, "EXPLAIN SELECT * FROM test_users")
       assert {:ok, %{columns: ["QUERY PLAN"], rows: rows}} = result
-      assert length(rows) > 0
+      refute Enum.empty?(rows)
     end
 
     test "rejects INSERT statements" do
@@ -271,8 +271,8 @@ defmodule Lotus.RunnerTest do
     test "allows statement with trailing semicolon" do
       result = Runner.run_sql(Repo, "SELECT * FROM test_users;")
       assert {:ok, %{columns: columns, rows: rows}} = result
-      assert length(columns) > 0
-      assert length(rows) > 0
+      refute Enum.empty?(columns)
+      refute Enum.empty?(rows)
     end
 
     test "allows semicolon in string literals" do
@@ -323,7 +323,7 @@ defmodule Lotus.RunnerTest do
       result = Runner.run_sql(Repo, query)
       assert {:ok, %{columns: columns, rows: rows}} = result
       assert "col;name" in columns
-      assert length(rows) > 0
+      refute Enum.empty?(rows)
     end
   end
 

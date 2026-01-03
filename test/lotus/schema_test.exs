@@ -45,7 +45,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Schema.get_table_schema("sqlite", "products")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
 
       column_names = Enum.map(schema, & &1.name)
       assert "id" in column_names
@@ -166,7 +166,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Schema.get_table_schema(Lotus.Test.Repo, "test_users")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
 
       column_names = Enum.map(schema, & &1.name)
       assert "id" in column_names
@@ -185,7 +185,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Schema.get_table_schema(Lotus.Test.Repo, "test_users", schema: "public")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
 
       column_names = Enum.map(schema, & &1.name)
       assert "id" in column_names
@@ -287,7 +287,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Schema.get_table_schema(Lotus.Test.MysqlRepo, "products")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
 
       column_names = Enum.map(schema, & &1.name)
       assert "id" in column_names
@@ -381,7 +381,7 @@ defmodule Lotus.SchemaTest do
       {:ok, tables} = Lotus.list_tables("sqlite")
 
       assert is_list(tables)
-      assert length(tables) > 0
+      refute Enum.empty?(tables)
     end
 
     @tag :postgres
@@ -389,7 +389,7 @@ defmodule Lotus.SchemaTest do
       {:ok, tables} = Lotus.list_tables("postgres")
 
       assert is_list(tables)
-      assert length(tables) > 0
+      refute Enum.empty?(tables)
     end
 
     @tag :mysql
@@ -397,7 +397,7 @@ defmodule Lotus.SchemaTest do
       {:ok, tables} = Lotus.list_tables("mysql")
 
       assert is_list(tables)
-      assert length(tables) > 0
+      refute Enum.empty?(tables)
     end
 
     @tag :sqlite
@@ -405,7 +405,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Lotus.get_table_schema("sqlite", "products")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
     end
 
     @tag :postgres
@@ -413,7 +413,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Lotus.get_table_schema("postgres", "test_users")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
     end
 
     @tag :mysql
@@ -421,7 +421,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schema} = Lotus.get_table_schema("mysql", "products")
 
       assert is_list(schema)
-      assert length(schema) > 0
+      refute Enum.empty?(schema)
     end
 
     @tag :sqlite
@@ -469,7 +469,7 @@ defmodule Lotus.SchemaTest do
       {:ok, schemas} = Lotus.list_schemas("mysql")
 
       assert is_list(schemas)
-      assert length(schemas) > 0
+      refute Enum.empty?(schemas)
     end
   end
 
