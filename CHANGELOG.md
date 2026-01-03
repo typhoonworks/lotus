@@ -5,7 +5,7 @@
 ### Added
 
 - **NEW:** `Lotus.Cache.Cachex` adapter for local or distributed in-memory caching using [Cachex](https://hexdocs.pm/cachex/)
-- **NEW:** Query visualization storage with renderer-agnostic config DSL
+- **NEW:** Query visualization storage with opaque config (validation delegated to consumers)
 - **NEW:** `Lotus.Viz` module for visualization CRUD operations
 - **NEW:** Visualization config validation against query results
 - Added `list_visualizations/1`, `create_visualization/2`, `update_visualization/2`, `delete_visualization/1` delegations to main `Lotus` module
