@@ -379,7 +379,7 @@ defmodule Lotus.Visibility do
   Resolves the column policy for a given result column name in the context of
   accessed relations and repo.
 
-  Rules are taken from `Config.column_rules_for_repo_name/1` and support patterns
+  Rules are taken from `Lotus.Config.column_rules_for_repo_name/1` and support patterns
   on schema, table, and column names. Returns a normalized policy map or nil.
   """
   @spec column_policy_for(String.t(), [{String.t() | nil, String.t()}], String.t()) ::

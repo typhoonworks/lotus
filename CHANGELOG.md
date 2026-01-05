@@ -4,7 +4,7 @@
 
 ## [0.10.0] - 2026-01-05
 
-### Added
+### Addedgco
 
 - **NEW:** `Lotus.Cache.Cachex` adapter for local or distributed in-memory caching using [Cachex](https://hexdocs.pm/cachex/)
 - **NEW:** Query visualization storage with opaque config (validation delegated to consumers)
