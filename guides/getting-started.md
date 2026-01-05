@@ -284,6 +284,8 @@ IO.inspect(viz)
 
 ### Visualization Config DSL
 
+Lotus stores visualization configs as opaque maps, giving you full flexibility. The structure below is the recommended format used by Lotus Web, but you can store any valid map that suits your charting library.
+
 The config uses a neutral format that maps to common charting concepts:
 
 ```elixir
@@ -335,7 +337,7 @@ end)
 
 ### Validating Against Query Results
 
-Before saving a visualization, you can validate that its config references valid columns:
+Lotus provides optional validation to check that your config references valid columns from the query results. This validation does **not** enforce any particular config structure—it only checks field references.
 
 ```elixir
 # Run the query to get results
@@ -357,8 +359,10 @@ end
 ```
 
 The validation checks:
-- All referenced fields exist in the result columns
+- Fields referenced in `x`, `y`, `series`, and `filters` exist in the result columns
 - Numeric aggregations (`sum`, `avg`) are only applied to numeric columns
+
+Note: This validation is optional. You can save any valid map as a visualization config.
 
 ### Updating and Deleting Visualizations
 
