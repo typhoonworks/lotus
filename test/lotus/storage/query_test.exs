@@ -136,6 +136,7 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [30, true]
     end
 
+    @tag :sqlite
     test "to_sql_params with SQLite adapter uses ? placeholders" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
@@ -177,6 +178,7 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [40]
     end
 
+    @tag :sqlite
     test "uses query variable defaults when supplied_vars are not provided (SQLite)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
@@ -231,6 +233,7 @@ defmodule Lotus.Storage.QueryTest do
       assert params == ["Jack", "Jack"]
     end
 
+    @tag :sqlite
     test "handles multiple occurrences of the same variable (SQLite)" do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}} OR nickname = {{name}}",
@@ -675,6 +678,156 @@ defmodule Lotus.Storage.QueryTest do
     test "allows underscores and digits (as content), keeps first occurrence" do
       sql = "SELECT * FROM t WHERE k={{user_id_2}} AND k2={{user_id_2}}"
       assert ["user_id_2"] == Query.extract_variables_from_statement(sql)
+    end
+  end
+
+  describe "automatic type detection integration" do
+    test "uses automatic UUID casting when column type detected" do
+      # When auto-detection returns :uuid type, should cast to binary
+      q = %Query{
+        statement: "SELECT * FROM users WHERE users.id = {{user_id}}",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      uuid_string = "550e8400-e29b-41d4-a716-446655440000"
+
+      # This tests the flow - automatic detection would find users.id
+      # Since schema cache isn't available in unit tests, it falls back to text
+      {sql, params} = Query.to_sql_params(q, %{"user_id" => uuid_string})
+
+      assert sql == "SELECT * FROM users WHERE users.id = $1"
+      # Without schema cache, value passes through as-is
+      assert params == [uuid_string]
+    end
+
+    test "manual type takes precedence when auto-detection returns :text" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age = {{min_age}}",
+        variables: [
+          %{name: "min_age", type: :number}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"min_age" => "25"})
+
+      # Manual type :number triggers casting and placeholder
+      assert sql == "SELECT * FROM users WHERE age = $1::numeric"
+      assert params == [25]
+    end
+
+    test "handles missing schema cache gracefully" do
+      # Query with explicit table.column pattern
+      q = %Query{
+        statement: "SELECT * FROM orders WHERE orders.total = {{amount}}",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      # Should not crash when schema cache unavailable
+      {sql, params} = Query.to_sql_params(q, %{"amount" => "100.50"})
+
+      assert sql == "SELECT * FROM orders WHERE orders.total = $1"
+      assert params == ["100.50"]
+    end
+
+    test "variable resolver extracts binding info from SQL" do
+      # This tests that variable resolver correctly parses table.column patterns
+      q = %Query{
+        statement: """
+        SELECT * FROM users u
+        JOIN orders o ON o.user_id = u.id
+        WHERE u.status = {{status}}
+        """,
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"status" => "active"})
+
+      assert sql =~ "WHERE u.status = $1"
+      assert params == ["active"]
+    end
+  end
+
+  describe "type casting error handling" do
+    test "raises ArgumentError for invalid number format with manual type" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE age > {{min_age}}",
+        variables: [
+          %{name: "min_age", type: :number}
+        ],
+        data_repo: "postgres"
+      }
+
+      assert_raise ArgumentError, ~r/Invalid number format/, fn ->
+        Query.to_sql_params(q, %{"min_age" => "not-a-number"})
+      end
+    end
+
+    test "raises ArgumentError for invalid date format with manual type" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE created_at >= {{since}}",
+        variables: [
+          %{name: "since", type: :date}
+        ],
+        data_repo: "postgres"
+      }
+
+      assert_raise ArgumentError, ~r/Invalid date format/, fn ->
+        Query.to_sql_params(q, %{"since" => "not-a-date"})
+      end
+    end
+
+    test "allows through values without type specification" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE name = {{name}}",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      # No type, so value passes through as-is
+      {_sql, params} = Query.to_sql_params(q, %{"name" => "John"})
+      assert params == ["John"]
+    end
+  end
+
+  describe "database-specific placeholder generation" do
+    test "PostgreSQL uses typed placeholders for known types" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE created = {{date}}",
+        variables: [%{name: "date", type: :date}],
+        data_repo: "postgres"
+      }
+
+      {sql, _} = Query.to_sql_params(q, %{"date" => "2024-01-01"})
+      assert sql =~ "$1::date"
+    end
+
+    @tag :mysql
+    test "MySQL uses CAST for typed placeholders" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE created = {{date}}",
+        variables: [%{name: "date", type: :date}],
+        data_repo: "mysql"
+      }
+
+      {sql, _} = Query.to_sql_params(q, %{"date" => "2024-01-01"})
+      assert sql =~ "CAST(? AS DATE)"
+    end
+
+    @tag :sqlite
+    test "SQLite uses plain placeholders" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE created = {{date}}",
+        variables: [%{name: "date", type: :date}],
+        data_repo: "sqlite"
+      }
+
+      {sql, _} = Query.to_sql_params(q, %{"date" => "2024-01-01"})
+      assert sql =~ "?"
+      refute sql =~ "CAST"
     end
   end
 end

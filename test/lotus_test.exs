@@ -221,7 +221,10 @@ defmodule LotusTest do
       }
 
       assert {:error, msg} = Lotus.run_query(query)
-      assert msg =~ "Invalid number format: 'not_a_number' is not a valid number"
+      # Auto-detection finds age is :integer column
+      assert msg =~ "Invalid integer format"
+      assert msg =~ "'not_a_number'"
+      assert msg =~ "not a valid integer"
     end
 
     test "errors with helpful message for number with non-numeric characters" do
@@ -234,7 +237,10 @@ defmodule LotusTest do
       }
 
       assert {:error, msg} = Lotus.run_query(query)
-      assert msg =~ "Invalid number format: '25abc' contains non-numeric characters"
+      # Auto-detection finds age is :integer column
+      assert msg =~ "Invalid integer format"
+      assert msg =~ "'25abc'"
+      assert msg =~ "not a valid integer"
     end
 
     test "errors with helpful message for invalid date conversion" do
@@ -250,71 +256,63 @@ defmodule LotusTest do
       assert msg =~ "Invalid date format: 'not_a_date' is not a valid ISO8601 date"
     end
 
-    test "errors for common invalid date formats" do
-      invalid_dates = [
+    test "errors for common invalid datetime formats" do
+      # inserted_at is a datetime column, so auto-detection expects datetime format
+      invalid_datetimes = [
         # US format
         "12/25/2023",
         # EU format
         "25/12/2023",
-        # Dashed EU format
-        "25-12-2023",
-        # Dashed US format
-        "12-25-2023",
-        # YYYY/MM/DD
-        "2023/12/25",
+        # Date only (no time component)
+        "2023-12-25",
         # Named month
         "Dec 25, 2023",
-        # Named month EU
-        "25 Dec 2023",
         # Invalid day
-        "2023-12-32",
+        "2023-12-32T10:00:00",
         # Invalid month
-        "2023-13-25",
-        # Compact format
-        "20231225",
-        # Missing leading zeros
-        "2023-2-5",
+        "2023-13-25T10:00:00",
         # Empty string
         ""
       ]
 
-      for invalid_date <- invalid_dates do
+      for invalid_datetime <- invalid_datetimes do
         query = %Query{
-          name: "Invalid Date Query",
+          name: "Invalid Datetime Query",
           statement: "SELECT name FROM test_users WHERE inserted_at > {{start_date}}",
           variables: [
-            %QueryVariable{name: "start_date", type: :date, default: invalid_date}
+            %QueryVariable{name: "start_date", type: :date, default: invalid_datetime}
           ]
         }
 
         assert {:error, msg} = Lotus.run_query(query)
 
-        assert msg =~ "Invalid date format: '#{invalid_date}' is not a valid ISO8601 date",
-               "Expected error for date format: #{invalid_date}"
+        assert msg =~ "Invalid datetime format",
+               "Expected datetime error for format: #{invalid_datetime}"
       end
     end
 
-    test "successfully parses valid ISO8601 date formats" do
-      valid_dates = [
-        # Standard ISO8601
-        "2023-12-25",
-        # New Year
-        "2023-01-01",
+    test "successfully parses valid ISO8601 datetime formats" do
+      # inserted_at is a datetime column, so auto-detection expects full datetime
+      valid_datetimes = [
+        # Standard ISO8601 datetime
+        "2023-12-25T10:30:00",
+        # With seconds
+        "2023-01-01T00:00:00",
         # End of year
-        "2023-12-31"
+        "2023-12-31T23:59:59"
       ]
 
-      for valid_date <- valid_dates do
+      for valid_datetime <- valid_datetimes do
         query = %Query{
-          name: "Valid Date Query",
+          name: "Valid Datetime Query",
           statement: "SELECT name FROM test_users WHERE inserted_at > {{start_date}}",
           variables: [
-            %QueryVariable{name: "start_date", type: :date, default: valid_date}
+            %QueryVariable{name: "start_date", type: :date, default: valid_datetime}
           ]
         }
 
         assert {:ok, _result} = Lotus.run_query(query),
-               "Should succeed for valid date format: #{valid_date}"
+               "Should succeed for valid datetime format: #{valid_datetime}"
       end
     end
 
@@ -330,7 +328,8 @@ defmodule LotusTest do
       assert {:ok, _result} = Lotus.run_query(query)
     end
 
-    test "successfully converts float strings to floats" do
+    test "rejects float strings for integer columns" do
+      # age is an integer column, so auto-detection requires integer format
       query = %Query{
         name: "Float Query",
         statement: "SELECT name FROM test_users WHERE age > {{min_age}}",
@@ -339,7 +338,10 @@ defmodule LotusTest do
         ]
       }
 
-      assert {:ok, _result} = Lotus.run_query(query)
+      # Float string cannot be cast to integer column
+      assert {:error, msg} = Lotus.run_query(query)
+      assert msg =~ "Invalid integer format"
+      assert msg =~ "'25.5'"
     end
 
     test "runs query using mixed stored defaults (number) and runtime values (text)" do

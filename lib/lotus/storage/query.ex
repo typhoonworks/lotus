@@ -11,11 +11,12 @@ defmodule Lotus.Storage.Query do
 
   use Ecto.Schema
   import Ecto.Changeset
+  require Logger
 
   alias Lotus.Config
   alias Lotus.Sources
   alias Lotus.SQL.Transformer
-  alias Lotus.Storage.QueryVariable
+  alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, TypeMapper, VariableResolver}
 
   @type t :: %__MODULE__{
           id: term(),
@@ -79,15 +80,26 @@ defmodule Lotus.Storage.Query do
 
   @spec to_sql_params(t(), map()) :: {String.t(), [term()]}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
+    repo = get_repo(q.data_repo)
     source_type = get_source_type(q.data_repo)
+    source_module = get_source_module(repo)
+
+    # Transform SQL for database-specific syntax
     transformed_sql = Transformer.transform(sql, source_type)
 
+    # Extract variables from SQL
     regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
     vars_in_order =
       Regex.scan(regex, transformed_sql)
       |> Enum.map(fn [_, var] -> var end)
 
+    variable_bindings = VariableResolver.resolve_variables(transformed_sql)
+
+    enriched_bindings =
+      enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_module)
+
+    # Build SQL with parameters, using automatic type casting
     Enum.reduce(Enum.with_index(vars_in_order, 1), {transformed_sql, []}, fn {var, idx},
                                                                              {acc_sql, acc_params} ->
       meta = Enum.find(vars, %{}, &(&1.name == var))
@@ -97,12 +109,16 @@ defmodule Lotus.Storage.Query do
           Map.get(meta, :default) ||
           raise ArgumentError, "Missing required variable: #{var}"
 
-      type = Map.get(meta, :type)
-      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, type)
+      manual_type = Map.get(meta, :type)
+      binding = Enum.find(enriched_bindings, &(&1.variable == var))
+
+      {final_type, casted_value} = determine_type_and_cast(value, manual_type, binding)
+
+      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
 
       {
         String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
-        acc_params ++ [cast_value(value, type)]
+        acc_params ++ [casted_value]
       }
     end)
   end
@@ -133,6 +149,22 @@ defmodule Lotus.Storage.Query do
     |> Enum.uniq()
   end
 
+  defp get_repo(nil) do
+    {_name, repo} = Config.default_data_repo()
+    repo
+  end
+
+  defp get_repo(repo_name) when is_binary(repo_name) do
+    Config.data_repos()
+    |> Map.get(repo_name)
+    |> case do
+      nil -> raise ArgumentError, "Unknown data repo: #{repo_name}"
+      repo -> repo
+    end
+  end
+
+  defp get_repo(repo) when is_atom(repo), do: repo
+
   defp get_source_type(nil) do
     {_name, repo} = Config.default_data_repo()
     Sources.source_type(repo)
@@ -142,6 +174,122 @@ defmodule Lotus.Storage.Query do
     do: Sources.source_type(repo_name)
 
   defp get_source_type(repo) when is_atom(repo), do: Sources.source_type(repo)
+
+  defp get_source_module(repo) do
+    case repo.__adapter__() do
+      Ecto.Adapters.Postgres -> Lotus.Sources.Postgres
+      Ecto.Adapters.SQLite3 -> Lotus.Sources.SQLite3
+      Ecto.Adapters.MyXQL -> Lotus.Sources.MySQL
+      _ -> nil
+    end
+  end
+
+  defp enrich_bindings_with_types(bindings, repo, search_path, source_module) do
+    Enum.map(bindings, fn binding ->
+      schema = resolve_schema(binding.table, search_path)
+
+      case SchemaCache.get_column_type(repo, schema, binding.table, binding.column) do
+        {:ok, db_type} ->
+          lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_module)
+          Map.put(binding, :lotus_type, lotus_type)
+
+        :not_found ->
+          Logger.debug(
+            "Column type not found: #{schema}.#{binding.table}.#{binding.column}, " <>
+              "defaulting to :text"
+          )
+
+          Map.put(binding, :lotus_type, :text)
+      end
+    end)
+  rescue
+    error in [ArgumentError, FunctionClauseError, DBConnection.ConnectionError] ->
+      Logger.warning(
+        "Type enrichment failed: #{Exception.message(error)}, " <>
+          "defaulting all bindings to :text"
+      )
+
+      Enum.map(bindings, &Map.put(&1, :lotus_type, :text))
+  end
+
+  defp resolve_schema(table, search_path) when is_binary(table) do
+    # Check if table name includes schema prefix (e.g., "public.users")
+    case String.split(table, ".", parts: 2) do
+      [schema, _table_name] ->
+        # Explicit schema in table name
+        schema
+
+      [_table_name] ->
+        # No schema prefix - use search_path or default
+        resolve_from_search_path(search_path)
+    end
+  end
+
+  defp resolve_schema(nil, search_path), do: resolve_from_search_path(search_path)
+
+  defp resolve_from_search_path(search_path) when is_binary(search_path) do
+    search_path
+    |> String.split(",")
+    |> List.first()
+    |> case do
+      nil -> "public"
+      schema -> String.trim(schema)
+    end
+  end
+
+  defp resolve_from_search_path(_), do: "public"
+
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
+  defp determine_type_and_cast(value, manual_type, binding) do
+    cond do
+      # If we have automatic detection with a non-text type, prefer it
+      binding && Map.has_key?(binding, :lotus_type) && binding.lotus_type != :text ->
+        lotus_type = binding.lotus_type
+        column_info = %{table: binding.table, column: binding.column}
+
+        if requires_casting?(lotus_type, value) do
+          case TypeCaster.cast_value(value, lotus_type, column_info) do
+            {:ok, casted_value} ->
+              {lotus_type, casted_value}
+
+            {:error, error_msg} ->
+              raise ArgumentError, error_msg
+          end
+        else
+          # Pass through without casting for text/varchar
+          {lotus_type, value}
+        end
+
+      # If automatic detection returned :text but we have a manual type, prefer manual
+      manual_type != nil ->
+        {manual_type, cast_value(value, manual_type)}
+
+      # If automatic detection found text type and no manual type, use text
+      binding && Map.has_key?(binding, :lotus_type) ->
+        {binding.lotus_type, value}
+
+      # No type information - use as-is
+      true ->
+        {nil, value}
+    end
+  end
+
+  defp requires_casting?(:text, _value), do: false
+  defp requires_casting?(:binary, value) when is_binary(value), do: false
+  defp requires_casting?(:enum, _value), do: false
+  defp requires_casting?(:uuid, _value), do: true
+  defp requires_casting?(:number, _value), do: true
+  defp requires_casting?(:integer, _value), do: true
+  defp requires_casting?(:float, _value), do: true
+  defp requires_casting?(:decimal, _value), do: true
+  defp requires_casting?(:boolean, _value), do: true
+  defp requires_casting?(:date, _value), do: true
+  defp requires_casting?(:time, _value), do: true
+  defp requires_casting?(:datetime, _value), do: true
+  defp requires_casting?(:json, _value), do: true
+  defp requires_casting?(:composite, _value), do: true
+  defp requires_casting?({:array, _element_type}, _value), do: true
+  defp requires_casting?(_, _value), do: false
 
   defp cast_value(value, :number) when is_binary(value) do
     case Integer.parse(value) do
