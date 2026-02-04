@@ -3,7 +3,7 @@ defmodule Lotus.Fixtures do
   Test fixtures for database tests.
   """
 
-  alias Lotus.Storage
+  alias Lotus.{Dashboards, Storage}
   alias Lotus.Test.Repo
   alias Lotus.Test.Schemas
 
@@ -169,5 +169,85 @@ defmodule Lotus.Fixtures do
 
     {:ok, viz} = Lotus.Viz.create_visualization(query, attrs)
     viz
+  end
+
+  @doc """
+  Creates a dashboard fixture for testing.
+
+  ## Examples
+
+      dashboard = dashboard_fixture()
+      dashboard = dashboard_fixture(%{name: "Custom Dashboard"})
+
+  """
+  def dashboard_fixture(attrs \\ %{}) do
+    defaults = %{
+      name: "Dashboard #{System.unique_integer([:positive])}",
+      description: "A test dashboard"
+    }
+
+    attrs = Map.merge(defaults, attrs)
+
+    {:ok, dashboard} = Dashboards.create_dashboard(attrs)
+    dashboard
+  end
+
+  @doc """
+  Creates a dashboard card fixture for testing.
+
+  ## Examples
+
+      card = dashboard_card_fixture(dashboard, %{card_type: :text})
+      card = dashboard_card_fixture(dashboard, %{card_type: :query, query_id: query.id})
+
+  """
+  def dashboard_card_fixture(dashboard, attrs \\ %{}) do
+    defaults = %{
+      card_type: :text,
+      position: 0,
+      content: %{"text" => "Test content"}
+    }
+
+    attrs = Map.merge(defaults, attrs)
+
+    {:ok, card} = Dashboards.create_dashboard_card(dashboard, attrs)
+    card
+  end
+
+  @doc """
+  Creates a dashboard filter fixture for testing.
+
+  ## Examples
+
+      filter = dashboard_filter_fixture(dashboard)
+      filter = dashboard_filter_fixture(dashboard, %{name: "custom_filter"})
+
+  """
+  def dashboard_filter_fixture(dashboard, attrs \\ %{}) do
+    defaults = %{
+      name: "filter_#{System.unique_integer([:positive])}",
+      label: "Test Filter",
+      filter_type: :text,
+      widget: :input,
+      position: 0
+    }
+
+    attrs = Map.merge(defaults, attrs)
+
+    {:ok, filter} = Dashboards.create_dashboard_filter(dashboard, attrs)
+    filter
+  end
+
+  @doc """
+  Creates a filter mapping fixture for testing.
+
+  ## Examples
+
+      mapping = filter_mapping_fixture(card, filter, "user_id")
+
+  """
+  def filter_mapping_fixture(card, filter, variable_name, opts \\ []) do
+    {:ok, mapping} = Dashboards.create_filter_mapping(card, filter, variable_name, opts)
+    mapping
   end
 end

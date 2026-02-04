@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-02-04
+
 ### Added
 
+- **NEW:** Dashboard support for combining multiple queries into interactive, shareable views
+  - Create dashboards with cards arranged in a 12-column grid layout
+  - Card types: query results, text, headings, and links
+  - Dashboard-level filters that map to query variables across cards
+  - Public sharing via secure tokens
+  - Parallel query execution with configurable timeouts
+  - ZIP export with CSV per card
 - **NEW:** Automatic type casting system for query variables with intelligent column type detection
 - **NEW:** `Lotus.Storage.TypeHandler` behaviour for implementing custom database type handlers
 - **NEW:** Custom type handler registry system via `Application.get_env(:lotus, :type_handlers)`

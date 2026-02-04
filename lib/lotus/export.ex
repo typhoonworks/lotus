@@ -4,8 +4,8 @@ defmodule Lotus.Export do
   """
 
   alias Lotus.Config
-  alias Lotus.Result
-  alias Lotus.Storage.Query
+  alias Lotus.{Dashboards, Result}
+  alias Lotus.Storage.{Dashboard, Query}
   alias Lotus.Value
 
   @default_page_size 1000
@@ -132,5 +132,106 @@ defmodule Lotus.Export do
 
   defp normalize_row_for_csv(row) do
     Enum.map(row, &Value.to_csv_string/1)
+  end
+
+  @doc """
+  Exports a dashboard to a ZIP archive containing CSV files for each query card.
+
+  Each query card's results are exported as a separate CSV file named after the
+  card (using title if set, otherwise "card_{id}.csv").
+
+  ## Options
+
+    * `:filter_values` - Map of filter names to their current values
+    * Any `Lotus.run_query/2` option such as `:repo`, `:vars`, `:search_path`
+
+  Returns `{:ok, binary}` where binary is the ZIP file content, or
+  `{:error, reason}` on failure.
+
+  ## Examples
+
+      {:ok, zip_binary} = Lotus.Export.export_dashboard(dashboard)
+      File.write!("dashboard_export.zip", zip_binary)
+
+      {:ok, zip_binary} = Lotus.Export.export_dashboard(dashboard,
+        filter_values: %{"date_range" => "2024-01-01,2024-12-31"}
+      )
+
+  """
+  @spec export_dashboard(Dashboard.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def export_dashboard(%Dashboard{} = dashboard, opts \\ []) do
+    cards = Dashboards.list_dashboard_cards(dashboard.id)
+    query_cards = Enum.filter(cards, &(&1.card_type == :query))
+    results = Dashboards.run_dashboard(dashboard.id, opts)
+
+    zip_entries =
+      query_cards
+      |> Enum.map(fn card ->
+        filename = card_filename(card)
+
+        case Map.get(results, card.id) do
+          {:ok, result} ->
+            csv_data = to_csv(result) |> IO.iodata_to_binary()
+            {String.to_charlist(filename), csv_data}
+
+          {:error, reason} ->
+            error_content = "Error executing query: #{inspect(reason)}"
+            {String.to_charlist(filename <> ".error.txt"), error_content}
+        end
+      end)
+
+    manifest = build_dashboard_manifest(dashboard, query_cards, results)
+    manifest_entry = {~c"manifest.json", Lotus.JSON.encode!(manifest)}
+
+    all_entries = [manifest_entry | zip_entries]
+
+    case :zip.create(~c"dashboard.zip", all_entries, [:memory]) do
+      {:ok, {_filename, zip_binary}} -> {:ok, zip_binary}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp card_filename(card) do
+    base_name =
+      if card.title && String.trim(card.title) != "" do
+        card.title
+        |> String.downcase()
+        |> String.replace(~r/[^a-z0-9]+/, "_")
+        |> String.trim("_")
+      else
+        "card_#{card.id}"
+      end
+
+    "#{base_name}.csv"
+  end
+
+  defp build_dashboard_manifest(dashboard, cards, results) do
+    %{
+      "dashboard" => %{
+        "id" => dashboard.id,
+        "name" => dashboard.name,
+        "description" => dashboard.description,
+        "exported_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+      },
+      "cards" =>
+        Enum.map(cards, fn card ->
+          result_info =
+            case Map.get(results, card.id) do
+              {:ok, result} ->
+                %{"status" => "success", "row_count" => result.num_rows}
+
+              {:error, reason} ->
+                %{"status" => "error", "error" => inspect(reason)}
+            end
+
+          %{
+            "id" => card.id,
+            "title" => card.title,
+            "query_id" => card.query_id,
+            "filename" => card_filename(card)
+          }
+          |> Map.merge(result_info)
+        end)
+    }
   end
 end

@@ -95,7 +95,11 @@ defmodule Lotus.Sources.Postgres do
       {"information_schema", ~r/.*/},
       {prefix, ms},
       {prefix, "lotus_queries"},
-      {prefix, "lotus_query_visualizations"}
+      {prefix, "lotus_query_visualizations"},
+      {prefix, "lotus_dashboards"},
+      {prefix, "lotus_dashboard_cards"},
+      {prefix, "lotus_dashboard_filters"},
+      {prefix, "lotus_dashboard_card_filter_mappings"}
     ]
   end
 

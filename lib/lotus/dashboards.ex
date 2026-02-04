@@ -1,0 +1,726 @@
+defmodule Lotus.Dashboards do
+  @moduledoc """
+  Service functions for managing dashboards in Lotus.
+
+  Provides CRUD operations for dashboards, cards, filters, and filter mappings,
+  as well as execution functions for running all cards in a dashboard.
+
+  ## Dashboard Structure
+
+  Dashboards contain:
+  - **Cards** - Query results, text, links, or headings arranged in a 12-column grid
+  - **Filters** - User inputs that control query variables across multiple cards
+  - **Filter Mappings** - Connections between dashboard filters and card query variables
+
+  ## Execution
+
+  Use `run_dashboard/2` to execute all query cards in a dashboard simultaneously.
+  Filter values are resolved and passed to each card's query variables via the
+  configured mappings.
+  """
+
+  import Ecto.Query
+
+  import Lotus.Helpers, only: [escape_like: 1]
+
+  alias Lotus.Storage.{
+    Dashboard,
+    DashboardCard,
+    DashboardCardFilterMapping,
+    DashboardFilter
+  }
+
+  @type id :: integer() | binary()
+  @type attrs :: map()
+
+  # ── Dashboard CRUD ─────────────────────────────────────────────────────────
+
+  @doc """
+  Lists all dashboards.
+
+  Returns dashboards ordered by name.
+  """
+  @spec list_dashboards() :: [Dashboard.t()]
+  def list_dashboards do
+    from(d in Dashboard, order_by: [asc: d.name])
+    |> Lotus.repo().all()
+  end
+
+  @doc """
+  Lists dashboards with optional filtering.
+
+  ## Options
+
+    * `:search` - Search term to match against dashboard names (case insensitive)
+
+  ## Examples
+
+      iex> list_dashboards_by(search: "sales")
+      [%Dashboard{name: "Sales Overview"}, ...]
+
+  """
+  @spec list_dashboards_by(keyword()) :: [Dashboard.t()]
+  def list_dashboards_by(opts \\ []) do
+    q = from(d in Dashboard, order_by: [asc: d.name])
+
+    q =
+      case Keyword.get(opts, :search) do
+        nil ->
+          q
+
+        term ->
+          escaped = escape_like(term)
+          from(d in q, where: ilike(d.name, ^"%#{escaped}%"))
+      end
+
+    Lotus.repo().all(q)
+  end
+
+  @doc """
+  Gets a single dashboard by ID.
+
+  Returns `nil` if the dashboard does not exist.
+  """
+  @spec get_dashboard(id()) :: Dashboard.t() | nil
+  def get_dashboard(id) do
+    Lotus.repo().get(Dashboard, id)
+  end
+
+  @doc """
+  Gets a single dashboard by ID.
+
+  Raises `Ecto.NoResultsError` if the dashboard does not exist.
+  """
+  @spec get_dashboard!(id()) :: Dashboard.t() | no_return()
+  def get_dashboard!(id) do
+    Lotus.repo().get!(Dashboard, id)
+  end
+
+  @doc """
+  Gets a dashboard by its public sharing token.
+
+  Returns `nil` if no dashboard has the given token.
+  """
+  @spec get_dashboard_by_token(String.t()) :: Dashboard.t() | nil
+  def get_dashboard_by_token(token) when is_binary(token) do
+    from(d in Dashboard, where: d.public_token == ^token)
+    |> Lotus.repo().one()
+  end
+
+  @doc """
+  Creates a new dashboard.
+
+  ## Examples
+
+      iex> create_dashboard(%{name: "Sales Dashboard"})
+      {:ok, %Dashboard{}}
+
+      iex> create_dashboard(%{})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  @spec create_dashboard(attrs()) :: {:ok, Dashboard.t()} | {:error, Ecto.Changeset.t()}
+  def create_dashboard(attrs) do
+    Dashboard.new(attrs)
+    |> Lotus.repo().insert()
+  end
+
+  @doc """
+  Updates a dashboard.
+
+  ## Examples
+
+      iex> update_dashboard(dashboard, %{name: "New Name"})
+      {:ok, %Dashboard{}}
+
+  """
+  @spec update_dashboard(Dashboard.t(), attrs()) ::
+          {:ok, Dashboard.t()} | {:error, Ecto.Changeset.t()}
+  def update_dashboard(%Dashboard{} = dashboard, attrs) do
+    Dashboard.update(dashboard, attrs)
+    |> Lotus.repo().update()
+  end
+
+  @doc """
+  Deletes a dashboard.
+
+  Also deletes all associated cards, filters, and filter mappings.
+
+  ## Examples
+
+      iex> delete_dashboard(dashboard)
+      {:ok, %Dashboard{}}
+
+  """
+  @spec delete_dashboard(Dashboard.t()) :: {:ok, Dashboard.t()} | {:error, Ecto.Changeset.t()}
+  def delete_dashboard(%Dashboard{} = dashboard) do
+    Lotus.repo().delete(dashboard)
+  end
+
+  @doc """
+  Enables public sharing for a dashboard by generating a unique token.
+
+  The token can be used to access the dashboard without authentication
+  via `get_dashboard_by_token/1`.
+
+  ## Examples
+
+      iex> enable_public_sharing(dashboard)
+      {:ok, %Dashboard{public_token: "abc123..."}}
+
+  """
+  @spec enable_public_sharing(Dashboard.t()) ::
+          {:ok, Dashboard.t()} | {:error, Ecto.Changeset.t()}
+  def enable_public_sharing(%Dashboard{} = dashboard) do
+    token = generate_secure_token()
+    update_dashboard(dashboard, %{public_token: token})
+  end
+
+  @doc """
+  Disables public sharing for a dashboard by removing its token.
+
+  ## Examples
+
+      iex> disable_public_sharing(dashboard)
+      {:ok, %Dashboard{public_token: nil}}
+
+  """
+  @spec disable_public_sharing(Dashboard.t()) ::
+          {:ok, Dashboard.t()} | {:error, Ecto.Changeset.t()}
+  def disable_public_sharing(%Dashboard{} = dashboard) do
+    update_dashboard(dashboard, %{public_token: nil})
+  end
+
+  defp generate_secure_token do
+    :crypto.strong_rand_bytes(32)
+    |> Base.url_encode64(padding: false)
+  end
+
+  # ── Card CRUD ──────────────────────────────────────────────────────────────
+
+  @doc """
+  Lists all cards for a dashboard.
+
+  Returns cards ordered by position, then by id.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload (e.g., `[:query, :filter_mappings]`)
+
+  ## Examples
+
+      iex> list_dashboard_cards(dashboard)
+      [%DashboardCard{}, ...]
+
+      iex> list_dashboard_cards(dashboard_id, preload: [:query, :filter_mappings])
+      [%DashboardCard{query: %Query{}, filter_mappings: [...]}, ...]
+
+  """
+  @spec list_dashboard_cards(Dashboard.t() | id(), keyword()) :: [DashboardCard.t()]
+  def list_dashboard_cards(dashboard_or_id, opts \\ [])
+
+  def list_dashboard_cards(%Dashboard{id: id}, opts), do: list_dashboard_cards(id, opts)
+
+  def list_dashboard_cards(dashboard_id, opts) do
+    preloads = Keyword.get(opts, :preload, [])
+
+    from(c in DashboardCard,
+      where: c.dashboard_id == ^dashboard_id,
+      order_by: [asc: c.position, asc: c.id],
+      preload: ^preloads
+    )
+    |> Lotus.repo().all()
+  end
+
+  @doc """
+  Gets a single card by ID.
+
+  Returns `nil` if the card does not exist.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload
+
+  """
+  @spec get_dashboard_card(id(), keyword()) :: DashboardCard.t() | nil
+  def get_dashboard_card(id, opts \\ []) do
+    preloads = Keyword.get(opts, :preload, [])
+
+    from(c in DashboardCard, where: c.id == ^id, preload: ^preloads)
+    |> Lotus.repo().one()
+  end
+
+  @doc """
+  Gets a single card by ID.
+
+  Raises `Ecto.NoResultsError` if the card does not exist.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload
+
+  """
+  @spec get_dashboard_card!(id(), keyword()) :: DashboardCard.t() | no_return()
+  def get_dashboard_card!(id, opts \\ []) do
+    preloads = Keyword.get(opts, :preload, [])
+
+    from(c in DashboardCard, where: c.id == ^id, preload: ^preloads)
+    |> Lotus.repo().one!()
+  end
+
+  @doc """
+  Creates a new card for a dashboard.
+
+  ## Examples
+
+      iex> create_dashboard_card(dashboard, %{
+      ...>   card_type: :query,
+      ...>   query_id: 123,
+      ...>   position: 0,
+      ...>   layout: %{x: 0, y: 0, w: 6, h: 4}
+      ...> })
+      {:ok, %DashboardCard{}}
+
+  """
+  @spec create_dashboard_card(Dashboard.t() | id(), attrs()) ::
+          {:ok, DashboardCard.t()} | {:error, Ecto.Changeset.t()}
+  def create_dashboard_card(%Dashboard{id: id}, attrs), do: create_dashboard_card(id, attrs)
+
+  def create_dashboard_card(dashboard_id, attrs) do
+    attrs = Map.put(attrs, :dashboard_id, dashboard_id)
+
+    DashboardCard.new(attrs)
+    |> Lotus.repo().insert()
+  end
+
+  @doc """
+  Updates a card.
+
+  ## Examples
+
+      iex> update_dashboard_card(card, %{title: "Revenue Chart"})
+      {:ok, %DashboardCard{}}
+
+  """
+  @spec update_dashboard_card(DashboardCard.t(), attrs()) ::
+          {:ok, DashboardCard.t()} | {:error, Ecto.Changeset.t()}
+  def update_dashboard_card(%DashboardCard{} = card, attrs) do
+    DashboardCard.update(card, attrs)
+    |> Lotus.repo().update()
+  end
+
+  @doc """
+  Deletes a card.
+
+  Also deletes all associated filter mappings.
+  """
+  @spec delete_dashboard_card(DashboardCard.t() | id()) ::
+          {:ok, DashboardCard.t()} | {:error, Ecto.Changeset.t() | :not_found}
+  def delete_dashboard_card(%DashboardCard{} = card), do: Lotus.repo().delete(card)
+
+  def delete_dashboard_card(id) do
+    case Lotus.repo().get(DashboardCard, id) do
+      nil -> {:error, :not_found}
+      card -> Lotus.repo().delete(card)
+    end
+  end
+
+  @doc """
+  Reorders cards in a dashboard.
+
+  Accepts a list of card IDs in the desired order. Each card's position
+  will be updated to match its index in the list.
+
+  ## Examples
+
+      iex> reorder_dashboard_cards(dashboard, [card3_id, card1_id, card2_id])
+      :ok
+
+  """
+  @spec reorder_dashboard_cards(Dashboard.t() | id(), [id()]) :: :ok
+  def reorder_dashboard_cards(%Dashboard{id: id}, card_ids),
+    do: reorder_dashboard_cards(id, card_ids)
+
+  def reorder_dashboard_cards(dashboard_id, card_ids) when is_list(card_ids) do
+    Lotus.repo().transaction(fn ->
+      card_ids
+      |> Enum.with_index()
+      |> Enum.each(fn {card_id, position} ->
+        from(c in DashboardCard,
+          where: c.id == ^card_id and c.dashboard_id == ^dashboard_id
+        )
+        |> Lotus.repo().update_all(set: [position: position])
+      end)
+    end)
+
+    :ok
+  end
+
+  # ── Filter CRUD ────────────────────────────────────────────────────────────
+
+  @doc """
+  Lists all filters for a dashboard.
+
+  Returns filters ordered by position, then by id.
+  """
+  @spec list_dashboard_filters(Dashboard.t() | id()) :: [DashboardFilter.t()]
+  def list_dashboard_filters(%Dashboard{id: id}), do: list_dashboard_filters(id)
+
+  def list_dashboard_filters(dashboard_id) do
+    from(f in DashboardFilter,
+      where: f.dashboard_id == ^dashboard_id,
+      order_by: [asc: f.position, asc: f.id]
+    )
+    |> Lotus.repo().all()
+  end
+
+  @doc """
+  Gets a single filter by ID.
+
+  Returns `nil` if the filter does not exist.
+  """
+  @spec get_dashboard_filter(id()) :: DashboardFilter.t() | nil
+  def get_dashboard_filter(id) do
+    Lotus.repo().get(DashboardFilter, id)
+  end
+
+  @doc """
+  Gets a single filter by ID.
+
+  Raises `Ecto.NoResultsError` if the filter does not exist.
+  """
+  @spec get_dashboard_filter!(id()) :: DashboardFilter.t() | no_return()
+  def get_dashboard_filter!(id) do
+    Lotus.repo().get!(DashboardFilter, id)
+  end
+
+  @doc """
+  Creates a new filter for a dashboard.
+
+  ## Examples
+
+      iex> create_dashboard_filter(dashboard, %{
+      ...>   name: "date_range",
+      ...>   label: "Date Range",
+      ...>   filter_type: :date_range,
+      ...>   widget: :date_range_picker,
+      ...>   position: 0
+      ...> })
+      {:ok, %DashboardFilter{}}
+
+  """
+  @spec create_dashboard_filter(Dashboard.t() | id(), attrs()) ::
+          {:ok, DashboardFilter.t()} | {:error, Ecto.Changeset.t()}
+  def create_dashboard_filter(%Dashboard{id: id}, attrs), do: create_dashboard_filter(id, attrs)
+
+  def create_dashboard_filter(dashboard_id, attrs) do
+    attrs = Map.put(attrs, :dashboard_id, dashboard_id)
+
+    DashboardFilter.new(attrs)
+    |> Lotus.repo().insert()
+  end
+
+  @doc """
+  Updates a filter.
+
+  ## Examples
+
+      iex> update_dashboard_filter(filter, %{label: "Select Period"})
+      {:ok, %DashboardFilter{}}
+
+  """
+  @spec update_dashboard_filter(DashboardFilter.t(), attrs()) ::
+          {:ok, DashboardFilter.t()} | {:error, Ecto.Changeset.t()}
+  def update_dashboard_filter(%DashboardFilter{} = filter, attrs) do
+    DashboardFilter.update(filter, attrs)
+    |> Lotus.repo().update()
+  end
+
+  @doc """
+  Deletes a filter.
+
+  Also deletes all associated filter mappings.
+  """
+  @spec delete_dashboard_filter(DashboardFilter.t() | id()) ::
+          {:ok, DashboardFilter.t()} | {:error, Ecto.Changeset.t() | :not_found}
+  def delete_dashboard_filter(%DashboardFilter{} = filter), do: Lotus.repo().delete(filter)
+
+  def delete_dashboard_filter(id) do
+    case Lotus.repo().get(DashboardFilter, id) do
+      nil -> {:error, :not_found}
+      filter -> Lotus.repo().delete(filter)
+    end
+  end
+
+  # ── Filter Mapping CRUD ────────────────────────────────────────────────────
+
+  @doc """
+  Lists all filter mappings for a card.
+  """
+  @spec list_card_filter_mappings(DashboardCard.t() | id()) :: [DashboardCardFilterMapping.t()]
+  def list_card_filter_mappings(%DashboardCard{id: id}), do: list_card_filter_mappings(id)
+
+  def list_card_filter_mappings(card_id) do
+    from(m in DashboardCardFilterMapping,
+      where: m.card_id == ^card_id,
+      preload: [:filter]
+    )
+    |> Lotus.repo().all()
+  end
+
+  @doc """
+  Creates a filter mapping connecting a dashboard filter to a card's query variable.
+
+  ## Options
+
+    * `:transform` - Optional transformation config for the filter value
+
+  ## Examples
+
+      iex> create_filter_mapping(card, filter, "start_date")
+      {:ok, %DashboardCardFilterMapping{}}
+
+      iex> create_filter_mapping(card, filter, "end_date", transform: %{type: "date_range_end"})
+      {:ok, %DashboardCardFilterMapping{}}
+
+  """
+  @spec create_filter_mapping(
+          DashboardCard.t() | id(),
+          DashboardFilter.t() | id(),
+          String.t(),
+          keyword()
+        ) ::
+          {:ok, DashboardCardFilterMapping.t()} | {:error, Ecto.Changeset.t()}
+  def create_filter_mapping(card, filter, variable_name, opts \\ [])
+
+  def create_filter_mapping(%DashboardCard{id: card_id}, filter, variable_name, opts) do
+    create_filter_mapping(card_id, filter, variable_name, opts)
+  end
+
+  def create_filter_mapping(card_id, %DashboardFilter{id: filter_id}, variable_name, opts) do
+    create_filter_mapping(card_id, filter_id, variable_name, opts)
+  end
+
+  def create_filter_mapping(card_id, filter_id, variable_name, opts) do
+    attrs = %{
+      card_id: card_id,
+      filter_id: filter_id,
+      variable_name: variable_name,
+      transform: Keyword.get(opts, :transform)
+    }
+
+    DashboardCardFilterMapping.new(attrs)
+    |> Lotus.repo().insert()
+  end
+
+  @doc """
+  Deletes a filter mapping.
+  """
+  @spec delete_filter_mapping(DashboardCardFilterMapping.t() | id()) ::
+          {:ok, DashboardCardFilterMapping.t()} | {:error, Ecto.Changeset.t() | :not_found}
+  def delete_filter_mapping(%DashboardCardFilterMapping{} = mapping) do
+    Lotus.repo().delete(mapping)
+  end
+
+  def delete_filter_mapping(id) do
+    case Lotus.repo().get(DashboardCardFilterMapping, id) do
+      nil -> {:error, :not_found}
+      mapping -> Lotus.repo().delete(mapping)
+    end
+  end
+
+  # ── Execution ──────────────────────────────────────────────────────────────
+
+  @doc """
+  Runs all query cards in a dashboard and returns their results.
+
+  Returns a map of card IDs to their results. By default, cards are executed
+  in parallel for better performance.
+
+  ## Options
+
+    * `:filter_values` - Map of filter names to their current values
+    * `:parallel` - Whether to run cards in parallel (default: true)
+    * `:timeout` - Timeout per card in milliseconds (default: 30000)
+
+  ## Filter Resolution
+
+  Filter values are resolved to query variables through the configured mappings.
+  For each card:
+  1. Get all filter mappings for the card
+  2. For each mapping, get the filter value from `:filter_values`
+  3. Apply any configured transform to the value
+  4. Pass the value to the query as the mapped variable name
+
+  ## Examples
+
+      iex> run_dashboard(dashboard, filter_values: %{"date_range" => "2024-01-01"})
+      %{
+        1 => {:ok, %Lotus.Result{}},
+        2 => {:ok, %Lotus.Result{}},
+        3 => {:error, "Missing required variable: status"}
+      }
+
+  """
+  @spec run_dashboard(Dashboard.t() | id(), keyword()) :: %{
+          id() => {:ok, Lotus.Result.t()} | {:error, term()}
+        }
+  def run_dashboard(dashboard, opts \\ [])
+
+  def run_dashboard(%Dashboard{id: id}, opts), do: run_dashboard(id, opts)
+
+  def run_dashboard(dashboard_id, opts) do
+    cards = list_dashboard_cards(dashboard_id)
+    filters = list_dashboard_filters(dashboard_id)
+    filter_values = Keyword.get(opts, :filter_values, %{})
+    parallel? = Keyword.get(opts, :parallel, true)
+    timeout = Keyword.get(opts, :timeout, 30_000)
+
+    filter_lookup = Map.new(filters, &{&1.id, &1})
+    query_cards = Enum.filter(cards, &(&1.card_type == :query))
+
+    # Preload all filter mappings for all query cards to avoid N+1 queries
+    card_ids = Enum.map(query_cards, & &1.id)
+    all_mappings = preload_mappings_for_cards(card_ids)
+
+    if parallel? do
+      run_cards_parallel(query_cards, filter_values, filter_lookup, all_mappings, opts, timeout)
+    else
+      run_cards_sequential(query_cards, filter_values, filter_lookup, all_mappings, opts)
+    end
+  end
+
+  @doc """
+  Runs a single dashboard card and returns its result.
+
+  ## Options
+
+    * `:filter_values` - Map of filter names to their current values
+    * `:timeout` - Query timeout in milliseconds
+
+  ## Examples
+
+      iex> run_dashboard_card(card, filter_values: %{"user_id" => "123"})
+      {:ok, %Lotus.Result{}}
+
+  """
+  @spec run_dashboard_card(DashboardCard.t() | id(), keyword()) ::
+          {:ok, Lotus.Result.t()} | {:error, term()}
+  def run_dashboard_card(card, opts \\ [])
+
+  def run_dashboard_card(%DashboardCard{} = card, opts) do
+    if card.card_type != :query do
+      {:error, :not_a_query_card}
+    else
+      filter_values = Keyword.get(opts, :filter_values, %{})
+
+      mappings = list_card_filter_mappings(card.id)
+      filter_lookup = Map.new(mappings, fn m -> {m.filter_id, m.filter} end)
+      vars = resolve_card_variables(mappings, filter_values, filter_lookup)
+
+      query_opts = Keyword.drop(opts, [:filter_values])
+      run_opts = Keyword.put(query_opts, :vars, vars)
+
+      Lotus.run_query(card.query_id, run_opts)
+    end
+  end
+
+  def run_dashboard_card(id, opts) do
+    case get_dashboard_card(id) do
+      nil -> {:error, :not_found}
+      card -> run_dashboard_card(card, opts)
+    end
+  end
+
+  defp preload_mappings_for_cards([]), do: %{}
+
+  defp preload_mappings_for_cards(card_ids) do
+    from(m in DashboardCardFilterMapping,
+      where: m.card_id in ^card_ids,
+      preload: [:filter]
+    )
+    |> Lotus.repo().all()
+    |> Enum.group_by(& &1.card_id)
+  end
+
+  defp run_cards_parallel(cards, filter_values, filter_lookup, all_mappings, opts, timeout) do
+    cards
+    |> Enum.map(fn card ->
+      # Capture card_id before spawning to handle timeouts
+      card_id = card.id
+
+      task =
+        Task.async(fn ->
+          execute_card(card, filter_values, filter_lookup, all_mappings, opts)
+        end)
+
+      {card_id, task}
+    end)
+    |> Enum.reduce(%{}, fn {card_id, task}, acc ->
+      result =
+        case Task.yield(task, timeout) || Task.shutdown(task) do
+          {:ok, result} -> result
+          nil -> {:error, :timeout}
+        end
+
+      Map.put(acc, card_id, result)
+    end)
+  end
+
+  defp run_cards_sequential(cards, filter_values, filter_lookup, all_mappings, opts) do
+    Enum.reduce(cards, %{}, fn card, acc ->
+      result = execute_card(card, filter_values, filter_lookup, all_mappings, opts)
+      Map.put(acc, card.id, result)
+    end)
+  end
+
+  defp execute_card(card, filter_values, filter_lookup, all_mappings, opts) do
+    mappings = Map.get(all_mappings, card.id, [])
+    vars = resolve_card_variables(mappings, filter_values, filter_lookup)
+
+    query_opts = Keyword.drop(opts, [:filter_values, :parallel, :timeout])
+    run_opts = Keyword.put(query_opts, :vars, vars)
+
+    Lotus.run_query(card.query_id, run_opts)
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  defp resolve_card_variables(mappings, filter_values, filter_lookup) do
+    Enum.reduce(mappings, %{}, fn mapping, vars ->
+      filter = Map.get(filter_lookup, mapping.filter_id)
+
+      if filter do
+        # Get filter value from supplied values or fall back to default
+        raw_value = Map.get(filter_values, filter.name) || filter.default_value
+
+        if raw_value do
+          # Apply transform if configured
+          value = apply_transform(raw_value, mapping.transform)
+          Map.put(vars, mapping.variable_name, value)
+        else
+          vars
+        end
+      else
+        vars
+      end
+    end)
+  end
+
+  defp apply_transform(value, nil), do: value
+
+  defp apply_transform(value, %{"type" => "date_range_start"}) when is_binary(value) do
+    # Assumes value is in format "start_date,end_date" or just a date
+    value |> String.split(",") |> List.first()
+  end
+
+  defp apply_transform(value, %{"type" => "date_range_end"}) when is_binary(value) do
+    # Assumes value is in format "start_date,end_date" or just a date
+    case String.split(value, ",") do
+      [_start, end_date] -> end_date
+      [single] -> single
+    end
+  end
+
+  defp apply_transform(value, _transform), do: value
+end

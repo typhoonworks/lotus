@@ -57,6 +57,15 @@ Visualizations are saved chart configurations attached to queries. Lotus stores 
 
 Before saving, you can use `Lotus.validate_visualization_config/2` to verify that field references in your config exist in the query results and that numeric aggregations apply to numeric columns. This validation is optional and does not enforce any particular config structure.
 
+### Dashboards
+Dashboards combine multiple queries into a single, interactive view. Each dashboard contains cards arranged in a 12-column grid layout, with support for:
+
+- **Query cards** - Display results from saved queries with optional visualization overrides
+- **Text/heading cards** - Add context with markdown text or section headings
+- **Link cards** - Quick navigation to related resources
+
+Dashboard filters let users control data across multiple cards simultaneously. A single filter (like a date range picker) can map to different query variables in each card, enabling coordinated filtering without modifying individual queries.
+
 ### Schema Introspection
 Lotus provides comprehensive schema discovery tools to explore database structure, list tables across schemas, inspect column definitions, and gather table statistics.
 

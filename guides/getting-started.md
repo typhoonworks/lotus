@@ -798,8 +798,48 @@ With Lotus Web, you get:
 
 See the [installation guide](installation.md#lotus-web-setup) for detailed setup instructions.
 
+## Building Dashboards
+
+Once you have queries and visualizations, you can combine them into dashboards for interactive reporting:
+
+```elixir
+# Create a dashboard
+{:ok, dashboard} = Lotus.create_dashboard(%{
+  name: "Sales Overview",
+  description: "Key sales metrics"
+})
+
+# Add query cards
+{:ok, card} = Lotus.create_dashboard_card(dashboard, %{
+  card_type: :query,
+  query_id: query.id,
+  title: "Monthly Revenue",
+  layout: %{x: 0, y: 0, w: 6, h: 4}
+})
+
+# Add a filter that applies to multiple cards
+{:ok, filter} = Lotus.create_dashboard_filter(dashboard, %{
+  name: "date_range",
+  label: "Date Range",
+  filter_type: :date_range,
+  widget: :date_range_picker,
+  position: 0
+})
+
+# Map the filter to a query variable
+Lotus.create_filter_mapping(card, filter, "start_date")
+
+# Run the dashboard
+{:ok, results} = Lotus.run_dashboard(dashboard,
+  filter_values: %{"date_range" => "2024-01-01/2024-03-31"}
+)
+```
+
+See the [Dashboards guide](dashboards.md) for complete documentation.
+
 ## Next Steps
 
 Now that you understand the basics, explore:
 
+- [Dashboards](dashboards.md) - Combine queries into interactive views
 - [Configuration](configuration.md) - Learn about all available configuration options

@@ -5,7 +5,7 @@ defmodule Lotus.Migrations.Postgres do
 
   use Ecto.Migration
 
-  @latest_version 2
+  @latest_version 3
   @default_prefix "public"
 
   @impl Lotus.Migration

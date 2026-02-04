@@ -77,7 +77,15 @@ defmodule Lotus.Sources.Default do
       {"public", "lotus_queries"},
       {nil, "lotus_queries"},
       {"public", "lotus_query_visualizations"},
-      {nil, "lotus_query_visualizations"}
+      {nil, "lotus_query_visualizations"},
+      {"public", "lotus_dashboards"},
+      {nil, "lotus_dashboards"},
+      {"public", "lotus_dashboard_cards"},
+      {nil, "lotus_dashboard_cards"},
+      {"public", "lotus_dashboard_filters"},
+      {nil, "lotus_dashboard_filters"},
+      {"public", "lotus_dashboard_card_filter_mappings"},
+      {nil, "lotus_dashboard_card_filter_mappings"}
     ]
   end
 

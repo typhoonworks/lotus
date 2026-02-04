@@ -64,7 +64,7 @@ defmodule Lotus do
         ]
 
   alias Lotus.Cache.Key
-  alias Lotus.{Config, Result, Runner, Schema, Sources, Storage, Viz}
+  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Sources, Storage, Viz}
   alias Lotus.Storage.Query
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
@@ -175,6 +175,188 @@ defmodule Lotus do
   defdelegate validate_visualization_config(config, result),
     to: Viz,
     as: :validate_against_result
+
+  # ── Dashboard Functions ────────────────────────────────────────────────────
+
+  @doc """
+  Lists all dashboards.
+  """
+  defdelegate list_dashboards(), to: Dashboards
+
+  @doc """
+  Lists dashboards with optional filtering.
+
+  ## Options
+
+    * `:search` - Search term to match against dashboard names
+  """
+  defdelegate list_dashboards_by(opts), to: Dashboards
+
+  @doc """
+  Gets a single dashboard by ID. Returns nil if not found.
+  """
+  defdelegate get_dashboard(id), to: Dashboards
+
+  @doc """
+  Gets a single dashboard by ID. Raises if not found.
+  """
+  defdelegate get_dashboard!(id), to: Dashboards
+
+  @doc """
+  Gets a dashboard by its public sharing token.
+  """
+  defdelegate get_dashboard_by_token(token), to: Dashboards
+
+  @doc """
+  Creates a new dashboard.
+  """
+  defdelegate create_dashboard(attrs), to: Dashboards
+
+  @doc """
+  Updates an existing dashboard.
+  """
+  defdelegate update_dashboard(dashboard, attrs), to: Dashboards
+
+  @doc """
+  Deletes a dashboard.
+  """
+  defdelegate delete_dashboard(dashboard), to: Dashboards
+
+  @doc """
+  Enables public sharing for a dashboard by generating a unique token.
+  """
+  defdelegate enable_public_sharing(dashboard), to: Dashboards
+
+  @doc """
+  Disables public sharing for a dashboard.
+  """
+  defdelegate disable_public_sharing(dashboard), to: Dashboards
+
+  # ── Dashboard Card Functions ───────────────────────────────────────────────
+
+  @doc """
+  Lists all cards for a dashboard.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload (e.g., `[:query, :filter_mappings]`)
+
+  """
+  defdelegate list_dashboard_cards(dashboard_or_id, opts \\ []), to: Dashboards
+
+  @doc """
+  Gets a single card by ID. Returns nil if not found.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload
+
+  """
+  defdelegate get_dashboard_card(id, opts \\ []), to: Dashboards
+
+  @doc """
+  Gets a single card by ID. Raises if not found.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload
+
+  """
+  defdelegate get_dashboard_card!(id, opts \\ []), to: Dashboards
+
+  @doc """
+  Creates a new card for a dashboard.
+  """
+  defdelegate create_dashboard_card(dashboard_or_id, attrs), to: Dashboards
+
+  @doc """
+  Updates a card.
+  """
+  defdelegate update_dashboard_card(card, attrs), to: Dashboards
+
+  @doc """
+  Deletes a card.
+  """
+  defdelegate delete_dashboard_card(card_or_id), to: Dashboards
+
+  @doc """
+  Reorders cards in a dashboard.
+  """
+  defdelegate reorder_dashboard_cards(dashboard_or_id, card_ids), to: Dashboards
+
+  # ── Dashboard Filter Functions ─────────────────────────────────────────────
+
+  @doc """
+  Lists all filters for a dashboard.
+  """
+  defdelegate list_dashboard_filters(dashboard_or_id), to: Dashboards
+
+  @doc """
+  Gets a single filter by ID. Returns nil if not found.
+  """
+  defdelegate get_dashboard_filter(id), to: Dashboards
+
+  @doc """
+  Gets a single filter by ID. Raises if not found.
+  """
+  defdelegate get_dashboard_filter!(id), to: Dashboards
+
+  @doc """
+  Creates a new filter for a dashboard.
+  """
+  defdelegate create_dashboard_filter(dashboard_or_id, attrs), to: Dashboards
+
+  @doc """
+  Updates a filter.
+  """
+  defdelegate update_dashboard_filter(filter, attrs), to: Dashboards
+
+  @doc """
+  Deletes a filter.
+  """
+  defdelegate delete_dashboard_filter(filter_or_id), to: Dashboards
+
+  # ── Filter Mapping Functions ───────────────────────────────────────────────
+
+  @doc """
+  Creates a filter mapping connecting a dashboard filter to a card's query variable.
+  """
+  defdelegate create_filter_mapping(card, filter, variable_name, opts \\ []), to: Dashboards
+
+  @doc """
+  Deletes a filter mapping.
+  """
+  defdelegate delete_filter_mapping(mapping_or_id), to: Dashboards
+
+  @doc """
+  Lists all filter mappings for a card.
+  """
+  defdelegate list_card_filter_mappings(card_or_id), to: Dashboards
+
+  # ── Dashboard Execution Functions ──────────────────────────────────────────
+
+  @doc """
+  Runs all query cards in a dashboard and returns their results.
+
+  Returns a map of card IDs to their results.
+
+  ## Options
+
+    * `:filter_values` - Map of filter names to their current values
+    * `:parallel` - Whether to run cards in parallel (default: true)
+    * `:timeout` - Timeout per card in milliseconds (default: 30000)
+  """
+  defdelegate run_dashboard(dashboard_or_id, opts \\ []), to: Dashboards
+
+  @doc """
+  Runs a single dashboard card and returns its result.
+
+  ## Options
+
+    * `:filter_values` - Map of filter names to their current values
+    * `:timeout` - Query timeout in milliseconds
+  """
+  defdelegate run_dashboard_card(card_or_id, opts \\ []), to: Dashboards
 
   @doc """
   Run a saved query (by struct or id).
