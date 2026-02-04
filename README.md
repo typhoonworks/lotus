@@ -46,7 +46,7 @@ The type casting system gracefully falls back to manual type annotations when sc
 
 ## Lotus Web UI
 
-While Lotus can be used standalone, it pairs naturally with [Lotus Web](https://github.com/typhoonworks/lotus_web) (v0.8+ for Lotus 0.10), which provides a beautiful web interface you can mount directly in your Phoenix application:
+While Lotus can be used standalone, it pairs naturally with [Lotus Web](https://github.com/typhoonworks/lotus_web) (v0.8+ for Lotus 0.11), which provides a beautiful web interface you can mount directly in your Phoenix application:
 
 - 🖥️ **Web-based SQL editor** with syntax highlighting and autocomplete
 - 🗂️ **Query management** - save, organize, and reuse SQL queries
@@ -92,7 +92,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.10.0"}
+    {:lotus, "~> 0.11.0"}
   ]
 end
 ```
