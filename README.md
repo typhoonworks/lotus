@@ -20,19 +20,29 @@ Lotus is a lightweight SQL query runner and storage library for Elixir applicati
 
 >🚧 While this library already ships a lot of features and the public API is mostly set, it’s still evolving. We’ll make a best effort to announce breaking changes, but we can’t guarantee backwards compatibility yet — especially as we generalize the `Source` abstraction to support more than SQL-backed data sources.
 
-## Production Use and UUID Caveats
+## Production Use
 
-Lotus is generally safe to run in production: it executes queries in read‑only transactions and restores session state (timeouts, isolation, etc.) to avoid pool pollution. We are running it in [Accomplish](https://accomplish.dev) successfully in production today, notwithanding being affected by the limitation described below.
+Lotus is production-ready and safe to run in your application:
 
-If your application uses UUIDs or mixed ID formats across databases, there are current limitations to be aware of:
+- ✅ **Read-only execution** - All queries run in read-only transactions with automatic timeout controls
+- ✅ **Session state management** - Connection pool state is preserved and restored after each query
+- ✅ **Automatic type casting** - Query variables are automatically cast to match column types using schema metadata
+- ✅ **Multi-database support** - Works seamlessly with PostgreSQL, MySQL, and SQLite
 
-- Runtime Lotus query variable binding around UUID columns can be constrained across different storage types:
-  - PostgreSQL `uuid`
-  - MySQL `BINARY(16)` vs `CHAR(36|32)`
-  - SQLite `TEXT` vs `BLOB`
-- Queries still work, and you can get a lot of value, but in some cases you may need explicit casts or to shape values to match the column’s storage format when using `{{var}}` in predicates against UUID columns. This limitation particularly affects the Lotus Web library today — there isn’t a built‑in workaround in the UI for column‑specific typing/casting yet.
+We're running Lotus successfully in production at [Accomplish](https://accomplish.dev).
 
-We plan to improve this with column‑aware binding (using schema metadata per adapter to deterministically cast/shape values for the true column type). Until then, keep the above in mind when authoring queries that filter on UUID columns.
+### Automatic Type Casting
+
+Lotus includes an intelligent type casting system that automatically detects column types from your database schema and converts string values (from web inputs) to the correct database-native formats:
+
+- **UUID handling** - Automatically converts UUID strings to 16-byte binary format for PostgreSQL `uuid` columns, resolving issues with custom UUID types (like UUID v7)
+- **Numeric types** - Casts strings to integers, floats, or decimals based on column type
+- **Date/time types** - Parses ISO8601 strings to native date, time, and datetime values
+- **Boolean types** - Converts string values (`"true"`, `"false"`, `"1"`, `"0"`) to native booleans
+- **Complex types** - Supports PostgreSQL arrays, enums, and composite types
+- **Custom types** - Extensible type handler system for user-defined database types
+
+The type casting system gracefully falls back to manual type annotations when schema information is unavailable, ensuring your queries always work.
 
 ## Lotus Web UI
 

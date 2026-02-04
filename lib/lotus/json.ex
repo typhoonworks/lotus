@@ -5,6 +5,7 @@ defmodule Lotus.JSON do
 
   cond do
     Code.ensure_loaded?(JSON) ->
+      defdelegate decode(data), to: JSON
       defdelegate decode!(data), to: JSON
       defdelegate encode!(data), to: JSON
       defdelegate encode_to_iodata!(data), to: JSON
@@ -13,6 +14,7 @@ defmodule Lotus.JSON do
       def encoder, do: JSON.Encoder
 
     Code.ensure_loaded?(Jason) ->
+      defdelegate decode(data), to: Jason
       defdelegate decode!(data), to: Jason
       defdelegate encode!(data), to: Jason
       defdelegate encode_to_iodata!(data), to: Jason

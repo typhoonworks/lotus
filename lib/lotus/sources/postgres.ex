@@ -62,13 +62,18 @@ defmodule Lotus.Sources.Postgres do
   def format_error(other), do: Default.format_error(other)
 
   @impl true
+  def param_placeholder(idx, _var, :uuid), do: "$#{idx}::uuid"
   def param_placeholder(idx, _var, :date), do: "$#{idx}::date"
   def param_placeholder(idx, _var, :datetime), do: "$#{idx}::timestamp"
   def param_placeholder(idx, _var, :time), do: "$#{idx}::time"
   def param_placeholder(idx, _var, :number), do: "$#{idx}::numeric"
   def param_placeholder(idx, _var, :integer), do: "$#{idx}::integer"
+  def param_placeholder(idx, _var, :float), do: "$#{idx}::real"
+  def param_placeholder(idx, _var, :decimal), do: "$#{idx}::numeric"
   def param_placeholder(idx, _var, :boolean), do: "$#{idx}::boolean"
   def param_placeholder(idx, _var, :json), do: "$#{idx}::jsonb"
+  def param_placeholder(idx, _var, :binary), do: "$#{idx}::bytea"
+  def param_placeholder(idx, _var, :text), do: "$#{idx}"
   def param_placeholder(idx, _var, _type), do: "$#{idx}"
 
   @impl true

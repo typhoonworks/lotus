@@ -75,3 +75,4 @@ Thumbs.db
 # Tools
 .accomplish.toml
 plans/
+.claude

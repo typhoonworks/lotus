@@ -2,9 +2,36 @@
 
 ## [Unreleased]
 
+### Added
+
+- **NEW:** Automatic type casting system for query variables with intelligent column type detection
+- **NEW:** `Lotus.Storage.TypeHandler` behaviour for implementing custom database type handlers
+- **NEW:** Custom type handler registry system via `Application.get_env(:lotus, :type_handlers)`
+- **NEW:** Support for complex PostgreSQL types:
+  - Array types (`integer[]`, `text[]`, etc.) with element-wise casting
+  - Enum types (`USER-DEFINED` types) with pass-through handling
+  - Composite types with JSON input support
+  - PostgreSQL array format parsing (supports both `{1,2,3}` and `[1,2,3]` formats)
+- **NEW:** `Lotus.Storage.SchemaCache` for caching column type information
+- **NEW:** `Lotus.Storage.TypeMapper` for mapping database types to Lotus internal types
+- **NEW:** `Lotus.Storage.TypeCaster` for converting string values to database-native formats
+- **NEW:** `Lotus.Storage.VariableResolver` for automatic variable-to-column binding detection
+- Added support for `:time` type with ISO8601 time parsing (e.g., "10:30:00")
+- Added graceful fallback handling when schema cache is unavailable (defaults to `:text` type)
+- Added "cast only when needed" optimization - text and enum types pass through without casting
+- Added comprehensive logging for type detection failures (debug/warning levels)
+- Added support for schema-qualified table names in automatic type detection (e.g., `public.users`)
+- Added custom type handler validation to ensure handlers implement required callbacks
+
+### Changed
+
+- Enhanced query variable system to automatically detect column types from database schema
+- Enhanced type casting to prioritize automatic detection for non-text types, falling back to manual types
+- Improved error messages for type casting failures with helpful format hints
+
 ## [0.10.0] - 2026-01-05
 
-### Addedgco
+### Added
 
 - **NEW:** `Lotus.Cache.Cachex` adapter for local or distributed in-memory caching using [Cachex](https://hexdocs.pm/cachex/)
 - **NEW:** Query visualization storage with opaque config (validation delegated to consumers)

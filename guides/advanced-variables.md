@@ -1,6 +1,225 @@
 # Advanced Variables
 
-This guide covers advanced variable usage patterns in Lotus queries, including how the SQL transformer handles database-specific syntax compatibility and advanced patterns for cross-database applications.
+This guide covers advanced variable usage patterns in Lotus queries, including automatic type casting, SQL transformation, and advanced patterns for cross-database applications.
+
+## Automatic Type Casting
+
+Lotus includes an intelligent automatic type casting system that detects column types from your database schema and converts string values (typically from web inputs) to the correct database-native formats.
+
+### How It Works
+
+When you use a variable in your query, Lotus:
+
+1. **Analyzes the SQL** to determine which table column the variable is bound to
+2. **Queries the schema cache** to get the column's database type
+3. **Maps the database type** to a Lotus internal type (`:uuid`, `:integer`, `:date`, etc.)
+4. **Casts the value** if needed, or passes it through for text types
+5. **Generates the appropriate SQL placeholder** with type annotations where needed
+
+This all happens automatically - you don't need to manually specify types in most cases.
+
+### Supported Types
+
+#### UUID Types
+
+Automatically handles UUID columns across different databases:
+
+```elixir
+# PostgreSQL uuid column
+{:ok, query} = Lotus.create_query(%{
+  name: "Find User by UUID",
+  statement: "SELECT * FROM users WHERE id = {{user_id}}",
+  variables: [%{name: "user_id", default: "550e8400-e29b-41d4-a716-446655440000"}]
+})
+
+# Lotus automatically:
+# - Detects that 'id' is a uuid column
+# - Converts the string to 16-byte binary format
+# - Generates: "SELECT * FROM users WHERE id = $1::uuid"
+# - Passes the binary value to the database
+```
+
+This works with standard UUIDs (v4) and custom UUID formats like UUID v7 (using libraries like Unid).
+
+#### Numeric Types
+
+Automatically casts string numbers to integers, floats, or decimals:
+
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "Products Above Price",
+  statement: "SELECT * FROM products WHERE price > {{min_price}}",
+  variables: [%{name: "min_price", default: "99.99"}]
+})
+
+# If 'price' is a numeric/decimal column:
+# - Converts "99.99" string to Decimal value
+# - Generates: "SELECT * FROM products WHERE price > $1::numeric"
+```
+
+#### Date, Time, and DateTime Types
+
+Parses ISO8601 date and time strings:
+
+```elixir
+# Date type
+{:ok, query} = Lotus.create_query(%{
+  name: "Orders Since Date",
+  statement: "SELECT * FROM orders WHERE created_at >= {{since}}",
+  variables: [%{name: "since", default: "2024-01-01"}]
+})
+
+# If 'created_at' is a date column:
+# - Parses "2024-01-01" to a Date struct
+# - Generates: "SELECT * FROM orders WHERE created_at >= $1::date"
+
+# Time type
+{:ok, query} = Lotus.create_query(%{
+  name: "Events After Time",
+  statement: "SELECT * FROM events WHERE event_time >= {{start_time}}",
+  variables: [%{name: "start_time", default: "10:30:00"}]
+})
+
+# If 'event_time' is a time column:
+# - Parses "10:30:00" to a Time struct
+# - Generates: "SELECT * FROM events WHERE event_time >= $1::time"
+
+# DateTime type
+{:ok, query} = Lotus.create_query(%{
+  name: "Logs Since Timestamp",
+  statement: "SELECT * FROM logs WHERE logged_at >= {{since}}",
+  variables: [%{name: "since", default: "2024-01-01T10:30:00"}]
+})
+
+# If 'logged_at' is a timestamp column:
+# - Parses "2024-01-01T10:30:00" to a NaiveDateTime struct
+# - Generates: "SELECT * FROM logs WHERE logged_at >= $1::timestamp"
+```
+
+#### Boolean Types
+
+Converts various string formats to native booleans:
+
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "Active Users",
+  statement: "SELECT * FROM users WHERE active = {{is_active}}",
+  variables: [%{name: "is_active", default: "true"}]
+})
+
+# Accepts: "true", "false", "1", "0", "yes", "no", "on", "off"
+# Converts to actual boolean: true or false
+# SQLite gets integers (1/0), PostgreSQL gets booleans
+```
+
+#### Complex PostgreSQL Types
+
+Lotus supports PostgreSQL-specific types:
+
+**Arrays:**
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "Users with Tags",
+  statement: "SELECT * FROM users WHERE tags @> {{required_tags}}::text[]",
+  variables: [%{name: "required_tags", default: "[\"admin\", \"active\"]"}]
+})
+
+# Accepts JSON array format: ["admin", "active"]
+# Or PostgreSQL format: {admin,active}
+# Casts each element to the array's element type
+```
+
+**Enums:**
+```elixir
+# Enum types (USER-DEFINED) pass through as strings
+{:ok, query} = Lotus.create_query(%{
+  name: "Orders by Status",
+  statement: "SELECT * FROM orders WHERE status = {{order_status}}",
+  variables: [%{name: "order_status", default: "pending"}]
+})
+
+# If 'status' is an enum type, Lotus passes the string value through
+# Database validates it's a valid enum value
+```
+
+### Fallback to Manual Types
+
+When automatic type detection fails (e.g., column not found in schema cache), Lotus falls back to manually specified types:
+
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "Manual Type Example",
+  statement: "SELECT * FROM computed_view WHERE score > {{min_score}}",
+  variables: [
+    # Explicitly specify type when automatic detection isn't available
+    %{name: "min_score", type: :number, default: "100"}
+  ]
+})
+
+# Uses the manual :number type annotation
+# Generates: "SELECT * FROM computed_view WHERE score > $1::numeric"
+```
+
+### Custom Type Handlers
+
+For custom database types (domains, specialized enums, etc.), you can register custom type handlers:
+
+```elixir
+# Define a custom type handler
+defmodule MyApp.StatusEnumHandler do
+  @behaviour Lotus.Storage.TypeHandler
+
+  @impl true
+  def cast(value, _opts) do
+    if value in ~w(active inactive pending archived) do
+      {:ok, value}
+    else
+      {:error, "Invalid status: must be one of active, inactive, pending, archived"}
+    end
+  end
+
+  @impl true
+  def requires_casting?(_value), do: false
+end
+
+# Register in config/config.exs
+config :lotus, :type_handlers, %{
+  "status_enum" => MyApp.StatusEnumHandler,
+  "my_custom_domain" => MyApp.CustomDomainHandler
+}
+```
+
+Now Lotus will use your custom handler whenever it encounters those database types.
+
+### Error Messages
+
+When type casting fails, Lotus provides clear, user-friendly error messages:
+
+```elixir
+# Invalid UUID format
+{:error, _} = Lotus.run_query(query, vars: %{"user_id" => "not-a-uuid"})
+# Error: Invalid UUID format: 'not-a-uuid' is not a valid UUID (expected format: 8-4-4-4-12 hex digits)
+
+# Invalid date format
+{:error, _} = Lotus.run_query(query, vars: %{"since" => "Jan 1st 2024"})
+# Error: Invalid date format: 'Jan 1st 2024' is not a valid date (expected ISO8601: YYYY-MM-DD)
+
+# Invalid integer format
+{:error, _} = Lotus.run_query(query, vars: %{"age" => "not-a-number"})
+# Error: Invalid integer format: 'not-a-number' is not a valid integer
+
+# Invalid boolean format
+{:error, _} = Lotus.run_query(query, vars: %{"active" => "maybe"})
+# Error: Invalid boolean format: 'maybe' is not a valid boolean (expected: true/false, yes/no, 1/0, on/off)
+```
+
+### Performance Considerations
+
+Type casting adds minimal overhead:
+
+- **Schema cache**: Column types are cached after first lookup (5-minute TTL by default)
+- **Smart casting**: Text and enum types skip casting entirely
+- **Graceful degradation**: If schema cache fails, falls back to manual types with logging
 
 ## SQL Transformer Overview
 
