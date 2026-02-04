@@ -100,7 +100,11 @@ defmodule Lotus.Sources.SQLite3 do
       {nil, ~r/^sqlite_/},
       {nil, ms},
       {nil, "lotus_queries"},
-      {nil, "lotus_query_visualizations"}
+      {nil, "lotus_query_visualizations"},
+      {nil, "lotus_dashboards"},
+      {nil, "lotus_dashboard_cards"},
+      {nil, "lotus_dashboard_filters"},
+      {nil, "lotus_dashboard_card_filter_mappings"}
     ]
   end
 

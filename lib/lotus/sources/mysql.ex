@@ -180,7 +180,11 @@ defmodule Lotus.Sources.MySQL do
       {"sys", ~r/.*/},
       {nil, ms},
       {nil, "lotus_queries"},
-      {nil, "lotus_query_visualizations"}
+      {nil, "lotus_query_visualizations"},
+      {nil, "lotus_dashboards"},
+      {nil, "lotus_dashboard_cards"},
+      {nil, "lotus_dashboard_filters"},
+      {nil, "lotus_dashboard_card_filter_mappings"}
     ]
 
     # Also deny these tables in the current database
@@ -189,7 +193,11 @@ defmodule Lotus.Sources.MySQL do
         [
           {database, ms},
           {database, "lotus_queries"},
-          {database, "lotus_query_visualizations"}
+          {database, "lotus_query_visualizations"},
+          {database, "lotus_dashboards"},
+          {database, "lotus_dashboard_cards"},
+          {database, "lotus_dashboard_filters"},
+          {database, "lotus_dashboard_card_filter_mappings"}
         ]
     else
       base_denies

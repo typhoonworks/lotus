@@ -6,6 +6,8 @@ defmodule Lotus.Storage do
   """
 
   import Ecto.Query
+  import Lotus.Helpers, only: [escape_like: 1]
+
   alias Lotus.Result
   alias Lotus.Storage.Query
 
@@ -47,7 +49,8 @@ defmodule Lotus.Storage do
           q
 
         term ->
-          from(query in q, where: ilike(query.name, ^"%#{term}%"))
+          escaped = escape_like(term)
+          from(query in q, where: ilike(query.name, ^"%#{escaped}%"))
       end
 
     Lotus.repo().all(q)

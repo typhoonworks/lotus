@@ -2,7 +2,7 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.10.0"
+  @version "0.11.0"
 
   def project do
     [
@@ -114,6 +114,7 @@ defmodule Lotus.MixProject do
       "guides/overview.md",
       "guides/installation.md",
       "guides/getting-started.md",
+      "guides/dashboards.md",
       "guides/advanced-variables.md",
       "guides/configuration.md",
       "guides/visibility.md",
