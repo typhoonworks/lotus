@@ -2,14 +2,14 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.11.0"
+  @version "0.12.0"
 
   def project do
     [
       app: :lotus,
       name: "Lotus",
       version: @version,
-      elixir: "~> 1.16",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -36,7 +36,6 @@ defmodule Lotus.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(:dev), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
@@ -50,6 +49,9 @@ defmodule Lotus.MixProject do
       {:nimble_csv, "~> 1.2"},
       {:nimble_options, "~> 1.0"},
       {:postgrex, "~> 0.20", optional: true},
+
+      # AI/LLM Integration
+      {:langchain, "~> 0.5.0"},
 
       # Development and testing dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -116,6 +118,7 @@ defmodule Lotus.MixProject do
       "guides/getting-started.md",
       "guides/dashboards.md",
       "guides/advanced-variables.md",
+      "guides/ai_query_generation.md",
       "guides/configuration.md",
       "guides/visibility.md",
       "guides/caching.md",

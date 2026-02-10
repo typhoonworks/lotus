@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
 
 ### Prerequisites
 
-- Elixir 1.16 or later
+- Elixir 1.17 or later
 - OTP 25 or later
 - PostgreSQL 13 or later (for main development database)
 - SQLite 3 (for multi-database testing)

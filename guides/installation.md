@@ -4,7 +4,7 @@ This guide walks you through setting up Lotus in your Elixir application.
 
 ## Requirements
 
-- Elixir 1.16 or later
+- Elixir 1.17 or later
 - OTP 25 or later
 - An Ecto-based application with PostgreSQL, MySQL, or SQLite
   - **SQLite**: Version 3.8.0+ recommended for database-level read-only protection
