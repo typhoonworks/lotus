@@ -372,11 +372,3 @@ if Lotus.AI.enabled?() do
 end
 ```
 
-### `Lotus.AI.config/0`
-
-Returns current AI configuration.
-
-```elixir
-Lotus.AI.config()
-#=> %{enabled: true, provider: "openai", api_key: "sk-..."}
-```
