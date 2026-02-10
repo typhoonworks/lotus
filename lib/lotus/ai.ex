@@ -51,6 +51,72 @@ defmodule Lotus.AI do
   alias Lotus.AI.ProviderRegistry
 
   @doc """
+  Generate SQL query from natural language prompt with conversation context.
+
+  Enables multi-turn conversations by accepting conversation history. The AI
+  can refine queries, fix errors, and provide iterative improvements.
+
+  ## Options
+
+  - `:prompt` (required) - Natural language description of desired query
+  - `:data_source` (required) - Name of the data source to query against
+  - `:conversation` (optional) - Conversation struct with message history
+
+  ## Returns
+
+  - `{:ok, result}` - Successfully generated SQL with metadata
+  - `{:error, term}` - Structured error tuple (see module docs for error types)
+
+  ## Examples
+
+      # Simple single-turn (same as generate_query/1)
+      {:ok, result} = Lotus.AI.generate_query_with_context(
+        prompt: "Show active users",
+        data_source: "postgres"
+      )
+
+      # Multi-turn with conversation history
+      conversation = Conversation.new()
+      conversation = Conversation.add_user_message(conversation, "Show active users")
+
+      {:ok, result} = Lotus.AI.generate_query_with_context(
+        prompt: "Show active users",
+        data_source: "postgres",
+        conversation: conversation
+      )
+
+      # If query fails, add error to conversation
+      conversation = Conversation.add_query_result(conversation, {:error, "column 'status' not found"})
+
+      # AI can now fix the error with full context
+      {:ok, fixed_result} = Lotus.AI.generate_query_with_context(
+        prompt: "Fix the error",
+        data_source: "postgres",
+        conversation: conversation
+      )
+  """
+  @spec generate_query_with_context(keyword()) :: {:ok, map()} | {:error, term()}
+  def generate_query_with_context(opts) do
+    with {:ok, config} <- get_ai_config(),
+         {:ok, provider_module} <- ProviderRegistry.get_provider(config.provider),
+         {:ok, response} <-
+           provider_module.generate_sql(
+             prompt: opts[:prompt],
+             data_source: opts[:data_source],
+             conversation: opts[:conversation],
+             config: config
+           ) do
+      {:ok,
+       %{
+         sql: response.content,
+         provider: config.provider,
+         model: response.model,
+         usage: response.usage
+       }}
+    end
+  end
+
+  @doc """
   Generate SQL query from natural language prompt.
 
   Uses the globally configured AI provider from application config.

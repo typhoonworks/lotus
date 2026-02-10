@@ -11,6 +11,7 @@ defmodule Lotus.AI.Providers.Anthropic do
   alias LangChain.ChatModels.ChatAnthropic
   alias LangChain.Function
   alias LangChain.Message
+  alias Lotus.AI.Conversation
   alias Lotus.AI.Prompts.SQLGeneration
   alias Lotus.AI.Tools.SchemaTools
 
@@ -33,13 +34,14 @@ defmodule Lotus.AI.Providers.Anthropic do
     prompt = Keyword.fetch!(opts, :prompt)
     data_source = Keyword.fetch!(opts, :data_source)
     config = Keyword.fetch!(opts, :config)
+    conversation = Keyword.get(opts, :conversation)
 
-    build_chain(prompt, data_source, config)
+    build_chain(prompt, data_source, config, conversation)
     |> run_until_complete()
     |> handle_response()
   end
 
-  defp build_chain(prompt, data_source, config) do
+  defp build_chain(prompt, data_source, config, conversation) do
     database_type = Lotus.Sources.source_type(data_source)
 
     # Get ALL schemas, not just those in search path
@@ -57,11 +59,10 @@ defmodule Lotus.AI.Providers.Anthropic do
 
     tools = build_anthropic_tools(data_source)
 
+    messages = build_messages(conversation, prompt, system_prompt)
+
     LLMChain.new!(%{llm: model, tools: tools})
-    |> LLMChain.add_messages([
-      Message.new_system!(system_prompt),
-      Message.new_user!(prompt)
-    ])
+    |> LLMChain.add_messages(messages)
   end
 
   defp run_until_complete(chain, iteration \\ 1) do
@@ -229,5 +230,53 @@ defmodule Lotus.AI.Providers.Anthropic do
       {schema, table} when not is_nil(schema) -> "#{schema}.#{table}"
       table -> table
     end)
+  end
+
+  defp build_messages(conversation, prompt, system_prompt) do
+    if conversation && conversation.messages != [] do
+      build_conversation_messages(conversation, prompt, system_prompt)
+    else
+      build_single_turn_messages(prompt, system_prompt)
+    end
+  end
+
+  defp build_single_turn_messages(prompt, system_prompt) do
+    [
+      Message.new_system!(system_prompt),
+      Message.new_user!(prompt)
+    ]
+  end
+
+  defp build_conversation_messages(conversation, prompt, system_prompt) do
+    conversation
+    |> Conversation.build_context_messages(system_prompt)
+    |> convert_to_langchain_messages()
+    |> maybe_add_current_prompt(conversation, prompt)
+  end
+
+  defp convert_to_langchain_messages(messages) do
+    Enum.map(messages, fn msg ->
+      case msg.role do
+        :system -> Message.new_system!(msg.content)
+        :user -> Message.new_user!(msg.content)
+        :assistant -> Message.new_assistant!(msg.content)
+      end
+    end)
+  end
+
+  defp maybe_add_current_prompt(messages, conversation, prompt) do
+    last_user_msg = find_last_user_message(conversation)
+
+    if last_user_msg && last_user_msg.content == prompt do
+      messages
+    else
+      messages ++ [Message.new_user!(prompt)]
+    end
+  end
+
+  defp find_last_user_message(conversation) do
+    conversation.messages
+    |> Enum.reverse()
+    |> Enum.find(&(&1.role == :user))
   end
 end

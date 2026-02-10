@@ -67,7 +67,7 @@ Learn more about setting up Lotus Web in the [installation guide](guides/install
 - 🎯 **Type-safe results** with structured query result handling
 - 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
 - 💾 **Result caching** with TTL-based expiration, cache profiles, and tag-based invalidation
-- 🤖 **AI-powered query generation (EXPERIMENTAL, BYOK)** - generate SQL from natural language using your own OpenAI, Anthropic, or Gemini API key
+- 🤖 **AI-powered query generation (EXPERIMENTAL, BYOK)** - generate SQL from natural language using your own OpenAI, Anthropic, or Gemini API key with multi-turn conversations for iterative refinement
 
 ### Production-Safe Connection Pooling
 Lotus automatically preserves your database session state to prevent connection pool pollution. When a query completes, all session settings (read-only mode, timeouts, isolation levels) are restored to their original values, ensuring Lotus doesn't interfere with other parts of your application. [Learn more about session management →](guides/installation.md#session-management--connection-pool-safety)
@@ -81,6 +81,7 @@ Lotus includes experimental support for generating SQL queries from natural lang
 The AI assistant:
 
 - **Bring Your Own Key**: You control your API keys and costs - OpenAI, Anthropic, or Google Gemini
+- **Conversational**: Multi-turn conversations for iterative query refinement and automatic error fixing
 - **Schema-aware**: Automatically discovers your database structure (schemas, tables, columns, enum values)
 - **Respects visibility**: Only sees tables and columns that are visible according to your Lotus visibility rules
 - **Multi-provider**: Supports OpenAI (GPT-4, GPT-4o), Anthropic (Claude), and Google Gemini models
@@ -100,6 +101,7 @@ config :lotus, :ai,
 **Usage:**
 
 ```elixir
+# Single-turn query generation
 {:ok, result} = Lotus.AI.generate_query(
   prompt: "Show all customers with unpaid invoices",
   data_source: "my_repo"
@@ -107,6 +109,24 @@ config :lotus, :ai,
 
 result.sql
 #=> "SELECT c.id, c.name FROM reporting.customers c ..."
+
+# Multi-turn conversation for refinement
+alias Lotus.AI.Conversation
+
+conversation = Conversation.new()
+{:ok, result} = Lotus.AI.generate_query_with_context(
+  prompt: "Show all customers with unpaid invoices",
+  data_source: "my_repo",
+  conversation: conversation
+)
+
+# Refine the query conversationally
+conversation = Conversation.add_user_message(conversation, "Sort by amount owed descending")
+{:ok, refined} = Lotus.AI.generate_query_with_context(
+  prompt: "Sort by amount owed descending",
+  data_source: "my_repo",
+  conversation: conversation
+)
 ```
 
 The AI will:
@@ -114,6 +134,7 @@ The AI will:
 2. Introspect relevant table structures
 3. Check actual enum values (e.g., invoice status codes)
 4. Generate accurate, schema-qualified SQL
+5. Remember context across multiple turns for iterative refinement
 
 See the [AI Query Generation guide](guides/ai_query_generation.md) for detailed setup instructions and examples.
 

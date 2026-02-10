@@ -14,6 +14,7 @@ The AI query generation feature:
 - **Respects visibility** - Only sees tables/columns allowed by your Lotus visibility rules
 - **Read-only** - Inherits Lotus's read-only execution guarantees
 - **Multi-provider** - Supports OpenAI, Anthropic (Claude), and Google Gemini
+- **Conversational** - Multi-turn conversations for iterative query refinement and error fixing
 
 ## Supported Providers
 
@@ -97,7 +98,9 @@ Get your API key from: https://aistudio.google.com/app/apikey
 
 ## Usage
 
-### Basic Query Generation
+### Basic Query Generation (Single-Turn)
+
+For simple, one-off queries without conversation context:
 
 ```elixir
 {:ok, result} = Lotus.AI.generate_query(
@@ -114,6 +117,8 @@ result.model
 result.usage
 #=> %{prompt_tokens: 245, completion_tokens: 28, total_tokens: 273}
 ```
+
+For iterative refinement and error fixing, see [Conversational Query Refinement](#conversational-query-refinement) below.
 
 ### Error Handling
 
@@ -337,17 +342,112 @@ AI query generation typically takes 2-10 seconds depending on:
 - LLM provider and model
 - Network latency
 
+## Conversational Query Refinement
+
+The AI supports multi-turn conversations, allowing you to iteratively refine queries, fix errors, and have back-and-forth dialogue.
+
+### Basic Conversation Flow
+
+```elixir
+alias Lotus.AI.Conversation
+
+# Start a new conversation
+conversation = Conversation.new()
+
+# First query attempt
+conversation = Conversation.add_user_message(conversation, "Show active users")
+
+{:ok, result} = Lotus.AI.generate_query_with_context(
+  prompt: "Show active users",
+  data_source: "postgres",
+  conversation: conversation
+)
+
+# Add the AI response to conversation
+conversation = Conversation.add_assistant_response(
+  conversation,
+  "Here's your query:",
+  result.sql
+)
+
+# If the query fails, add the error
+case Lotus.run_sql(result.sql, [], repo: "postgres") do
+  {:ok, _} ->
+    :success
+  {:error, error} ->
+    conversation = Conversation.add_query_result(conversation, {:error, error})
+end
+
+# Ask the AI to fix the error - it has full context
+{:ok, fixed_result} = Lotus.AI.generate_query_with_context(
+  prompt: "Fix the error",
+  data_source: "postgres",
+  conversation: conversation
+)
+```
+
+### Iterative Refinement
+
+Users can refine queries conversationally:
+
+```elixir
+conversation = Conversation.new()
+
+# Initial request
+{:ok, result1} = Lotus.AI.generate_query_with_context(
+  prompt: "Show user signups by month",
+  data_source: "postgres",
+  conversation: conversation
+)
+
+conversation = Conversation.add_assistant_response(conversation, "Generated query", result1.sql)
+
+# Refine the query
+conversation = Conversation.add_user_message(conversation, "Only show the last 6 months")
+
+{:ok, result2} = Lotus.AI.generate_query_with_context(
+  prompt: "Only show the last 6 months",
+  data_source: "postgres",
+  conversation: conversation
+)
+# The AI remembers the previous query and modifies it accordingly
+```
+
+### Automatic Error Recovery
+
+Conversations enable automatic error detection and fixing:
+
+```elixir
+# Check if the last message was an error
+if Conversation.should_auto_retry?(conversation) do
+  # Automatically retry with full error context
+  Lotus.AI.generate_query_with_context(
+    prompt: "Fix the error",
+    data_source: "postgres",
+    conversation: conversation
+  )
+end
+```
+
+### Managing Long Conversations
+
+Prevent token overflow by pruning old messages:
+
+```elixir
+# Keep only the last 10 messages
+conversation = Conversation.prune_messages(conversation, 10)
+```
+
 ## Limitations
 
-- **No query history** - Each generation is independent
-- **No multi-turn refinement** - Can't iteratively improve queries
 - **English prompts recommended** - Other languages may work but aren't tested
+- **Token limits** - Very long conversations may need pruning to stay within model limits
 
 ## API Reference
 
 ### `Lotus.AI.generate_query/1`
 
-Generates SQL from natural language.
+Generates SQL from natural language (single-turn).
 
 **Options:**
 
@@ -361,6 +461,34 @@ Generates SQL from natural language.
 - `{:error, :api_key_not_configured}` - Missing API key
 - `{:error, {:unable_to_generate, reason}}` - LLM refused
 - `{:error, term()}` - Other error
+
+### `Lotus.AI.generate_query_with_context/1`
+
+Generates SQL with conversation context for multi-turn refinement.
+
+**Options:**
+
+- `:prompt` (required) - Natural language description
+- `:data_source` (required) - Repository name or module
+- `:conversation` (optional) - `Conversation` struct with message history
+
+**Returns:**
+
+Same as `generate_query/1`.
+
+### `Lotus.AI.Conversation`
+
+Manages conversational state for multi-turn interactions.
+
+**Key Functions:**
+
+- `Conversation.new()` - Initialize a new conversation
+- `Conversation.add_user_message(conversation, content)` - Add user message
+- `Conversation.add_assistant_response(conversation, content, sql)` - Add AI response
+- `Conversation.add_query_result(conversation, result)` - Add query execution result (success or error)
+- `Conversation.should_auto_retry?(conversation)` - Check if last message was an error
+- `Conversation.prune_messages(conversation, keep_last)` - Remove old messages to manage token usage
+- `Conversation.update_schema_context(conversation, tables)` - Track analyzed tables
 
 ### `Lotus.AI.enabled?/0`
 
