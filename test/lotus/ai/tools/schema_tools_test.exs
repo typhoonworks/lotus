@@ -11,7 +11,13 @@ defmodule Lotus.AI.Tools.SchemaToolsTest do
 
       assert {:ok, json} = SchemaTools.list_tables("postgres")
       assert {:ok, decoded} = Lotus.JSON.decode(json)
-      assert decoded["tables"] == ["public.users", "public.posts", "public.comments", "analytics.events"]
+
+      assert decoded["tables"] == [
+               "public.users",
+               "public.posts",
+               "public.comments",
+               "analytics.events"
+             ]
     end
 
     test "returns JSON-encoded table list for schema-less database" do
