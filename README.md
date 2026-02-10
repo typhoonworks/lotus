@@ -143,7 +143,7 @@ def deps do
 end
 ```
 
-Lotus requires Elixir 1.16 or later, and OTP 25 or later. It may work with earlier versions, but it wasn't tested against them.
+Lotus requires Elixir 1.17 or later, and OTP 25 or later. It may work with earlier versions, but it wasn't tested against them.
 
 Follow the [installation instructions](guides/installation.md) to set up Lotus in your application.
 
@@ -275,7 +275,7 @@ config :lotus,
 - PostgreSQL (tested with version 14+)
 - MySQL (tested with version 8.0+)
 - SQLite 3
-- Elixir 1.16+
+- Elixir 1.17+
 - OTP 25+
 
 ### Setting up the development environment

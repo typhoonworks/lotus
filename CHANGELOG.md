@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17 (required by `langchain` dependency)
+
 ## [0.12.0] - 2026-02-10
 
 ### Added

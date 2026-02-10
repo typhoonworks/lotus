@@ -9,7 +9,7 @@ defmodule Lotus.MixProject do
       app: :lotus,
       name: "Lotus",
       version: @version,
-      elixir: "~> 1.16",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -51,7 +51,7 @@ defmodule Lotus.MixProject do
       {:postgrex, "~> 0.20", optional: true},
 
       # AI/LLM Integration
-      {:langchain, "~> 0.4.0"},
+      {:langchain, "~> 0.5.0"},
 
       # Development and testing dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

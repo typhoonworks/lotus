@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - tuple:
-              elixir: "1.16"
+              elixir: "1.17"
               erlang: "26.2"
               postgres: "15.8-alpine"
           - tuple:
