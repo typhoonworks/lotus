@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-02-10
+
 ### Added
 
 - **NEW:** Long-running conversation support for AI-powered query generation
