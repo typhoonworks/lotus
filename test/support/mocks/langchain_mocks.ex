@@ -101,8 +101,9 @@ defmodule Lotus.LangChainMocks do
       metadata: %{usage: usage}
     }
 
-    # Return updated chain with last_message set
-    %{chain | last_message: message}
+    # Return updated chain with last_message set and needs_response cleared
+    # so run_until_complete doesn't loop and call LLMChain.run again
+    %{chain | last_message: message, needs_response: false}
   end
 
   defp build_token_usage(usage_map) do

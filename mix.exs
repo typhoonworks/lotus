@@ -51,7 +51,7 @@ defmodule Lotus.MixProject do
       {:postgrex, "~> 0.20", optional: true},
 
       # AI/LLM Integration
-      {:langchain, "~> 0.5.0"},
+      {:langchain, "~> 0.4.0"},
 
       # Development and testing dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -118,6 +118,7 @@ defmodule Lotus.MixProject do
       "guides/getting-started.md",
       "guides/dashboards.md",
       "guides/advanced-variables.md",
+      "guides/ai_query_generation.md",
       "guides/configuration.md",
       "guides/visibility.md",
       "guides/caching.md",

@@ -107,11 +107,13 @@ defmodule Lotus.AI.Providers.OpenAITest do
 
     test "includes schema query tools" do
       mock_with_assertion(fn chain ->
-        assert length(chain.tools) == 2
+        assert length(chain.tools) == 4
 
         tool_names = Enum.map(chain.tools, & &1.name)
+        assert "list_schemas" in tool_names
         assert "list_tables" in tool_names
         assert "get_table_schema" in tool_names
+        assert "get_column_values" in tool_names
       end)
 
       opts = [

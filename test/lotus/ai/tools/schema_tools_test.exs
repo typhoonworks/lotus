@@ -11,7 +11,7 @@ defmodule Lotus.AI.Tools.SchemaToolsTest do
 
       assert {:ok, json} = SchemaTools.list_tables("postgres")
       assert {:ok, decoded} = Lotus.JSON.decode(json)
-      assert decoded["tables"] == ["users", "posts", "comments", "events"]
+      assert decoded["tables"] == ["public.users", "public.posts", "public.comments", "analytics.events"]
     end
 
     test "returns JSON-encoded table list for schema-less database" do
@@ -71,6 +71,61 @@ defmodule Lotus.AI.Tools.SchemaToolsTest do
       end)
 
       assert {:error, "Table not found"} = SchemaTools.get_table_schema("postgres", "unknown")
+    end
+  end
+
+  describe "get_column_values/3" do
+    setup do
+      Mimic.copy(Lotus)
+      :ok
+    end
+
+    test "returns JSON-encoded distinct values for a column" do
+      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+        {:ok, %{rows: [["active"], ["inactive"], ["pending"]]}}
+      end)
+
+      assert {:ok, json} = SchemaTools.get_column_values("postgres", "public.users", "status")
+      assert {:ok, decoded} = Lotus.JSON.decode(json)
+
+      assert decoded["table"] == "public.users"
+      assert decoded["column"] == "status"
+      assert decoded["values"] == ["active", "inactive", "pending"]
+      assert decoded["count"] == 3
+    end
+
+    test "returns empty values when column has no non-null values" do
+      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+        {:ok, %{rows: []}}
+      end)
+
+      assert {:ok, json} = SchemaTools.get_column_values("postgres", "users", "deleted_at")
+      assert {:ok, decoded} = Lotus.JSON.decode(json)
+
+      assert decoded["values"] == []
+      assert decoded["count"] == 0
+    end
+
+    test "returns error when query fails" do
+      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+        {:error, "Permission denied"}
+      end)
+
+      assert {:error, "Permission denied"} =
+               SchemaTools.get_column_values("postgres", "users", "status")
+    end
+  end
+
+  describe "get_column_values_metadata/0" do
+    test "returns tool metadata" do
+      metadata = SchemaTools.get_column_values_metadata()
+
+      assert metadata.name == "get_column_values"
+      assert metadata.description =~ "distinct values"
+      assert metadata.parameters.table_name.type == "string"
+      assert metadata.parameters.table_name.required == true
+      assert metadata.parameters.column_name.type == "string"
+      assert metadata.parameters.column_name.required == true
     end
   end
 
