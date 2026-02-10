@@ -172,6 +172,30 @@ defmodule Lotus.Config do
       type: {:or, [:map, nil]},
       default: nil,
       doc: "Cache configuration including adapter, profiles, and settings."
+    ],
+    ai: [
+      type: :keyword_list,
+      default: [],
+      doc: """
+      AI-powered query generation configuration.
+
+      ## Options
+
+      - `:enabled` (boolean) - Enable AI features. Default: false
+      - `:provider` (string) - LLM provider: "openai", "anthropic", or "gemini"
+      - `:api_key` (string or tuple) - API key or {:system, "ENV_VAR"}
+      - `:model` (string) - Model name override (optional, defaults to provider's recommended model)
+
+      ## Example
+
+          config :lotus,
+            ai: [
+              enabled: true,
+              provider: "openai",
+              api_key: {:system, "OPENAI_API_KEY"},
+              model: "gpt-4o"
+            ]
+      """
     ]
   ]
 
@@ -199,7 +223,8 @@ defmodule Lotus.Config do
       :table_visibility,
       :column_visibility,
       :schema_visibility,
-      :cache
+      :cache,
+      :ai
     ])
   end
 
@@ -440,6 +465,18 @@ defmodule Lotus.Config do
   """
   @spec default_page_size() :: pos_integer() | nil
   def default_page_size, do: load!()[:default_page_size]
+
+  @doc """
+  Returns AI configuration keyword list.
+  """
+  @spec ai() :: keyword()
+  def ai, do: get(:ai) || []
+
+  @doc """
+  Returns whether AI features are enabled.
+  """
+  @spec ai_enabled?() :: boolean()
+  def ai_enabled?, do: (get(:ai) || [])[:enabled] || false
 
   @doc """
   Returns the entire validated configuration as a map.
