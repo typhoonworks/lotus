@@ -2,7 +2,7 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.13.0"
+  @version "0.13.1"
 
   def project do
     [
@@ -128,7 +128,7 @@ defmodule Lotus.MixProject do
 
   defp description do
     """
-    Lightweight, SQL query runner and storage for Elixir apps — save, organize, and execute analytical queries with Ecto.
+    Embeddable business intelligence engine for Elixir — run SQL queries, build dashboards, and manage analytics directly in your Phoenix app with Ecto.
     """
   end
 end
