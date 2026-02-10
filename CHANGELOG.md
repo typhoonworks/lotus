@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-02-10
+
+### Added
+
+- **NEW (EXPERIMENTAL):** AI-powered SQL query generation from natural language
+  - Support for OpenAI (GPT-4, GPT-4o), Anthropic (Claude), and Google Gemini models
+  - Schema-aware query generation with tool-based introspection
+  - Automatic discovery of schemas, tables, columns, and enum values
+  - Multi-turn conversations with LLM for complex queries
+  - Respects Lotus visibility rules - AI sees only what users see
+  - Configuration-based setup (no database changes required)
+  - `Lotus.AI.generate_query/1` API for programmatic access
+  - Four introspection tools: `list_schemas()`, `list_tables()`, `get_table_schema()`, `get_column_values()`
+  - Provider-agnostic architecture with shared tool implementations
+  - Disabled by default - requires explicit configuration
+  - See "AI Query Generation" section in README for setup instructions
+
+### Changed
+
+- Added `langchain` as a required dependency (needed for AI features)
+- AI features are opt-in via configuration - no impact if not configured
+
 ## [0.11.0] - 2026-02-04
 
 ### Added

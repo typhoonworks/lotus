@@ -67,9 +67,55 @@ Learn more about setting up Lotus Web in the [installation guide](guides/install
 - 🎯 **Type-safe results** with structured query result handling
 - 🛡️ **Defense-in-depth** with preflight authorization and built-in system table protection
 - 💾 **Result caching** with TTL-based expiration, cache profiles, and tag-based invalidation
+- 🤖 **AI-powered query generation (EXPERIMENTAL, BYOK)** - generate SQL from natural language using your own OpenAI, Anthropic, or Gemini API key
 
 ### Production-Safe Connection Pooling
 Lotus automatically preserves your database session state to prevent connection pool pollution. When a query completes, all session settings (read-only mode, timeouts, isolation levels) are restored to their original values, ensuring Lotus doesn't interfere with other parts of your application. [Learn more about session management →](guides/installation.md#session-management--connection-pool-safety)
+
+### AI Query Generation (Experimental, BYOK)
+
+> ⚠️ **Experimental Feature**: AI query generation is disabled by default and requires you to bring your own API key (BYOK). The API may change in future versions.
+
+Lotus includes experimental support for generating SQL queries from natural language descriptions using Large Language Models (LLMs). API calls go directly from your application to the LLM provider of your choice.
+
+The AI assistant:
+
+- **Bring Your Own Key**: You control your API keys and costs - OpenAI, Anthropic, or Google Gemini
+- **Schema-aware**: Automatically discovers your database structure (schemas, tables, columns, enum values)
+- **Respects visibility**: Only sees tables and columns that are visible according to your Lotus visibility rules
+- **Multi-provider**: Supports OpenAI (GPT-4, GPT-4o), Anthropic (Claude), and Google Gemini models
+- **Tool-based**: Uses function calling to introspect your database before generating queries
+- **Read-only**: Inherits Lotus's read-only safety guarantees
+
+**Setup:**
+
+```elixir
+# config/config.exs
+config :lotus, :ai,
+  enabled: true,
+  provider: "openai",  # or "anthropic" or "gemini"
+  api_key: {:system, "OPENAI_API_KEY"}
+```
+
+**Usage:**
+
+```elixir
+{:ok, result} = Lotus.AI.generate_query(
+  prompt: "Show all customers with unpaid invoices",
+  data_source: "my_repo"
+)
+
+result.sql
+#=> "SELECT c.id, c.name FROM reporting.customers c ..."
+```
+
+The AI will:
+1. Discover available schemas and tables
+2. Introspect relevant table structures
+3. Check actual enum values (e.g., invoice status codes)
+4. Generate accurate, schema-qualified SQL
+
+See the [AI Query Generation guide](guides/ai_query_generation.md) for detailed setup instructions and examples.
 
 ## What's planned?
 - [ ] Query versioning and change tracking
@@ -92,7 +138,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.11.0"}
+    {:lotus, "~> 0.12.0"}
   ]
 end
 ```

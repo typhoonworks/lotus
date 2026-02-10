@@ -145,8 +145,6 @@ defmodule Lotus.AI.Tools.SchemaTools do
     {schema, table} = parse_table_name(data_source, table_name)
 
     # Build the query to get distinct values
-    {repo, _repo_name} = Lotus.Sources.resolve!(data_source, nil)
-
     query =
       case schema do
         nil ->
@@ -156,9 +154,10 @@ defmodule Lotus.AI.Tools.SchemaTools do
           ~s(SELECT DISTINCT "#{column_name}" FROM "#{schema}"."#{table}" WHERE "#{column_name}" IS NOT NULL ORDER BY "#{column_name}" LIMIT 100)
       end
 
-    case repo.query(query) do
-      {:ok, %{rows: rows}} ->
-        values = Enum.map(rows, fn [value] -> value end)
+    # Use Lotus.run_sql which respects visibility rules and safety checks
+    case Lotus.run_sql(query, [], repo: data_source) do
+      {:ok, result} ->
+        values = Enum.map(result.rows, fn [value] -> value end)
 
         result = %{
           table: table_name,
@@ -187,7 +186,6 @@ defmodule Lotus.AI.Tools.SchemaTools do
   - `:description` - What the tool does
   - `:parameters` - Empty map (no parameters required)
   """
-  @spec list_schemas_metadata() :: map()
   def list_schemas_metadata do
     %{
       name: "list_schemas",
@@ -210,7 +208,6 @@ defmodule Lotus.AI.Tools.SchemaTools do
   - `:description` - What the tool does
   - `:parameters` - Empty map (no parameters required)
   """
-  @spec list_tables_metadata() :: map()
   def list_tables_metadata do
     %{
       name: "list_tables",
@@ -233,7 +230,6 @@ defmodule Lotus.AI.Tools.SchemaTools do
   - `:description` - What the tool does
   - `:parameters` - Map describing table_name parameter
   """
-  @spec get_table_schema_metadata() :: map()
   def get_table_schema_metadata do
     %{
       name: "get_table_schema",
@@ -263,7 +259,6 @@ defmodule Lotus.AI.Tools.SchemaTools do
   - `:description` - What the tool does
   - `:parameters` - Map describing parameters
   """
-  @spec get_column_values_metadata() :: map()
   def get_column_values_metadata do
     %{
       name: "get_column_values",

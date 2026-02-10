@@ -2,7 +2,7 @@ defmodule Lotus.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/typhoonworks/lotus"
-  @version "0.11.0"
+  @version "0.12.0"
 
   def project do
     [
@@ -51,7 +51,7 @@ defmodule Lotus.MixProject do
       {:postgrex, "~> 0.20", optional: true},
 
       # AI/LLM Integration
-      {:langchain, "~> 0.5.0", optional: true},
+      {:langchain, "~> 0.5.0"},
 
       # Development and testing dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
