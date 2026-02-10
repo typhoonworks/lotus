@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-02-10
+
+### Added
+
+- **NEW:** Long-running conversation support for AI-powered query generation
+  - Multi-turn conversations with context retention across messages
+  - Conversational refinement of generated queries based on user feedback
+  - Enhanced error detection and query optimization capabilities
+  - Support for iterative query improvements without starting from scratch
+  - Replaces previous "fire and forget" single-request model with stateful conversations
+
 ### Changed
 
 - **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17 (required by `langchain` dependency)
