@@ -27,6 +27,7 @@ defmodule Lotus.AI.Provider do
   @type response :: %{
           content: String.t(),
           model: String.t(),
+          variables: [map()],
           usage: %{
             prompt_tokens: non_neg_integer(),
             completion_tokens: non_neg_integer(),

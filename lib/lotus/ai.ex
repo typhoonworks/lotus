@@ -24,6 +24,7 @@ defmodule Lotus.AI do
       # Returns:
       # %{
       #   sql: "SELECT * FROM users WHERE created_at >= ...",
+      #   variables: [],
       #   provider: "openai",
       #   model: "gpt-4o",
       #   usage: %{total_tokens: 150}
@@ -109,6 +110,7 @@ defmodule Lotus.AI do
       {:ok,
        %{
          sql: response.content,
+         variables: Map.get(response, :variables, []),
          provider: config.provider,
          model: response.model,
          usage: response.usage
@@ -166,6 +168,7 @@ defmodule Lotus.AI do
       {:ok,
        %{
          sql: response.content,
+         variables: Map.get(response, :variables, []),
          provider: config.provider,
          model: response.model,
          usage: response.usage

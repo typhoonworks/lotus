@@ -86,6 +86,41 @@ defmodule Lotus.AIFixtures do
   end
 
   @doc """
+  SQL response with variable configurations.
+  """
+  def sql_with_variables_response do
+    %{
+      content: """
+      ```sql
+      SELECT * FROM orders WHERE status = {{status}}
+      ```
+
+      ```variables
+      [
+        {
+          "name": "status",
+          "type": "text",
+          "widget": "select",
+          "label": "Order Status",
+          "static_options": [
+            {"value": "pending", "label": "Pending"},
+            {"value": "shipped", "label": "Shipped"},
+            {"value": "delivered", "label": "Delivered"}
+          ]
+        }
+      ]
+      ```
+      """,
+      model: "gpt-4o",
+      usage: %{
+        "prompt_tokens" => 200,
+        "completion_tokens" => 80,
+        "total_tokens" => 280
+      }
+    }
+  end
+
+  @doc """
   Table list for schema introspection.
   """
   def table_list do
