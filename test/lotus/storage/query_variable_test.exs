@@ -86,6 +86,35 @@ defmodule Lotus.Storage.QueryVariableTest do
     end
   end
 
+  describe "list field" do
+    test "defaults to false" do
+      attrs = %{name: "test", type: :text}
+      changeset = QueryVariable.changeset(%QueryVariable{}, attrs)
+      assert changeset.valid?
+
+      variable = Ecto.Changeset.apply_changes(changeset)
+      assert variable.list == false
+    end
+
+    test "list: true persists through changeset" do
+      attrs = %{name: "countries", type: :text, list: true}
+      changeset = QueryVariable.changeset(%QueryVariable{}, attrs)
+      assert changeset.valid?
+
+      variable = Ecto.Changeset.apply_changes(changeset)
+      assert variable.list == true
+    end
+
+    test "list: false persists through changeset" do
+      attrs = %{name: "status", type: :text, list: false}
+      changeset = QueryVariable.changeset(%QueryVariable{}, attrs)
+      assert changeset.valid?
+
+      variable = Ecto.Changeset.apply_changes(changeset)
+      assert variable.list == false
+    end
+  end
+
   def build_var(attrs \\ %{}) do
     attrs =
       Enum.into(attrs, %{

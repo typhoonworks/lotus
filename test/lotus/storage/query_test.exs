@@ -793,6 +793,142 @@ defmodule Lotus.Storage.QueryTest do
     end
   end
 
+  describe "list variable expansion" do
+    test "list variable expands to multiple placeholders (PostgreSQL)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}})",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"countries" => ["US", "UK", "DE"]})
+
+      assert sql == "SELECT * FROM users WHERE country IN ($1, $2, $3)"
+      assert params == ["US", "UK", "DE"]
+    end
+
+    @tag :sqlite
+    test "list variable expands to multiple placeholders (SQLite)" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}})",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "sqlite"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"countries" => ["US", "UK", "DE"]})
+
+      assert sql == "SELECT * FROM users WHERE country IN (?, ?, ?)"
+      assert params == ["US", "UK", "DE"]
+    end
+
+    test "list + scalar variable: correct index sequencing" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}}) AND age > {{min_age}}",
+        variables: [
+          %{name: "countries", type: :text, list: true},
+          %{name: "min_age", type: :number}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} =
+        Query.to_sql_params(q, %{"countries" => ["US", "UK"], "min_age" => "18"})
+
+      assert sql ==
+               "SELECT * FROM users WHERE country IN ($1, $2) AND age > $3::numeric"
+
+      assert params == ["US", "UK", 18]
+    end
+
+    test "list with number type casting" do
+      q = %Query{
+        statement: "SELECT * FROM orders WHERE id IN ({{ids}})",
+        variables: [
+          %{name: "ids", type: :number, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"ids" => ["1", "2", "3"]})
+
+      assert sql == "SELECT * FROM orders WHERE id IN ($1::numeric, $2::numeric, $3::numeric)"
+      assert params == [1, 2, 3]
+    end
+
+    test "empty list raises ArgumentError" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}})",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      assert_raise ArgumentError, ~r/must have at least one value/, fn ->
+        Query.to_sql_params(q, %{"countries" => []})
+      end
+    end
+
+    test "comma-separated string is normalized to list" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}})",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"countries" => "US, UK, DE"})
+
+      assert sql == "SELECT * FROM users WHERE country IN ($1, $2, $3)"
+      assert params == ["US", "UK", "DE"]
+    end
+
+    test "single value in list works" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE country IN ({{countries}})",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"countries" => ["US"]})
+
+      assert sql == "SELECT * FROM users WHERE country IN ($1)"
+      assert params == ["US"]
+    end
+
+    test "scalar variable after list gets correct index" do
+      q = %Query{
+        statement:
+          "SELECT * FROM orders WHERE status = {{status}} AND country IN ({{countries}}) AND age > {{min_age}}",
+        variables: [
+          %{name: "status", type: :text},
+          %{name: "countries", type: :text, list: true},
+          %{name: "min_age", type: :number}
+        ],
+        data_repo: "postgres"
+      }
+
+      {sql, params} =
+        Query.to_sql_params(q, %{
+          "status" => "active",
+          "countries" => ["US", "UK", "DE"],
+          "min_age" => "21"
+        })
+
+      assert sql ==
+               "SELECT * FROM orders WHERE status = $1 AND country IN ($2, $3, $4) AND age > $5::numeric"
+
+      assert params == ["active", "US", "UK", "DE", 21]
+    end
+  end
+
   describe "database-specific placeholder generation" do
     test "PostgreSQL uses typed placeholders for known types" do
       q = %Query{
