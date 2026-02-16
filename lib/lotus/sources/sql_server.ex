@@ -3,8 +3,6 @@ defmodule Lotus.Sources.SQLServer do
 
   @behaviour Lotus.Source
 
-  alias Lotus.Sources.Default
-
   @mssql_error Module.concat([:Tds, :Error])
 
   @impl true
@@ -28,7 +26,7 @@ defmodule Lotus.Sources.SQLServer do
   def set_statement_timeout(_repo, _timeout_ms), do: :ok
 
   @impl true
-  # No-op: SQL does not have search_path concept. 
+  # No-op: SQL Server does not have search_path concept. 
   # Would need to pass `prefix: ` down to each query instead.
   def set_search_path(_repo, _search_path), do: :ok
 
@@ -50,6 +48,15 @@ defmodule Lotus.Sources.SQLServer do
   def handled_errors, do: [TDS.Error]
 
   @impl true
+  def param_placeholder(idx, _var, :time), do: "CAST(@#{idx} AS TIME)"
+  def param_placeholder(idx, _var, :number), do: "CAST(@#{idx} AS NUMERIC)"
+  def param_placeholder(idx, _var, :integer), do: "CAST(@#{idx} AS INT)"
+  def param_placeholder(idx, _var, :float), do: "CAST(@#{idx} AS FLOAT)"
+  def param_placeholder(idx, _var, :boolean), do: "CAST(@#{idx} AS BIT)"
+  def param_placeholder(idx, _var, :uuid), do: "CAST(@#{idx} AS UNIQUEIDENTIFIER)"
+  def param_placeholder(idx, _var, :decimal), do: "CAST(@#{idx} AS DECIMAL)"
+  def param_placeholder(idx, _var, :date), do: "CAST(@#{idx} AS DATE)"
+  def param_placeholder(idx, _var, :datetime), do: "CAST(@#{idx} AS DATETIME)"
   def param_placeholder(idx, _var, _type), do: "@#{idx}"
 
   @impl true
@@ -124,7 +131,7 @@ defmodule Lotus.Sources.SQLServer do
     placeholders =
       schemas
       |> Enum.with_index(1)
-      |> Enum.map(fn {_, idx} -> "@p#{idx}" end)
+      |> Enum.map(fn {_, idx} -> "@#{idx}" end)
       |> Enum.join(", ")
 
     sql = """
@@ -197,7 +204,7 @@ defmodule Lotus.Sources.SQLServer do
     SELECT TOP 1 s.name
     FROM sys.objects o
     INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
-    WHERE o.name = @p1 
+    WHERE o.name = @1 
       AND o.type IN ('U', 'V')
       AND s.name IN (#{schema_placeholders})
     ORDER BY CASE #{order_case} END
@@ -217,7 +224,7 @@ defmodule Lotus.Sources.SQLServer do
   defp format_mssql_type("char", char_len, _, _) when not is_nil(char_len),
     do: "char(#{char_len})"
 
-  defp format_mssql_type("numberic", _, num_prec, num_scale)
+  defp format_mssql_type("numeric", _, num_prec, num_scale)
        when not is_nil(num_prec) and not is_nil(num_scale),
        do: "decimal(#{num_prec},#{num_scale})"
 

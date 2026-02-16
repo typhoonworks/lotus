@@ -34,10 +34,22 @@ defmodule Lotus.SourcesTest do
       assert repo_name == "mysql"
     end
 
+    test "falls back to another string q_repo when repo_opt is nil" do
+      {repo_module, repo_name} = Sources.resolve!(nil, "sql_server")
+      assert repo_module == Lotus.Test.SQLServerRepo
+      assert repo_name == "sql_server"
+    end
+
     test "falls back to module q_repo when repo_opt is nil" do
       {repo_module, repo_name} = Sources.resolve!(nil, Lotus.Test.MysqlRepo)
       assert repo_module == Lotus.Test.MysqlRepo
       assert repo_name == "mysql"
+    end
+
+    test "falls back to another module q_repo when repo_opt is nil" do
+      {repo_module, repo_name} = Sources.resolve!(nil, Lotus.Test.SQLServerRepo)
+      assert repo_module == Lotus.Test.SQLServerRepo
+      assert repo_name == "sql_server"
     end
 
     test "falls back to default repo when both are nil" do
@@ -94,6 +106,7 @@ defmodule Lotus.SourcesTest do
       assert Sources.name_from_module!(Lotus.Test.Repo) == "postgres"
       assert Sources.name_from_module!(Lotus.Test.SqliteRepo) == "sqlite"
       assert Sources.name_from_module!(Lotus.Test.MysqlRepo) == "mysql"
+      assert Sources.name_from_module!(Lotus.Test.SQLServerRepo) == "sql_server"
     end
 
     test "raises for unconfigured repo module" do
@@ -120,6 +133,10 @@ defmodule Lotus.SourcesTest do
       assert Sources.source_type("mysql") == :mysql
     end
 
+    test "detects sql_server adapter from repo name" do
+      assert Sources.source_type("sql_server") == :sql_server
+    end
+
     test "detects postgres adapter from repo module" do
       assert Sources.source_type(Lotus.Test.Repo) == :postgres
     end
@@ -130,6 +147,10 @@ defmodule Lotus.SourcesTest do
 
     test "detects mysql adapter from repo module" do
       assert Sources.source_type(Lotus.Test.MysqlRepo) == :mysql
+    end
+
+    test "detects sql_server adapter from repo module" do
+      assert Sources.source_type(Lotus.Test.SQLServerRepo) == :sql_server
     end
 
     test "raises for unknown repo name" do
@@ -171,11 +192,11 @@ defmodule Lotus.SourcesTest do
       assert Sources.supports_feature?(:sqlite, :json) == true
     end
 
-    test "tds features" do
-      assert Sources.supports_feature?(:tds, :search_path) == false
-      assert Sources.supports_feature?(:tds, :make_interval) == false
-      assert Sources.supports_feature?(:tds, :arrays) == false
-      assert Sources.supports_feature?(:tds, :json) == false
+    test "sql_server features" do
+      assert Sources.supports_feature?(:sql_server, :search_path) == false
+      assert Sources.supports_feature?(:sql_server, :make_interval) == false
+      assert Sources.supports_feature?(:sql_server, :arrays) == false
+      assert Sources.supports_feature?(:sql_server, :json) == false
     end
 
     test "unknown source type returns false for all features" do
@@ -189,7 +210,7 @@ defmodule Lotus.SourcesTest do
       assert Sources.supports_feature?(:postgres, :unknown_feature) == false
       assert Sources.supports_feature?(:mysql, :unknown_feature) == false
       assert Sources.supports_feature?(:sqlite, :unknown_feature) == false
-      assert Sources.supports_feature?(:tds, :unknown_feature) == false
+      assert Sources.supports_feature?(:sql_server, :unknown_feature) == false
     end
   end
 end
