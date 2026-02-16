@@ -13,7 +13,7 @@ defmodule Lotus.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error]],
+      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error, TDS.Error]],
       deps: deps(),
       docs: docs(),
       package: package(),

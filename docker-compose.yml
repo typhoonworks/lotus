@@ -33,6 +33,20 @@ services:
       - mysql_data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password
 
+  mssql:
+    image: "mcr.microsoft.com/mssql/server:2017-latest-ubuntu"
+    restart: always
+    container_name: lotus_mssql
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: Lotus123!
+      MSSQL_SA_PASSWORD: Lotus123!
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
 volumes:
   db:
   mysql_data:
+  mssql_data:

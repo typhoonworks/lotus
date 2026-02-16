@@ -74,4 +74,21 @@ config :lotus, Lotus.Test.MysqlRepo,
   show_sensitive_data_on_connection_error: true,
   stacktrace: true
 
-config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo]
+config :lotus, Lotus.Test.SQLServerRepo,
+  username: "sa",
+  password: "Lotus123!",
+  hostname: "localhost",
+  port: 1433,
+  database: "lotus_dev",
+  pool_size: 10,
+  priv: "priv/sql_server_repo",
+  show_sensitive_data_on_connection_error: true,
+  stacktrace: true
+
+config :lotus,
+  ecto_repos: [
+    Lotus.Test.Repo,
+    Lotus.Test.SqliteRepo,
+    Lotus.Test.MysqlRepo,
+    Lotus.Test.SQLServerRepo
+  ]
