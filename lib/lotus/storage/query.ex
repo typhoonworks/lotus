@@ -100,27 +100,53 @@ defmodule Lotus.Storage.Query do
       enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_module)
 
     # Build SQL with parameters, using automatic type casting
-    Enum.reduce(Enum.with_index(vars_in_order, 1), {transformed_sql, []}, fn {var, idx},
-                                                                             {acc_sql, acc_params} ->
-      meta = Enum.find(vars, %{}, &(&1.name == var))
+    {final_sql, final_params, _idx} =
+      Enum.reduce(vars_in_order, {transformed_sql, [], 1}, fn var, {acc_sql, acc_params, idx} ->
+        meta = Enum.find(vars, %{}, &(&1.name == var))
 
-      value =
-        Map.get(supplied_vars, var) ||
-          Map.get(meta, :default) ||
-          raise ArgumentError, "Missing required variable: #{var}"
+        value =
+          Map.get(supplied_vars, var) ||
+            Map.get(meta, :default) ||
+            raise ArgumentError, "Missing required variable: #{var}"
 
-      manual_type = Map.get(meta, :type)
-      binding = Enum.find(enriched_bindings, &(&1.variable == var))
+        manual_type = Map.get(meta, :type)
+        binding = Enum.find(enriched_bindings, &(&1.variable == var))
+        is_list = Map.get(meta, :list, false)
 
-      {final_type, casted_value} = determine_type_and_cast(value, manual_type, binding)
+        if is_list do
+          values = normalize_list_value(value)
 
-      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
+          if values == [] do
+            raise ArgumentError, "List variable '#{var}' must have at least one value"
+          end
 
-      {
-        String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
-        acc_params ++ [casted_value]
-      }
-    end)
+          {placeholders, casted_values, next_idx} =
+            Enum.reduce(values, {[], [], idx}, fn v, {phs, cvs, i} ->
+              {final_type, casted} = determine_type_and_cast(v, manual_type, binding)
+              ph = Lotus.Source.param_placeholder(q.data_repo, i, var, final_type)
+              {phs ++ [ph], cvs ++ [casted], i + 1}
+            end)
+
+          placeholder_str = Enum.join(placeholders, ", ")
+
+          {
+            String.replace(acc_sql, "{{#{var}}}", placeholder_str, global: false),
+            acc_params ++ casted_values,
+            next_idx
+          }
+        else
+          {final_type, casted_value} = determine_type_and_cast(value, manual_type, binding)
+          placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
+
+          {
+            String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
+            acc_params ++ [casted_value],
+            idx + 1
+          }
+        end
+      end)
+
+    {final_sql, final_params}
   end
 
   @doc """
@@ -273,6 +299,16 @@ defmodule Lotus.Storage.Query do
         {nil, value}
     end
   end
+
+  defp normalize_list_value(value) when is_list(value), do: value
+
+  defp normalize_list_value(value) when is_binary(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+  end
+
+  defp normalize_list_value(value), do: [value]
 
   defp requires_casting?(:text, _value), do: false
   defp requires_casting?(:binary, value) when is_binary(value), do: false

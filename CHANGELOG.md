@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-02-16
+
+### Added
+
+- **NEW:** List variable support for multi-value query parameters (e.g., `IN (...)` clauses)
+  - Variables with `list: true` expand to multiple SQL placeholders at execution time
+  - Correct parameter index sequencing when mixing list and scalar variables
+  - Per-element type casting for list values (e.g., `:number` casts each element individually)
+  - Automatic normalization of comma-separated strings into lists (e.g., `"US, UK, DE"` → `["US", "UK", "DE"]`)
+  - Support for all database adapters (PostgreSQL `$1, $2, $3`, MySQL/SQLite `?, ?, ?`)
+  - Validation that list variables contain at least one value
+  - Added `list` boolean field to `QueryVariable` schema (defaults to `false`)
+
 ## [0.13.0] - 2026-02-10
 
 ### Added

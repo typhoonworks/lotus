@@ -31,11 +31,12 @@ defmodule Lotus.Storage.QueryVariable do
           widget: :input | :select | nil,
           label: String.t() | nil,
           default: String.t() | nil,
+          list: boolean(),
           static_options: [StaticOption.t()],
           options_query: String.t() | nil
         }
 
-  @permitted ~w(name type widget label default options_query)a
+  @permitted ~w(name type widget label default list options_query)a
   @required ~w(name type)a
 
   embedded_schema do
@@ -44,6 +45,7 @@ defmodule Lotus.Storage.QueryVariable do
     field(:widget, Ecto.Enum, values: @available_widgets)
     field(:label, :string)
     field(:default, :string)
+    field(:list, :boolean, default: false)
     field(:options_query, :string)
 
     embeds_many(:static_options, StaticOption)
