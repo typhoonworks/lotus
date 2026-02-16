@@ -162,6 +162,40 @@ defmodule Lotus.AI.Providers.OpenAITest do
       assert {:error, :timeout} = OpenAI.generate_sql(opts)
     end
 
+    test "extracts and returns variables from LLM response" do
+      mock_sql_with_variables()
+
+      opts = [
+        prompt: "Show orders with a status dropdown",
+        data_source: "postgres",
+        config: %{api_key: "sk-test", provider: "openai"}
+      ]
+
+      assert {:ok, response} = OpenAI.generate_sql(opts)
+
+      assert response.content =~ "SELECT * FROM orders"
+      assert length(response.variables) == 1
+
+      variable = hd(response.variables)
+      assert variable["name"] == "status"
+      assert variable["type"] == "text"
+      assert variable["widget"] == "select"
+    end
+
+    test "returns empty variables for SQL-only response" do
+      mock_successful_generation()
+
+      opts = [
+        prompt: "Show active users",
+        data_source: "postgres",
+        config: %{api_key: "sk-test", provider: "openai"}
+      ]
+
+      assert {:ok, response} = OpenAI.generate_sql(opts)
+
+      assert response.variables == []
+    end
+
     test "extracts plain SQL without markdown" do
       mock_plain_sql()
 

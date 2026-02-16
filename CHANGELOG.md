@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- **NEW:** AI-generated query variable configurations alongside SQL
+  - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
+  - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)
+  - Smart options strategy: `static_options` via `get_column_values()` for small cardinality, `options_query` for dynamic/large sets
+  - `extract_variables/1` parser for ```` ```variables ```` JSON blocks with normalization (type validation, widget/list defaults, nil stripping)
+  - `extract_response/1` unified extractor combining SQL and variable extraction for providers
+  - All providers (OpenAI, Anthropic, Gemini) return `variables` in their response map
+  - `generate_query/1` and `generate_query_with_context/1` now include `variables` in the result
+  - Conversation history preserves and formats variable context across multi-turn exchanges
+
+### Changed
+
+- `Lotus.AI.Provider.response` type now includes a `variables` field
+- `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
+- Providers use `SQLGeneration.extract_response/1` instead of `extract_sql/1` for response parsing
+
 ## [0.14.0] - 2026-02-16
 
 ### Added

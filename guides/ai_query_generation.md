@@ -15,6 +15,9 @@ The AI query generation feature:
 - **Read-only** - Inherits Lotus's read-only execution guarantees
 - **Multi-provider** - Supports OpenAI, Anthropic (Claude), and Google Gemini
 - **Conversational** - Multi-turn conversations for iterative query refinement and error fixing
+- **Variable-aware** - Generates query variable configurations with UI metadata (widget types, labels, dropdown options)
+
+> **Web-first design:** The AI module is designed to work hand-in-hand with the [Lotus Web](https://github.com/typhoonworks/lotus_web) interface. Generated variable configurations — widget types, labels, static options, and options queries — map directly to the web editor's `WidgetComponent`, which renders them as text inputs, dropdowns, multi-selects, date pickers, and tag inputs. While the API is usable standalone, the variable metadata is most valuable when paired with the web UI.
 
 ## Supported Providers
 
@@ -111,11 +114,34 @@ For simple, one-off queries without conversation context:
 result.sql
 #=> "SELECT * FROM users WHERE created_at > NOW() - INTERVAL '7 days'"
 
+result.variables
+#=> []
+
+result.provider
+#=> "openai"
+
 result.model
 #=> "gpt-4o"
 
 result.usage
 #=> %{prompt_tokens: 245, completion_tokens: 28, total_tokens: 273}
+```
+
+When the user asks for parameterized queries, the AI also returns variable configurations:
+
+```elixir
+{:ok, result} = Lotus.AI.generate_query(
+  prompt: "Show orders filtered by a status dropdown",
+  data_source: "my_repo"
+)
+
+result.sql
+#=> "SELECT * FROM orders WHERE status = {{status}}"
+
+result.variables
+#=> [%{"name" => "status", "type" => "text", "widget" => "select",
+#=>    "label" => "Order Status",
+#=>    "static_options" => [%{"value" => "pending", "label" => "Pending"}, ...]}]
 ```
 
 For iterative refinement and error fixing, see [Conversational Query Refinement](#conversational-query-refinement) below.
@@ -367,7 +393,8 @@ conversation = Conversation.add_user_message(conversation, "Show active users")
 conversation = Conversation.add_assistant_response(
   conversation,
   "Here's your query:",
-  result.sql
+  result.sql,
+  result.variables
 )
 
 # If the query fails, add the error
@@ -400,7 +427,7 @@ conversation = Conversation.new()
   conversation: conversation
 )
 
-conversation = Conversation.add_assistant_response(conversation, "Generated query", result1.sql)
+conversation = Conversation.add_assistant_response(conversation, "Generated query", result1.sql, result1.variables)
 
 # Refine the query
 conversation = Conversation.add_user_message(conversation, "Only show the last 6 months")
@@ -456,7 +483,7 @@ Generates SQL from natural language (single-turn).
 
 **Returns:**
 
-- `{:ok, %{sql: String.t(), model: String.t(), usage: map()}}` - Success
+- `{:ok, %{sql: String.t(), variables: [map()], provider: String.t(), model: String.t(), usage: map()}}` - Success
 - `{:error, :not_configured}` - AI not enabled
 - `{:error, :api_key_not_configured}` - Missing API key
 - `{:error, {:unable_to_generate, reason}}` - LLM refused
@@ -484,7 +511,7 @@ Manages conversational state for multi-turn interactions.
 
 - `Conversation.new()` - Initialize a new conversation
 - `Conversation.add_user_message(conversation, content)` - Add user message
-- `Conversation.add_assistant_response(conversation, content, sql)` - Add AI response
+- `Conversation.add_assistant_response(conversation, content, sql, variables \\ [])` - Add AI response
 - `Conversation.add_query_result(conversation, result)` - Add query execution result (success or error)
 - `Conversation.should_auto_retry?(conversation)` - Check if last message was an error
 - `Conversation.prune_messages(conversation, keep_last)` - Remove old messages to manage token usage

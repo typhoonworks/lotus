@@ -37,6 +37,7 @@ defmodule Lotus.AI.Conversation do
           role: :system | :user | :assistant | :error,
           content: String.t(),
           sql: String.t() | nil,
+          variables: [map()] | nil,
           timestamp: DateTime.t()
         }
 
@@ -111,6 +112,7 @@ defmodule Lotus.AI.Conversation do
   - `conversation` - Current conversation state
   - `content` - Assistant's explanation or message
   - `sql` - Generated SQL query
+  - `variables` - Optional list of variable configurations (default: `[]`)
 
   ## Examples
 
@@ -122,12 +124,13 @@ defmodule Lotus.AI.Conversation do
       iex> message.sql
       "SELECT * FROM users"
   """
-  @spec add_assistant_response(t(), String.t(), String.t()) :: t()
-  def add_assistant_response(conversation, content, sql) do
+  @spec add_assistant_response(t(), String.t(), String.t(), [map()]) :: t()
+  def add_assistant_response(conversation, content, sql, variables \\ []) do
     message = %{
       role: :assistant,
       content: content,
       sql: sql,
+      variables: variables,
       timestamp: DateTime.utc_now()
     }
 
@@ -220,15 +223,7 @@ defmodule Lotus.AI.Conversation do
             %{role: :user, content: msg.content}
 
           :assistant ->
-            # Include both explanation and SQL in assistant message
-            content =
-              if msg.sql do
-                "#{msg.content}\n\n```sql\n#{msg.sql}\n```"
-              else
-                msg.content
-              end
-
-            %{role: :assistant, content: content}
+            %{role: :assistant, content: format_assistant_content(msg)}
 
           :error ->
             # Format error as user message asking for fix
@@ -245,6 +240,17 @@ defmodule Lotus.AI.Conversation do
 
     [system_message] ++ conversation_messages
   end
+
+  defp format_assistant_content(%{sql: sql, variables: variables, content: content})
+       when is_binary(sql) and is_list(variables) and variables != [] do
+    "#{content}\n\n```sql\n#{sql}\n```\n\n```variables\n#{Lotus.JSON.encode!(variables)}\n```"
+  end
+
+  defp format_assistant_content(%{sql: sql, content: content}) when is_binary(sql) do
+    "#{content}\n\n```sql\n#{sql}\n```"
+  end
+
+  defp format_assistant_content(%{content: content}), do: content
 
   @doc """
   Determine if the conversation should auto-retry based on the last message.

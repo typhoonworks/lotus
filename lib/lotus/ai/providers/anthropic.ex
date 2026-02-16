@@ -83,9 +83,9 @@ defmodule Lotus.AI.Providers.Anthropic do
   defp handle_response({:ok, updated_chain}) do
     content = extract_content(updated_chain.last_message.content)
 
-    case SQLGeneration.extract_sql(content) do
-      {:ok, sql} ->
-        {:ok, build_success_response(updated_chain, sql)}
+    case SQLGeneration.extract_response(content) do
+      {:ok, %{sql: sql, variables: variables}} ->
+        {:ok, build_success_response(updated_chain, sql, variables)}
 
       {:error, {:unable_to_generate, reason}} ->
         {:error, {:unable_to_generate, reason}}
@@ -106,12 +106,13 @@ defmodule Lotus.AI.Providers.Anthropic do
 
   defp extract_content(nil), do: nil
 
-  defp build_success_response(chain, sql) do
+  defp build_success_response(chain, sql, variables) do
     usage = chain.last_message.metadata[:usage]
 
     %{
       content: sql,
       model: chain.llm.model,
+      variables: variables,
       usage: %{
         prompt_tokens: usage.input || 0,
         completion_tokens: usage.output || 0,

@@ -71,6 +71,34 @@ defmodule Lotus.AI.ConversationTest do
     end
   end
 
+  describe "add_assistant_response/4" do
+    test "stores variables in message" do
+      variables = [%{"name" => "status", "type" => "text", "widget" => "select"}]
+
+      conversation =
+        Conversation.new()
+        |> Conversation.add_assistant_response(
+          "Here's your query:",
+          "SELECT * FROM orders WHERE status = {{status}}",
+          variables
+        )
+
+      message = List.first(conversation.messages)
+
+      assert message.variables == variables
+    end
+
+    test "defaults variables to empty list when not provided" do
+      conversation =
+        Conversation.new()
+        |> Conversation.add_assistant_response("Query:", "SELECT 1")
+
+      message = List.first(conversation.messages)
+
+      assert message.variables == []
+    end
+  end
+
   describe "add_query_result/2" do
     test "adds error message when query fails" do
       conversation =
@@ -155,6 +183,37 @@ defmodule Lotus.AI.ConversationTest do
       assert error_as_user.content =~ "previous query failed"
       assert error_as_user.content =~ "column 'status' does not exist"
       assert error_as_user.content =~ "SELECT status FROM users"
+    end
+
+    test "includes variables block in assistant context when variables are present" do
+      variables = [%{"name" => "status", "type" => "text", "widget" => "select"}]
+
+      conversation =
+        Conversation.new()
+        |> Conversation.add_assistant_response(
+          "Here's your query:",
+          "SELECT * FROM orders WHERE status = {{status}}",
+          variables
+        )
+
+      messages = Conversation.build_context_messages(conversation, "System prompt")
+
+      assistant_message = Enum.at(messages, 1)
+      assert assistant_message.role == :assistant
+      assert assistant_message.content =~ "```sql"
+      assert assistant_message.content =~ "```variables"
+      assert assistant_message.content =~ "status"
+    end
+
+    test "does not include variables block when variables are empty" do
+      conversation =
+        Conversation.new()
+        |> Conversation.add_assistant_response("Query:", "SELECT * FROM users")
+
+      messages = Conversation.build_context_messages(conversation, "System prompt")
+
+      assistant_message = Enum.at(messages, 1)
+      refute assistant_message.content =~ "```variables"
     end
 
     test "builds complete multi-turn conversation" do

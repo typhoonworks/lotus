@@ -61,6 +61,15 @@ defmodule Lotus.LangChainMocks do
   end
 
   @doc """
+  Mock successful SQL generation with variable configurations.
+  """
+  def mock_sql_with_variables do
+    expect(LangChain.Chains.LLMChain, :run, fn chain ->
+      {:ok, build_chain_response(chain, sql_with_variables_response())}
+    end)
+  end
+
+  @doc """
   Mock API error (rate limiting, auth failure, etc.).
   """
   def mock_api_error(error_message \\ "Rate limit exceeded") do

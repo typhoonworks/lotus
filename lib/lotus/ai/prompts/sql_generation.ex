@@ -77,6 +77,8 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     ## Database-Specific Notes:
     #{database_specific_notes(database_type)}
 
+    #{variable_system_docs()}
+
     ## Examples:
     - "Active users in last 7 days" → Query users table if it has created_at/status
     - "Top 5 products by sales" → Query if products/orders tables exist
@@ -125,6 +127,147 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
 
       {:ok, sql}
     end
+  end
+
+  @doc """
+  Extract variable configurations from LLM response content.
+
+  Parses a ```variables JSON block from the response. Returns an empty list
+  if no block is found or if the JSON is malformed.
+
+  ## Parameters
+
+  - `content` - Raw response content from the LLM
+
+  ## Returns
+
+  List of variable configuration maps (empty list if none found).
+
+  ## Examples
+
+      iex> extract_variables("```variables\\n[{\\"name\\": \\"status\\", \\"type\\": \\"text\\"}]\\n```")
+      [%{"name" => "status", "type" => "text", "widget" => "input", "list" => false}]
+
+      iex> extract_variables("Just some SQL without variables")
+      []
+  """
+  @spec extract_variables(String.t()) :: [map()]
+  def extract_variables(content) do
+    case Regex.run(~r/```variables\s*\n(.*?)\n```/s, content) do
+      [_, json_str] ->
+        case Lotus.JSON.decode(String.trim(json_str)) do
+          {:ok, variables} when is_list(variables) ->
+            Enum.map(variables, &normalize_variable/1)
+
+          _ ->
+            []
+        end
+
+      nil ->
+        []
+    end
+  end
+
+  @doc """
+  Extract both SQL and variables from LLM response content.
+
+  Combines `extract_sql/1` and `extract_variables/1` into a single call.
+  This is the primary extraction entry point for providers.
+
+  ## Parameters
+
+  - `content` - Raw response content from the LLM
+
+  ## Returns
+
+  - `{:ok, %{sql: String.t(), variables: [map()]}}` - Successfully extracted
+  - `{:error, {:unable_to_generate, reason}}` - LLM refused to generate
+
+  ## Examples
+
+      iex> extract_response("```sql\\nSELECT * FROM users WHERE status = {{status}}\\n```\\n```variables\\n[{\\"name\\": \\"status\\"}]\\n```")
+      {:ok, %{sql: "SELECT * FROM users WHERE status = {{status}}", variables: [...]}}
+  """
+  @spec extract_response(String.t()) ::
+          {:ok, %{sql: String.t(), variables: [map()]}}
+          | {:error, {:unable_to_generate, String.t()}}
+  def extract_response(content) do
+    case extract_sql(content) do
+      {:ok, sql} ->
+        variables = extract_variables(content)
+        {:ok, %{sql: sql, variables: variables}}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @valid_types ~w(text number date)
+
+  defp normalize_variable(var) when is_map(var) do
+    var
+    |> normalize_type()
+    |> Map.put_new("widget", "input")
+    |> Map.put_new("list", false)
+    |> Map.reject(fn {_k, v} -> is_nil(v) end)
+  end
+
+  defp normalize_type(%{"type" => type} = var) when type in @valid_types, do: var
+  defp normalize_type(%{"type" => _} = var), do: Map.put(var, "type", "text")
+  defp normalize_type(var), do: Map.put(var, "type", "text")
+
+  defp variable_system_docs do
+    """
+    ## Query Variables (Parameterization):
+    Only add variables when the user explicitly asks for parameterization, filters,
+    dropdowns, selectable inputs, or similar. NEVER add variables proactively.
+
+    **Syntax:** Use `{{variable_name}}` placeholders in SQL.
+
+    **Variable config fields:**
+    - `name` (required) — matches the `{{name}}` in SQL
+    - `type` (required) — `text`, `number`, or `date`
+    - `widget` — `input` (free-form) or `select` (dropdown). Default: `input`
+    - `label` — human-friendly label for the UI
+    - `default` — fallback value if none provided
+    - `list` — `true` for multi-select / IN clauses. Default: `false`
+    - `static_options` — array of `{"value": "...", "label": "..."}` objects for select widgets
+    - `options_query` — SQL that returns `value` and `label` columns for dynamic options
+
+    **Widget guidelines:**
+    - Use `input` for free-form text, numbers, or dates
+    - Use `select` when a column has a finite set of values
+    - Use `list: true` with `select` for multi-select (generates IN clauses)
+
+    **Options strategy:**
+    - Default to `static_options` with values discovered via `get_column_values()` when there are roughly 20 or fewer distinct values
+    - Use `options_query` when values are numerous, change frequently, or the user explicitly asks for dynamic/SQL-based options (e.g., "make it dynamic", "use a SQL query for options", "keep options up to date")
+    - `options_query` must return exactly two columns aliased as `value` and `label`
+
+    **Response format when variables are used:**
+    Include BOTH a ```sql block AND a ```variables JSON block:
+
+    ```sql
+    SELECT * FROM orders WHERE status = {{status}}
+    ```
+
+    ```variables
+    [
+      {
+        "name": "status",
+        "type": "text",
+        "widget": "select",
+        "label": "Order Status",
+        "static_options": [
+          {"value": "pending", "label": "Pending"},
+          {"value": "shipped", "label": "Shipped"}
+        ]
+      }
+    ]
+    ```
+
+    When no variables are needed, return ONLY the ```sql block as usual.
+    """
   end
 
   defp database_specific_notes(:postgres) do

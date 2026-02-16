@@ -87,9 +87,24 @@ defmodule Lotus.AITest do
 
       assert result.sql =~ "SELECT * FROM users"
       assert result.sql =~ "created_at >= NOW()"
+      assert result.variables == []
       assert result.provider == "openai"
       assert result.model == "gpt-4o"
       assert result.usage.total_tokens == 200
+    end
+
+    test "returns variables when LLM generates them" do
+      mock_sql_with_variables()
+
+      assert {:ok, result} =
+               AI.generate_query(
+                 prompt: "Show orders with a status dropdown",
+                 data_source: "postgres"
+               )
+
+      assert result.sql =~ "SELECT * FROM orders"
+      assert length(result.variables) == 1
+      assert hd(result.variables)["name"] == "status"
     end
 
     test "handles plain SQL without markdown" do
@@ -193,6 +208,45 @@ defmodule Lotus.AITest do
                )
 
       System.delete_env("TEST_AI_KEY")
+    end
+  end
+
+  describe "generate_query_with_context/1" do
+    setup do
+      setup_mocks()
+
+      stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
+      stub(Lotus.Schema, :list_tables, fn _ -> {:ok, table_list()} end)
+
+      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test")
+
+      :ok
+    end
+
+    test "returns variables in result map" do
+      mock_sql_with_variables()
+
+      assert {:ok, result} =
+               AI.generate_query_with_context(
+                 prompt: "Show orders with a status dropdown",
+                 data_source: "postgres"
+               )
+
+      assert result.sql =~ "SELECT * FROM orders"
+      assert length(result.variables) == 1
+      assert hd(result.variables)["name"] == "status"
+    end
+
+    test "returns empty variables for SQL-only response" do
+      mock_successful_generation()
+
+      assert {:ok, result} =
+               AI.generate_query_with_context(
+                 prompt: "Show active users",
+                 data_source: "postgres"
+               )
+
+      assert result.variables == []
     end
   end
 
