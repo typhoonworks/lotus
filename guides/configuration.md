@@ -357,7 +357,15 @@ config :lotus,
 By default, Lotus blocks all write operations (INSERT, UPDATE, DELETE, DDL) at both the
 application level (regex deny list) and the database level (read-only transactions).
 
-You can disable the application-level deny check per query by passing `read_only: false`:
+To allow writes globally (applies to all queries, including the web UI):
+
+```elixir
+# config/config.exs (or config/dev.exs for dev-only)
+config :lotus,
+  read_only: false
+```
+
+You can also enable writes per query without changing the global config:
 
 ```elixir
 # Insert a record

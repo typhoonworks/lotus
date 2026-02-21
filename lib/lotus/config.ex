@@ -69,11 +69,13 @@ defmodule Lotus.Config do
 
       config :lotus,
         default_repo: "primary",       # Default data repo for queries
-        unique_names: false            # Defaults to true
+        unique_names: false,           # Defaults to true
+        read_only: false               # Defaults to true; set to false to allow writes
   """
 
   @type t :: %{
           ecto_repo: module(),
+          read_only: boolean(),
           unique_names: boolean(),
           data_repos: %{String.t() => module()},
           default_repo: String.t() | nil,
@@ -101,6 +103,12 @@ defmodule Lotus.Config do
       type: :atom,
       required: true,
       doc: "The Ecto repository where Lotus will store its query definitions."
+    ],
+    read_only: [
+      type: :boolean,
+      default: true,
+      doc:
+        "When true (default), blocks write operations (INSERT, UPDATE, DELETE, DDL) at the application level. Set to false to allow write queries."
     ],
     data_repos: [
       type: {:map, :string, :atom},
@@ -216,6 +224,7 @@ defmodule Lotus.Config do
     Application.get_all_env(:lotus)
     |> Keyword.take([
       :ecto_repo,
+      :read_only,
       :unique_names,
       :data_repos,
       :default_repo,
@@ -239,6 +248,12 @@ defmodule Lotus.Config do
   """
   @spec unique_names?() :: boolean()
   def unique_names?, do: load!()[:unique_names]
+
+  @doc """
+  Returns whether queries are restricted to read-only operations.
+  """
+  @spec read_only?() :: boolean()
+  def read_only?, do: load!()[:read_only]
 
   @doc """
   Returns the configured data repositories.
