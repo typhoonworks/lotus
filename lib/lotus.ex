@@ -463,8 +463,14 @@ defmodule Lotus do
     end)
   end
 
-  defp prepare_final_opts(opts, nil), do: opts
-  defp prepare_final_opts(opts, search_path), do: Keyword.put(opts, :search_path, search_path)
+  defp prepare_final_opts(opts, nil),
+    do: Keyword.put_new_lazy(opts, :read_only, &Config.read_only?/0)
+
+  defp prepare_final_opts(opts, search_path) do
+    opts
+    |> Keyword.put(:search_path, search_path)
+    |> Keyword.put_new_lazy(:read_only, &Config.read_only?/0)
+  end
 
   defp build_cache_tags(query_id, repo_name, opts) do
     base_tags = ["query:#{query_id}", "repo:#{repo_name}"]
@@ -575,7 +581,12 @@ defmodule Lotus do
           {:ok, Result.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
     {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), nil)
-    runner_opts = Keyword.delete(opts, :repo)
+
+    runner_opts =
+      opts
+      |> Keyword.delete(:repo)
+      |> Keyword.put_new_lazy(:read_only, &Config.read_only?/0)
+
     search_path = Keyword.get(runner_opts, :search_path)
 
     {sql, params, window_meta, cache_bound} =
