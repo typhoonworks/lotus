@@ -354,6 +354,71 @@ defmodule Lotus.RunnerTest do
     end
   end
 
+  describe "write queries with read_only: false" do
+    test "INSERT succeeds with read_only: false and returns result" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      result =
+        Runner.run_sql(
+          Repo,
+          "INSERT INTO test_users (name, email, age, active, metadata, inserted_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email",
+          ["Ada Lovelace", "ada@math.org", 36, true, %{}, now, now],
+          read_only: false
+        )
+
+      assert {:ok, %{columns: ["id", "name", "email"], rows: [[_id, "Ada Lovelace", "ada@math.org"]]}} =
+               result
+    end
+
+    test "UPDATE succeeds with read_only: false and returns affected rows" do
+      result =
+        Runner.run_sql(
+          Repo,
+          "UPDATE test_users SET age = age + 1 WHERE active = true RETURNING id, name, age",
+          [],
+          read_only: false
+        )
+
+      assert {:ok, %{columns: ["id", "name", "age"], rows: rows}} = result
+      assert length(rows) > 0
+    end
+
+    test "DELETE succeeds with read_only: false and returns affected rows" do
+      result =
+        Runner.run_sql(
+          Repo,
+          "DELETE FROM test_users WHERE active = false RETURNING id",
+          [],
+          read_only: false
+        )
+
+      assert {:ok, %{columns: ["id"], rows: rows}} = result
+      assert length(rows) >= 1
+    end
+
+    test "INSERT is still rejected with default opts (no regression)" do
+      result =
+        Runner.run_sql(
+          Repo,
+          "INSERT INTO test_users (name, email) VALUES ('test', 'test@example.com')"
+        )
+
+      assert {:error, "Only read-only queries are allowed"} = result
+    end
+
+    test "single-statement validation still enforced with read_only: false" do
+      result =
+        Runner.run_sql(
+          Repo,
+          "INSERT INTO test_users (name, email) VALUES ('a', 'a@a.com'); DELETE FROM test_users",
+          [],
+          read_only: false
+        )
+
+      assert {:error, "Only a single statement is allowed"} = result
+    end
+  end
+
   describe "error handling" do
     test "handles syntax errors gracefully" do
       result = Runner.run_sql(Repo, "SELECT * FROM")

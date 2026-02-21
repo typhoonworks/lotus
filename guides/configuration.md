@@ -352,20 +352,59 @@ config :lotus,
   }
 ```
 
+## Enabling Write Queries
+
+By default, Lotus blocks all write operations (INSERT, UPDATE, DELETE, DDL) at both the
+application level (regex deny list) and the database level (read-only transactions).
+
+You can disable the application-level deny check per query by passing `read_only: false`:
+
+```elixir
+# Insert a record
+{:ok, result} = Lotus.run_sql(
+  "INSERT INTO notes (body) VALUES ($1) RETURNING id, body",
+  ["hello world"],
+  read_only: false
+)
+
+# Update records
+{:ok, result} = Lotus.run_sql(
+  "UPDATE users SET active = true WHERE id = $1 RETURNING id",
+  [42],
+  read_only: false
+)
+```
+
+> ### Warning {: .warning}
+>
+> Write queries bypass the application-level deny list. If you don't need writes,
+> keep the default `read_only: true`. For maximum safety in production, point Lotus
+> at a [read-only database replica](#read-only-repositories-recommended) so that
+> writes are impossible at the connection level regardless of options.
+
+Even with `read_only: false`, the following safety checks still apply:
+
+- **Single-statement validation** — multiple statements separated by `;` are still rejected
+- **Table visibility rules** — queries against blocked tables are still denied
+- **Preflight authorization** — schema and table access controls are still enforced
+
 ## Read-Only Repositories (Recommended)
 
-While Lotus provides multiple layers of security including read-only execution and table visibility controls, the ultimate security practice is to use Ecto repositories configured with `read_only: true`. This provides database-level guarantees that no write operations can occur.
+For the strongest guarantee that no writes can occur, point Lotus at an Ecto repository
+backed by a **read-only database replica**. This is separate from Lotus's own `read_only`
+option — Ecto's `read_only: true` repo option rejects every write at the repository level,
+so even `read_only: false` in Lotus cannot bypass it.
 
 ### Why Use Read-Only Repositories?
 
-- **Ultimate security**: Repository-level read-only enforcement that cannot be bypassed
-- **Zero risk**: Impossible to accidentally perform write operations through the repository
+- **Connection-level enforcement**: The repository rejects all writes before they reach the database
+- **Immune to option overrides**: Lotus's `read_only: false` has no effect — Ecto blocks writes first
 - **Clear intent**: Explicitly declares that a repository is intended only for reading data
-- **Additional safety layer**: Works alongside Lotus's existing security features
+- **Defense-in-depth**: Works alongside Lotus's application-level safety checks
 
 ### Configuring Read-Only Repositories
 
-Ecto provides built-in support for read-only repositories using the `read_only: true` option:
+Ecto provides built-in support for read-only repositories using the `read_only: true` repo option:
 
 ```elixir
 # lib/my_app/read_only_repo.ex
@@ -373,7 +412,7 @@ defmodule MyApp.ReadOnlyRepo do
   use Ecto.Repo,
     otp_app: :my_app,
     adapter: Ecto.Adapters.Postgres,
-    read_only: true  # This prevents all write operations at the Ecto level
+    read_only: true  # Ecto rejects all write operations at the repo level
 end
 ```
 
@@ -396,27 +435,23 @@ config :my_app, MyApp.ReadOnlyRepo,
   database: "myapp_prod"
 ```
 
-### Benefits with Lotus
+### How It Interacts with Lotus
 
-When you combine Lotus's security features with read-only repositories:
+When a data repo is configured with Ecto's `read_only: true`:
 
-1. **Repository-level enforcement**: The repository cannot execute write operations
-2. **Application-level safety**: Lotus still provides SQL validation and table visibility controls
-3. **Defense-in-depth**: Multiple layers of protection working together
-4. **Peace of mind**: Guaranteed read-only access regardless of SQL content
-
-### Example Usage
+1. **Ecto blocks writes first** — the repo rejects INSERT/UPDATE/DELETE before Lotus is involved
+2. **Lotus's `read_only: false` has no effect** — even if you pass it, the repo won't execute writes
+3. **Lotus safety checks still apply** — SQL validation, table visibility, and preflight authorization run as usual
 
 ```elixir
-# This will work - reading data through read-only repo
-{:ok, result} = Lotus.run_sql(
-  "SELECT COUNT(*) FROM users", 
-  [], 
-  repo: "main"
-)
+# Reads work normally
+{:ok, result} = Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "main")
 
-# This would fail at the repository level even if it somehow bypassed Lotus
-# The read-only repository will reject any write operations
+# Writes are blocked by Ecto's read-only repo — even with read_only: false
+{:error, _} = Lotus.run_sql(
+  "INSERT INTO users (name) VALUES ($1)", ["test"],
+  repo: "main", read_only: false
+)
 ```
 
 ### Learn More

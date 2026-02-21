@@ -119,13 +119,13 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **CSV export** — download query results with streaming support for large datasets
 - **Schema explorer** — browse tables, columns, and statistics interactively
 - **AI query generation** — ask your database questions in plain English; schema-aware, multi-turn conversations using OpenAI, Anthropic, or Gemini (BYOK)
-- **Read-only by design** — all queries run in read-only transactions with automatic timeout controls and session state management
+- **Read-only by default** — all queries run in read-only transactions with automatic timeout controls and session state management (opt out per-query with `read_only: false`)
 
 ## Production Ready
 
 Lotus is built for production use from the ground up:
 
-- **Read-only execution** — all queries run inside read-only transactions. No accidental writes.
+- **Read-only execution** — all queries run inside read-only transactions by default. No accidental writes. Pass `read_only: false` to enable writes.
 - **Session state management** — connection pool state is automatically preserved and restored after each query, preventing pool pollution.
 - **Automatic type casting** — query variables are cast to match column types (UUIDs, dates, numbers, booleans, enums) using schema metadata, with graceful fallbacks.
 - **Timeout controls** — configurable per-query timeouts with sensible defaults.
