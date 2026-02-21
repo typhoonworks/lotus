@@ -13,7 +13,7 @@ defmodule Lotus.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error]],
+      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error, TDS.Error]],
       deps: deps(),
       docs: docs(),
       package: package(),
@@ -49,6 +49,7 @@ defmodule Lotus.MixProject do
       {:nimble_csv, "~> 1.2"},
       {:nimble_options, "~> 1.0"},
       {:postgrex, "~> 0.20", optional: true},
+      {:tds, "~> 2.3.6", optional: true},
 
       # AI/LLM Integration
       {:langchain, "~> 0.5.0"},
