@@ -20,6 +20,9 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
 
   - `database_type` - Database type (e.g., :postgres, :mysql, :sqlite)
   - `table_names` - List of available table names in the database
+  - `opts` - Optional keyword list:
+    - `:read_only` - When `true` (default), instructs the LLM to only generate
+      read-only queries. When `false`, allows write queries (INSERT, UPDATE, DELETE, DDL).
 
   ## Returns
 
@@ -30,17 +33,13 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
       iex> SQLGeneration.system_prompt(:postgres, ["users", "posts"])
       "You are a specialized SQL query generator for postgres databases..."
   """
-  @spec system_prompt(atom(), [String.t()]) :: String.t()
-  def system_prompt(database_type, table_names) do
+  @spec system_prompt(atom(), [String.t()], keyword()) :: String.t()
+  def system_prompt(database_type, table_names, opts \\ []) do
+    read_only = Keyword.get(opts, :read_only, true)
+
     """
     You are a specialized SQL query generator for #{database_type} databases.
-
-    **IMPORTANT:** You can ONLY generate SQL queries. If asked about:
-    - General information (recipes, weather, etc.)
-    - Data not in available tables
-    - Actions (sending emails, creating records)
-
-    Respond with: "UNABLE_TO_GENERATE: [reason]"
+    #{read_only_instructions(read_only)}
 
     ## Available Tables:
     #{Enum.join(table_names, ", ")}
@@ -301,6 +300,34 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     """
     - Use standard SQL syntax
     - Check database documentation for specific features
+    """
+  end
+
+  defp read_only_instructions(true) do
+    """
+    **IMPORTANT:** You can ONLY generate **read-only** SQL queries (SELECT, WITH, EXPLAIN, VALUES).
+    Never generate INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, or any other write/DDL statements.
+
+    If asked about:
+    - General information (recipes, weather, etc.)
+    - Data not in available tables
+    - Actions that modify data (inserting, updating, deleting records)
+    - Any non-SELECT operation
+
+    Respond with: "UNABLE_TO_GENERATE: [reason]"
+    """
+  end
+
+  defp read_only_instructions(false) do
+    """
+    **IMPORTANT:** You can generate both read and write SQL queries, including SELECT, INSERT, UPDATE,
+    DELETE, CREATE, ALTER, DROP, and other statements.
+
+    If asked about:
+    - General information (recipes, weather, etc.)
+    - Data not in available tables
+
+    Respond with: "UNABLE_TO_GENERATE: [reason]"
     """
   end
 end

@@ -35,13 +35,14 @@ defmodule Lotus.AI.Providers.OpenAI do
     data_source = Keyword.fetch!(opts, :data_source)
     config = Keyword.fetch!(opts, :config)
     conversation = Keyword.get(opts, :conversation)
+    read_only = Keyword.get(opts, :read_only, true)
 
-    build_chain(prompt, data_source, config, conversation)
+    build_chain(prompt, data_source, config, conversation, read_only)
     |> run_until_complete()
     |> handle_response()
   end
 
-  defp build_chain(prompt, data_source, config, conversation) do
+  defp build_chain(prompt, data_source, config, conversation, read_only) do
     database_type = Lotus.Sources.source_type(data_source)
 
     # Get ALL schemas, not just those in search path
@@ -49,7 +50,7 @@ defmodule Lotus.AI.Providers.OpenAI do
     {:ok, tables} = Lotus.Schema.list_tables(data_source, schemas: all_schemas)
     table_names = extract_table_names(tables)
 
-    system_prompt = SQLGeneration.system_prompt(database_type, table_names)
+    system_prompt = SQLGeneration.system_prompt(database_type, table_names, read_only: read_only)
 
     model = %ChatOpenAI{
       model: config[:model] || default_model(),

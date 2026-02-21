@@ -21,7 +21,8 @@ defmodule Lotus.AI.Provider do
   @type generate_opts :: [
           prompt: String.t(),
           data_source: String.t(),
-          config: config()
+          config: config(),
+          read_only: boolean()
         ]
 
   @type response :: %{
@@ -46,6 +47,7 @@ defmodule Lotus.AI.Provider do
   - `:prompt` - Natural language query description
   - `:data_source` - Name of the data source to query against
   - `:config` - Provider configuration including API key and model
+  - `:read_only` - When `true` (default), instructs the LLM to only generate read-only queries
 
   ## Returns
 

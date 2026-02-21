@@ -4,6 +4,7 @@
 
 ### Added
 
+- **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
 - **NEW:** AI-generated query variable configurations alongside SQL
   - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
   - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)

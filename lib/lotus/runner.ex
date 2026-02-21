@@ -1,6 +1,10 @@
 defmodule Lotus.Runner do
   @moduledoc """
-  Read-only SQL execution with safety checks, param binding, and result shaping.
+  SQL execution with safety checks, param binding, and result shaping.
+
+  By default, all queries are read-only. Destructive operations (INSERT, UPDATE,
+  DELETE, DDL) are blocked at both the application and database level. Pass
+  `read_only: false` to allow write operations.
   """
 
   alias Lotus.{Preflight, Result, Source, Sources, Visibility}
@@ -18,15 +22,18 @@ defmodule Lotus.Runner do
           search_path: String.t() | nil
         ]
 
-  # Deny list for dangerous operations (defense-in-depth)
-  # The real safety is the DB-level read-only transaction guard
+  # Deny list for dangerous operations (defense-in-depth).
+  # Skipped when `read_only: false` is passed in opts.
+  # The DB-level read-only transaction guard provides an additional safety layer.
   @deny ~r/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|VACUUM|ANALYZE|CALL|LOCK)\b/i
 
   @spec run_sql(repo(), sql(), params(), opts()) ::
           {:ok, query_result()} | {:error, term()}
   def run_sql(repo, sql, params \\ [], opts \\ []) when is_binary(sql) and is_list(params) do
+    read_only = Keyword.get(opts, :read_only, true)
+
     with :ok <- assert_single_statement(sql),
-         :ok <- assert_not_denied(sql),
+         :ok <- assert_not_denied(sql, read_only),
          :ok <- preflight_visibility(repo, sql, params, opts) do
       exec_read_only(repo, sql, params, opts)
     end
@@ -265,7 +272,9 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp assert_not_denied(sql) do
+  defp assert_not_denied(_sql, false = _read_only), do: :ok
+
+  defp assert_not_denied(sql, _read_only) do
     if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok
   end
 

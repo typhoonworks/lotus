@@ -62,6 +62,8 @@ defmodule Lotus.AI do
   - `:prompt` (required) - Natural language description of desired query
   - `:data_source` (required) - Name of the data source to query against
   - `:conversation` (optional) - Conversation struct with message history
+  - `:read_only` (optional) - When `true` (default), the AI only generates read-only
+    queries. Set to `false` to allow the AI to generate write queries.
 
   ## Returns
 
@@ -105,7 +107,8 @@ defmodule Lotus.AI do
              prompt: opts[:prompt],
              data_source: opts[:data_source],
              conversation: opts[:conversation],
-             config: config
+             config: config,
+             read_only: Keyword.get(opts, :read_only, true)
            ) do
       {:ok,
        %{
@@ -127,6 +130,8 @@ defmodule Lotus.AI do
 
   - `:prompt` (required) - Natural language description of desired query
   - `:data_source` (required) - Name of the data source to query against
+  - `:read_only` (optional) - When `true` (default), the AI only generates read-only
+    queries. Set to `false` to allow the AI to generate write queries.
 
   ## Returns
 
@@ -163,7 +168,8 @@ defmodule Lotus.AI do
            provider_module.generate_sql(
              prompt: opts[:prompt],
              data_source: opts[:data_source],
-             config: config
+             config: config,
+             read_only: Keyword.get(opts, :read_only, true)
            ) do
       {:ok,
        %{

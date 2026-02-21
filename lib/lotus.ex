@@ -530,7 +530,13 @@ defmodule Lotus do
   end
 
   @doc """
-  Run ad-hoc SQL (bypassing storage), still read-only and sandboxed.
+  Run ad-hoc SQL (bypassing storage), read-only by default and sandboxed.
+
+  ## Options
+
+    * `:read_only` — when `true` (default), blocks write operations (INSERT, UPDATE,
+      DELETE, DDL) at both the application and database level. Set to `false` to allow
+      write queries.
 
   ## Examples
 
@@ -545,6 +551,13 @@ defmodule Lotus do
 
       # With search_path for schema resolution
       {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
+
+      # Allow write queries (development use)
+      {:ok, result} = Lotus.run_sql(
+        "INSERT INTO notes (body) VALUES ($1)",
+        ["hello"],
+        read_only: false
+      )
 
   ### Windowed pagination
   Pass `window: [limit: pos_integer, offset: non_neg_integer, count: :none | :exact]` to
