@@ -272,7 +272,7 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp assert_not_denied(_sql, _read_only = false), do: :ok
+  defp assert_not_denied(_sql, false = _read_only), do: :ok
 
   defp assert_not_denied(sql, _read_only) do
     if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok

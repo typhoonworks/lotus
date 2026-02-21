@@ -366,7 +366,8 @@ defmodule Lotus.RunnerTest do
           read_only: false
         )
 
-      assert {:ok, %{columns: ["id", "name", "email"], rows: [[_id, "Ada Lovelace", "ada@math.org"]]}} =
+      assert {:ok,
+              %{columns: ["id", "name", "email"], rows: [[_id, "Ada Lovelace", "ada@math.org"]]}} =
                result
     end
 
@@ -380,7 +381,7 @@ defmodule Lotus.RunnerTest do
         )
 
       assert {:ok, %{columns: ["id", "name", "age"], rows: rows}} = result
-      assert length(rows) > 0
+      assert rows != []
     end
 
     test "DELETE succeeds with read_only: false and returns affected rows" do
@@ -393,7 +394,7 @@ defmodule Lotus.RunnerTest do
         )
 
       assert {:ok, %{columns: ["id"], rows: rows}} = result
-      assert length(rows) >= 1
+      assert rows != []
     end
 
     test "INSERT is still rejected with default opts (no regression)" do
