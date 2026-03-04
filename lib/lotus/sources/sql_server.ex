@@ -3,6 +3,8 @@ defmodule Lotus.Sources.SQLServer do
 
   @behaviour Lotus.Source
 
+  alias Lotus.Sources.Default
+
   @mssql_error Module.concat([:Tds, :Error])
 
   @impl true
@@ -26,8 +28,6 @@ defmodule Lotus.Sources.SQLServer do
   def set_statement_timeout(_repo, _timeout_ms), do: :ok
 
   @impl true
-  # No-op: SQL Server does not have search_path concept. 
-  # Would need to pass `prefix: ` down to each query instead.
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
@@ -44,19 +44,25 @@ defmodule Lotus.Sources.SQLServer do
     end
   end
 
+  def format_error(other), do: Default.format_error(other)
+
   @impl true
   def handled_errors, do: [TDS.Error]
 
   @impl true
+  def param_placeholder(idx, _var, :uuid), do: "CAST(@#{idx} AS UNIQUEIDENTIFIER)"
+  def param_placeholder(idx, _var, :date), do: "CAST(@#{idx} AS DATE)"
+  def param_placeholder(idx, _var, :datetime), do: "CAST(@#{idx} AS DATETIME)"
   def param_placeholder(idx, _var, :time), do: "CAST(@#{idx} AS TIME)"
   def param_placeholder(idx, _var, :number), do: "CAST(@#{idx} AS NUMERIC)"
   def param_placeholder(idx, _var, :integer), do: "CAST(@#{idx} AS INT)"
   def param_placeholder(idx, _var, :float), do: "CAST(@#{idx} AS FLOAT)"
-  def param_placeholder(idx, _var, :boolean), do: "CAST(@#{idx} AS BIT)"
-  def param_placeholder(idx, _var, :uuid), do: "CAST(@#{idx} AS UNIQUEIDENTIFIER)"
   def param_placeholder(idx, _var, :decimal), do: "CAST(@#{idx} AS DECIMAL)"
-  def param_placeholder(idx, _var, :date), do: "CAST(@#{idx} AS DATE)"
-  def param_placeholder(idx, _var, :datetime), do: "CAST(@#{idx} AS DATETIME)"
+  def param_placeholder(idx, _var, :boolean), do: "CAST(@#{idx} AS BIT)"
+  def param_placeholder(idx, _var, :json), do: "CAST(@#{idx} AS NVARCHAR(MAX))"
+  def param_placeholder(idx, _var, :binary), do: "CAST(@#{idx} AS VARBINARY)"
+  def param_placeholder(idx, _var, :text), do: "CAST(@#{idx} AS NTEXT)"
+
   def param_placeholder(idx, _var, _type), do: "@#{idx}"
 
   @impl true
@@ -111,12 +117,23 @@ defmodule Lotus.Sources.SQLServer do
   @impl true
   def list_schemas(repo) do
     sql = """
-      SELECT name AS [Username]
-      FROM sys.database_principals
-      WHERE type NOT IN ('A', 'G', 'R', 'X')
-        AND sid IS NOT NULL 
-        AND name NOT IN ('guest', 'dbo', 'INFORMATION_SCHEMA', 'sys')
-      ORDER BY [Username];
+      SELECT name
+      FROM sys.schemas
+      WHERE name NOT IN (
+        'sys',
+        'INFORMATION_SCHEMA',
+        'guest',
+        'db_owner',
+        'db_accessadmin',
+        'db_backupoperator',
+        'db_datareader',
+        'db_datawriter',
+        'db_ddladmin',
+        'db_denydatareader',
+        'db_denydatawriter',
+        'db_securityadmin'
+      )
+      ORDER BY name
     """
 
     %{rows: rows} = repo.query!(sql)
@@ -164,13 +181,13 @@ defmodule Lotus.Sources.SQLServer do
     INNER JOIN sys.objects o ON c.object_id = o.object_id
     INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
     LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
-    LEFT JOIN sys.index_columns ic ON ic.object_id = c.object_id 
-      AND ic.column_id = c.column_id
-    LEFT JOIN sys.indexes i ON ic.object_id = i.object_id 
-      AND ic.index_id = i.index_id 
+    LEFT JOIN sys.indexes i ON i.object_id = c.object_id
       AND i.is_primary_key = 1
+    LEFT JOIN sys.index_columns ic ON ic.object_id = i.object_id
+      AND ic.index_id = i.index_id
+      AND ic.column_id = c.column_id
     WHERE s.name = @1 AND o.name = @2
-    ORDER BY c.column_id
+    ORDER BY c.column_id;
     """
 
     %{rows: rows} = repo.query!(sql, [schema, table])
@@ -218,8 +235,22 @@ defmodule Lotus.Sources.SQLServer do
     end
   end
 
+  defp format_mssql_type("nvarchar", -1, _, _), do: "nvarchar(MAX)"
+
   defp format_mssql_type("nvarchar", char_len, _, _) when not is_nil(char_len),
-    do: "nvarchar(#{char_len})"
+    do: "nvarchar(#{div(char_len, 2)})"
+
+  defp format_mssql_type("nchar", -1, _, _), do: "nchar(MAX)"
+
+  defp format_mssql_type("nchar", char_len, _, _) when not is_nil(char_len),
+    do: "nchar(#{div(char_len, 2)})"
+
+  defp format_mssql_type("varchar", -1, _, _), do: "varchar(MAX)"
+
+  defp format_mssql_type("varchar", char_len, _, _) when not is_nil(char_len),
+    do: "varchar(#{char_len})"
+
+  defp format_mssql_type("char", -1, _, _), do: "char(MAX)"
 
   defp format_mssql_type("char", char_len, _, _) when not is_nil(char_len),
     do: "char(#{char_len})"
