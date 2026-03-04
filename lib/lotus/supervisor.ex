@@ -5,9 +5,6 @@ defmodule Lotus.Supervisor do
 
   use Supervisor
 
-  alias Lotus.Cache.Cachex
-  alias Lotus.Cache.ETS
-
   @spec start_link(keyword) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     case Keyword.get(opts, :supervisor_name) do
@@ -22,7 +19,7 @@ defmodule Lotus.Supervisor do
 
     children =
       case cache_conf do
-        %{adapter: adapter} when adapter in [ETS, Cachex] -> adapter.spec_config()
+        %{adapter: adapter} -> adapter.spec_config()
         nil -> []
       end
 
