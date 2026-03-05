@@ -94,6 +94,7 @@ defmodule Lotus.AI.Conversation do
       role: :user,
       content: content,
       sql: nil,
+      variables: nil,
       timestamp: DateTime.utc_now()
     }
 
@@ -174,6 +175,7 @@ defmodule Lotus.AI.Conversation do
       role: :error,
       content: format_error(error),
       sql: last_sql,
+      variables: nil,
       timestamp: DateTime.utc_now()
     }
 
@@ -212,9 +214,11 @@ defmodule Lotus.AI.Conversation do
       iex> Enum.map(messages, & &1.role)
       [:system, :user]
   """
-  @spec build_context_messages(t(), String.t()) :: [map()]
-  def build_context_messages(conversation, system_prompt) do
+  @spec build_context_messages(t(), String.t(), map() | nil) :: [map()]
+  def build_context_messages(conversation, system_prompt, query_context \\ nil) do
     system_message = %{role: :system, content: system_prompt}
+
+    context_messages = build_query_context_messages(query_context)
 
     conversation_messages =
       Enum.map(conversation.messages, fn msg ->
@@ -238,7 +242,7 @@ defmodule Lotus.AI.Conversation do
         end
       end)
 
-    [system_message] ++ conversation_messages
+    [system_message] ++ context_messages ++ conversation_messages
   end
 
   defp format_assistant_content(%{sql: sql, variables: variables, content: content})
@@ -339,6 +343,24 @@ defmodule Lotus.AI.Conversation do
   end
 
   # Private helpers
+
+  defp build_query_context_messages(nil), do: []
+
+  defp build_query_context_messages(%{sql: sql, variables: variables})
+       when is_binary(sql) and sql != "" do
+    content =
+      if is_list(variables) and variables != [] do
+        "The user already has this query in their editor:\n\n```sql\n#{sql}\n```\n\n```variables\n#{Lotus.JSON.encode!(variables)}\n```"
+      else
+        "The user already has this query in their editor:\n\n```sql\n#{sql}\n```"
+      end
+
+    [
+      %{role: :assistant, content: content}
+    ]
+  end
+
+  defp build_query_context_messages(_), do: []
 
   defp format_error(error) when is_binary(error), do: error
   defp format_error(error) when is_exception(error), do: Exception.message(error)
