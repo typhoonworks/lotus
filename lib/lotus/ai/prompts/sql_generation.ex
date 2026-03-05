@@ -9,6 +9,8 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
   - Security guidelines (read-only, limits, etc.)
   """
 
+  alias Lotus.AI.Prompts.Variables
+
   @doc """
   Generate system prompt for SQL query generation.
 
@@ -76,7 +78,8 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     ## Database-Specific Notes:
     #{database_specific_notes(database_type)}
 
-    #{variable_system_docs()}
+    #{Variables.system_docs()}
+    #{sql_variable_notes()}
 
     ## Examples:
     - "Active users in last 7 days" → Query users table if it has created_at/status
@@ -215,57 +218,10 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
   defp normalize_type(%{"type" => _} = var), do: Map.put(var, "type", "text")
   defp normalize_type(var), do: Map.put(var, "type", "text")
 
-  defp variable_system_docs do
+  defp sql_variable_notes do
     """
-    ## Query Variables (Parameterization):
-    Only add variables when the user explicitly asks for parameterization, filters,
-    dropdowns, selectable inputs, or similar. NEVER add variables proactively.
-
-    **Syntax:** Use `{{variable_name}}` placeholders in SQL.
-
-    **Variable config fields:**
-    - `name` (required) — matches the `{{name}}` in SQL
-    - `type` (required) — `text`, `number`, or `date`
-    - `widget` — `input` (free-form) or `select` (dropdown). Default: `input`
-    - `label` — human-friendly label for the UI
-    - `default` — fallback value if none provided
-    - `list` — `true` for multi-select / IN clauses. Default: `false`
-    - `static_options` — array of `{"value": "...", "label": "..."}` objects for select widgets
-    - `options_query` — SQL that returns `value` and `label` columns for dynamic options
-
-    **Widget guidelines:**
-    - Use `input` for free-form text, numbers, or dates
-    - Use `select` when a column has a finite set of values
-    - Use `list: true` with `select` for multi-select (generates IN clauses)
-
-    **Options strategy:**
-    - Default to `static_options` with values discovered via `get_column_values()` when there are roughly 20 or fewer distinct values
-    - Use `options_query` when values are numerous, change frequently, or the user explicitly asks for dynamic/SQL-based options (e.g., "make it dynamic", "use a SQL query for options", "keep options up to date")
-    - `options_query` must return exactly two columns aliased as `value` and `label`
-
-    **Response format when variables are used:**
-    Include BOTH a ```sql block AND a ```variables JSON block:
-
-    ```sql
-    SELECT * FROM orders WHERE status = {{status}}
-    ```
-
-    ```variables
-    [
-      {
-        "name": "status",
-        "type": "text",
-        "widget": "select",
-        "label": "Order Status",
-        "static_options": [
-          {"value": "pending", "label": "Pending"},
-          {"value": "shipped", "label": "Shipped"}
-        ]
-      }
-    ]
-    ```
-
-    When no variables are needed, return ONLY the ```sql block as usual.
+    **SQL-specific variable notes:**
+    - For `list: true` variables, just use `{{variable}}` directly — e.g., `IN ({{names}})` or `= ANY({{ids}})`. Do NOT wrap the variable in conversion functions like `STRING_TO_ARRAY()`, `SPLIT()`, or similar. The framework expands `{{variable}}` into the correct number of parameter placeholders automatically.
     """
   end
 

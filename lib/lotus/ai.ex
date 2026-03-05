@@ -107,6 +107,7 @@ defmodule Lotus.AI do
              prompt: opts[:prompt],
              data_source: opts[:data_source],
              conversation: opts[:conversation],
+             query_context: opts[:query_context],
              config: config,
              read_only: Keyword.get(opts, :read_only, true)
            ) do
