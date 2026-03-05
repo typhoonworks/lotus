@@ -58,7 +58,7 @@ defmodule Lotus.Sources do
   @doc """
   Detect the source type from a repository module or name.
   """
-  @spec source_type(module() | String.t()) :: :postgres | :mysql | :sqlite | :tds | :other
+  @spec source_type(module() | String.t()) :: :postgres | :mysql | :sqlite | :sql_server | :other
   def source_type(repo_name) when is_binary(repo_name) do
     repo = Config.get_data_repo!(repo_name)
     source_type(repo)
@@ -69,7 +69,7 @@ defmodule Lotus.Sources do
       Ecto.Adapters.Postgres -> :postgres
       Ecto.Adapters.SQLite3 -> :sqlite
       Ecto.Adapters.MyXQL -> :mysql
-      Ecto.Adapters.Tds -> :tds
+      Ecto.Adapters.Tds -> :sql_server
       _ -> :other
     end
   end
@@ -93,10 +93,10 @@ defmodule Lotus.Sources do
   def supports_feature?(:sqlite, :arrays), do: false
   def supports_feature?(:sqlite, :json), do: true
 
-  def supports_feature?(:tds, :search_path), do: false
-  def supports_feature?(:tds, :make_interval), do: false
-  def supports_feature?(:tds, :arrays), do: false
-  def supports_feature?(:tds, :json), do: false
+  def supports_feature?(:sql_server, :search_path), do: false
+  def supports_feature?(:sql_server, :make_interval), do: false
+  def supports_feature?(:sql_server, :arrays), do: false
+  def supports_feature?(:sql_server, :json), do: false
 
   def supports_feature?(_, _), do: false
 end

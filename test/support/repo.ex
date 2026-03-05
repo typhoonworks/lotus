@@ -21,3 +21,11 @@ defmodule Lotus.Test.MysqlRepo do
     otp_app: :lotus,
     adapter: Ecto.Adapters.MyXQL
 end
+
+defmodule Lotus.Test.SQLServerRepo do
+  @moduledoc false
+
+  use Ecto.Repo,
+    otp_app: :lotus,
+    adapter: Ecto.Adapters.Tds
+end

@@ -170,7 +170,8 @@ defmodule Lotus.Source do
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
     Ecto.Adapters.SQLite3 => Lotus.Sources.SQLite3,
-    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL
+    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL,
+    Ecto.Adapters.Tds => Lotus.Sources.SQLServer
   }
 
   @doc """

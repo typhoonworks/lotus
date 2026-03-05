@@ -6,7 +6,8 @@ config :lotus,
   data_repos: %{
     "postgres" => Lotus.Test.Repo,
     "sqlite" => Lotus.Test.SqliteRepo,
-    "mysql" => Lotus.Test.MysqlRepo
+    "mysql" => Lotus.Test.MysqlRepo,
+    "sql_server" => Lotus.Test.SQLServerRepo
   },
   table_visibility: %{
     # Built-in rules automatically exclude:
@@ -62,4 +63,23 @@ config :lotus, Lotus.Test.MysqlRepo,
     System.get_env("MYSQL_URL") ||
       "mysql://root:mysql@localhost:3307/lotus_test#{System.get_env("MIX_TEST_PARTITION")}"
 
-config :lotus, ecto_repos: [Lotus.Test.Repo, Lotus.Test.SqliteRepo, Lotus.Test.MysqlRepo]
+config :lotus, Lotus.Test.SQLServerRepo,
+  username: "sa",
+  password: "Lotus123!",
+  hostname: "localhost",
+  port: 1433,
+  database: "lotus_test#{System.get_env("MIX_TEST_PARTITION")}",
+  migration_lock: false,
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: System.schedulers_online() * 2,
+  priv: "test/support/sql_server",
+  show_sensitive_data_on_connection_error: true,
+  stacktrace: true
+
+config :lotus,
+  ecto_repos: [
+    Lotus.Test.Repo,
+    Lotus.Test.SqliteRepo,
+    Lotus.Test.MysqlRepo,
+    Lotus.Test.SQLServerRepo
+  ]
