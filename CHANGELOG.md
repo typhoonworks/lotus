@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.0] - 2026-03-05
 
 ### Added
 
@@ -20,6 +20,13 @@
 - `Lotus.AI.Provider.response` type now includes a `variables` field
 - `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
 - Providers use `SQLGeneration.extract_response/1` instead of `extract_sql/1` for response parsing
+- Fixed cache adapter constraint that prevented custom cache adapters from being used
+
+### Dependencies
+
+- Bumped `langchain` from 0.5.2 to 0.6.0
+- Bumped `ecto_sql` from 3.13.4 to 3.13.5
+- Bumped `credo` from 1.7.16 to 1.7.17
 
 ## [0.14.0] - 2026-02-16
 
