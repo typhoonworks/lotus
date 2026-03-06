@@ -15,7 +15,7 @@ defmodule Lotus.Storage.Query do
 
   alias Lotus.Config
   alias Lotus.Sources
-  alias Lotus.SQL.Transformer
+  alias Lotus.SQL.{OptionalClause, Transformer}
   alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, TypeMapper, VariableResolver}
 
   @type t :: %__MODULE__{
@@ -84,8 +84,11 @@ defmodule Lotus.Storage.Query do
     source_type = get_source_type(q.data_repo)
     source_module = get_source_module(repo)
 
+    # Process optional clauses before transformation
+    processed_sql = OptionalClause.process(sql, supplied_vars)
+
     # Transform SQL for database-specific syntax
-    transformed_sql = Transformer.transform(sql, source_type)
+    transformed_sql = Transformer.transform(processed_sql, source_type)
 
     # Extract variables from SQL
     regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
@@ -173,6 +176,15 @@ defmodule Lotus.Storage.Query do
     Regex.scan(regex, statement, capture: :all_but_first)
     |> List.flatten()
     |> Enum.uniq()
+  end
+
+  @doc """
+  Returns a `MapSet` of variable names that appear inside `[[...]]` optional
+  clause blocks in the given SQL statement.
+  """
+  @spec extract_optional_variable_names(String.t()) :: MapSet.t()
+  def extract_optional_variable_names(statement) do
+    OptionalClause.extract_optional_variable_names(statement)
   end
 
   defp get_repo(nil) do

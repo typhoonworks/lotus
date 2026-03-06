@@ -929,6 +929,74 @@ defmodule Lotus.Storage.QueryTest do
     end
   end
 
+  describe "optional clauses ([[...]])" do
+    test "value provided — brackets stripped, clause kept" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE 1=1 [[AND status = {{status}}]]",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"status" => "active"})
+
+      assert sql == "SELECT * FROM users WHERE 1=1 AND status = $1"
+      assert params == ["active"]
+    end
+
+    test "no value — clause stripped, no error" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE 1=1 [[AND status = {{status}}]]",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{})
+
+      assert sql == "SELECT * FROM users WHERE 1=1 "
+      assert params == []
+    end
+
+    test "mixed required + optional variables" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE id = {{id}} [[AND status = {{status}}]]",
+        variables: [],
+        data_repo: "postgres"
+      }
+
+      {sql, params} = Query.to_sql_params(q, %{"id" => 1})
+
+      assert sql == "SELECT * FROM users WHERE id = $1 "
+      assert params == [1]
+    end
+
+    test "optional clause with list variable" do
+      q = %Query{
+        statement: "SELECT * FROM users WHERE 1=1 [[AND country IN ({{countries}})]]",
+        variables: [
+          %{name: "countries", type: :text, list: true}
+        ],
+        data_repo: "postgres"
+      }
+
+      # With values
+      {sql, params} = Query.to_sql_params(q, %{"countries" => ["US", "UK"]})
+      assert sql == "SELECT * FROM users WHERE 1=1 AND country IN ($1, $2)"
+      assert params == ["US", "UK"]
+
+      # Without values — clause removed
+      {sql, params} = Query.to_sql_params(q, %{})
+      assert sql == "SELECT * FROM users WHERE 1=1 "
+      assert params == []
+    end
+
+    test "extract_optional_variable_names/1" do
+      sql =
+        "SELECT * FROM users WHERE id = {{id}} [[AND name = {{name}}]] [[AND status = {{status}}]]"
+
+      assert Query.extract_optional_variable_names(sql) == MapSet.new(["name", "status"])
+    end
+  end
+
   describe "database-specific placeholder generation" do
     test "PostgreSQL uses typed placeholders for known types" do
       q = %Query{
