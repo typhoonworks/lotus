@@ -222,6 +222,7 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     """
     **SQL-specific variable notes:**
     - For `list: true` variables, just use `{{variable}}` directly — e.g., `IN ({{names}})` or `= ANY({{ids}})`. Do NOT wrap the variable in conversion functions like `STRING_TO_ARRAY()`, `SPLIT()`, or similar. The framework expands `{{variable}}` into the correct number of parameter placeholders automatically.
+    - For optional filters, wrap clauses in `[[...]]` — e.g., `WHERE 1=1 [[AND status = {{status}}]]`. The block is removed when the variable has no value. Always use `WHERE 1=1` as the base when using optional clauses so that removing all `[[...]]` blocks still produces valid SQL.
     """
   end
 

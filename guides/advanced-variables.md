@@ -2,6 +2,105 @@
 
 This guide covers advanced variable usage patterns in Lotus queries, including automatic type casting, SQL transformation, and advanced patterns for cross-database applications.
 
+## Optional Variables (`[[...]]` Syntax)
+
+Lotus supports optional variable clauses using double-bracket syntax. Clauses wrapped in `[[...]]` are automatically removed from the query when the enclosed variables have no value (missing, `nil`, or empty string `""`). When all variables inside a block have values, the brackets are stripped and the clause is kept.
+
+This is useful for building flexible queries where some filters are optional — users can leave them blank without breaking the query.
+
+### Basic Usage
+
+Use `WHERE 1=1` as a base condition so that optional `[[AND ...]]` clauses can be safely removed:
+
+```sql
+SELECT * FROM users
+WHERE 1=1
+  [[AND "name" ILIKE '%' || {{name}} || '%']]
+  [[AND "status" = {{status}}]]
+ORDER BY created_at DESC
+```
+
+- If `name` is blank and `status` is `"active"`, the query becomes:
+  ```sql
+  SELECT * FROM users WHERE 1=1 AND "status" = $1 ORDER BY created_at DESC
+  ```
+- If both are blank, the query becomes:
+  ```sql
+  SELECT * FROM users WHERE 1=1 ORDER BY created_at DESC
+  ```
+
+### Multiple Variables in a Block
+
+A `[[...]]` block with multiple variables requires **all** of them to have values. If any variable is missing, the entire block is removed:
+
+```sql
+SELECT * FROM users
+WHERE 1=1
+  [[AND age BETWEEN {{min_age}} AND {{max_age}}]]
+```
+
+Both `min_age` and `max_age` must be provided for the clause to be included.
+
+### Mixing Required and Optional Variables
+
+Variables outside `[[...]]` blocks are always required. You can mix both in a single query:
+
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "User Search",
+  statement: """
+  SELECT * FROM users
+  WHERE organization_id = {{org_id}}
+    [[AND "name" ILIKE '%' || {{name}} || '%']]
+    [[AND "status" = {{status}}]]
+  ORDER BY created_at DESC
+  LIMIT 100
+  """,
+  variables: [
+    %{name: "org_id", type: :number},
+    %{name: "name", type: :text},
+    %{name: "status", type: :text}
+  ]
+})
+
+# org_id is always required; name and status are optional
+{:ok, result} = Lotus.run_query(query, vars: %{"org_id" => 1})
+```
+
+### Optional Variables with Lists
+
+Optional clauses work with list variables too:
+
+```elixir
+{:ok, query} = Lotus.create_query(%{
+  name: "Filter by Countries",
+  statement: """
+  SELECT * FROM users
+  WHERE 1=1
+    [[AND country IN ({{countries}})]]
+  """,
+  variables: [
+    %{name: "countries", type: :text, list: true}
+  ]
+})
+
+# With values — clause included, list expanded
+{:ok, result} = Lotus.run_query(query, vars: %{"countries" => ["US", "UK"]})
+# SQL: SELECT * FROM users WHERE 1=1 AND country IN ($1, $2)
+
+# Without values — clause removed
+{:ok, result} = Lotus.run_query(query, vars: %{})
+# SQL: SELECT * FROM users WHERE 1=1
+```
+
+### How It Works
+
+1. Before SQL transformation, Lotus scans for `[[...]]` blocks
+2. For each block, it checks whether all `{{variable}}` references inside have values
+3. If all variables have values, the `[[` and `]]` brackets are removed and the content is kept
+4. If any variable is missing/nil/empty, the entire block (including brackets) is removed
+5. The remaining SQL is then processed normally (variable substitution, type casting, etc.)
+
 ## Automatic Type Casting
 
 Lotus includes an intelligent automatic type casting system that detects column types from your database schema and converts string values (typically from web inputs) to the correct database-native formats.

@@ -78,6 +78,7 @@ defmodule Lotus.Storage.VariableResolver do
     sql
     |> String.downcase()
     |> remove_comments()
+    |> String.replace(~r/\[\[|\]\]/, " ")
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
   end
