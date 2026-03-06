@@ -4,6 +4,12 @@
 
 ### Added
 
+- **NEW:** Telemetry integration for observability
+  - Query execution events: `[:lotus, :query, :start]`, `[:lotus, :query, :stop]`, `[:lotus, :query, :exception]`
+  - Cache operation events: `[:lotus, :cache, :hit]`, `[:lotus, :cache, :miss]`, `[:lotus, :cache, :put]`
+  - Schema introspection events: `[:lotus, :schema, :introspection, :start]`, `[:lotus, :schema, :introspection, :stop]`
+  - New `Lotus.Telemetry` module with event reference documentation
+  - Telemetry guide with setup instructions and LiveDashboard integration example
 - **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
 - **NEW:** AI-generated query variable configurations alongside SQL
   - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)

@@ -7,7 +7,7 @@ defmodule Lotus.Runner do
   `read_only: false` to allow write operations.
   """
 
-  alias Lotus.{Preflight, Result, Source, Sources, Visibility}
+  alias Lotus.{Preflight, Result, Source, Sources, Telemetry, Visibility}
   alias Lotus.Preflight.Relations
   alias Lotus.Visibility.Policy
 
@@ -30,12 +30,29 @@ defmodule Lotus.Runner do
   @spec run_sql(repo(), sql(), params(), opts()) ::
           {:ok, query_result()} | {:error, term()}
   def run_sql(repo, sql, params \\ [], opts \\ []) when is_binary(sql) and is_list(params) do
+    telemetry_meta = %{repo: repo, sql: sql, params: params}
+    start_time = Telemetry.query_start(telemetry_meta)
     read_only = Keyword.get(opts, :read_only, true)
 
-    with :ok <- assert_single_statement(sql),
-         :ok <- assert_not_denied(sql, read_only),
-         :ok <- preflight_visibility(repo, sql, params, opts) do
-      exec_read_only(repo, sql, params, opts)
+    result =
+      with :ok <- assert_single_statement(sql),
+           :ok <- assert_not_denied(sql, read_only),
+           :ok <- preflight_visibility(repo, sql, params, opts) do
+        exec_read_only(repo, sql, params, opts)
+      end
+
+    case result do
+      {:ok, %Result{} = res} ->
+        Telemetry.query_stop(
+          start_time,
+          Map.merge(telemetry_meta, %{row_count: res.num_rows, result: res})
+        )
+
+        {:ok, res}
+
+      {:error, _} = error ->
+        Telemetry.query_exception(start_time, :error, error, [], telemetry_meta)
+        error
     end
   end
 

@@ -24,7 +24,7 @@ defmodule Lotus.Schema do
   - **SQLite**: Returns table names as strings (schema-less)
   """
 
-  alias Lotus.{Config, Source, Sources, Visibility}
+  alias Lotus.{Config, Source, Sources, Telemetry, Visibility}
   alias Lotus.Visibility.Policy
 
   @doc """
@@ -55,6 +55,7 @@ defmodule Lotus.Schema do
           {:ok, [String.t()]} | {:error, term()}
   def list_schemas(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:list_schemas, repo_name)
 
     key = schema_key(:list_schemas, repo_name)
     tags = ["repo:#{repo_name}", "schema:list_schemas"]
@@ -66,15 +67,25 @@ defmodule Lotus.Schema do
         :schema
       end
 
-    exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      try do
-        raw_schemas = Source.list_schemas(repo)
-        filtered_schemas = Visibility.filter_schemas(raw_schemas, repo_name)
-        {:ok, filtered_schemas}
-      rescue
-        e -> {:error, Exception.message(e)}
-      end
-    end)
+    result =
+      exec_with_cache(opts[:cache], profile, key, tags, fn ->
+        try do
+          raw_schemas = Source.list_schemas(repo)
+          filtered_schemas = Visibility.filter_schemas(raw_schemas, repo_name)
+          {:ok, filtered_schemas}
+        rescue
+          e -> {:error, Exception.message(e)}
+        end
+      end)
+
+    Telemetry.schema_introspection_stop(
+      start_time,
+      :list_schemas,
+      repo_name,
+      result_status(result)
+    )
+
+    result
   end
 
   @doc """
@@ -114,56 +125,65 @@ defmodule Lotus.Schema do
           {:ok, [{String.t(), String.t()}] | [String.t()]} | {:error, term()}
   def list_tables(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:list_tables, repo_name)
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    case Visibility.validate_schemas(schemas, repo_name) do
-      :ok ->
-        search_path = Keyword.get(opts, :search_path)
+    result =
+      case Visibility.validate_schemas(schemas, repo_name) do
+        :ok ->
+          search_path = Keyword.get(opts, :search_path)
 
-        key =
-          schema_key(
-            :list_tables,
-            repo_name,
-            search_path || Enum.join(schemas, ","),
-            include_views?
-          )
+          key =
+            schema_key(
+              :list_tables,
+              repo_name,
+              search_path || Enum.join(schemas, ","),
+              include_views?
+            )
 
-        tags = ["repo:#{repo_name}", "schema:list_tables"]
+          tags = ["repo:#{repo_name}", "schema:list_tables"]
 
-        profile =
-          if is_list(opts[:cache]) do
-            Keyword.get(opts[:cache], :profile, :schema)
-          else
-            :schema
-          end
+          profile =
+            if is_list(opts[:cache]) do
+              Keyword.get(opts[:cache], :profile, :schema)
+            else
+              :schema
+            end
 
-        exec_with_cache(opts[:cache], profile, key, tags, fn ->
-          try do
-            raw_relations = Source.list_tables(repo, schemas, include_views?)
+          exec_with_cache(opts[:cache], profile, key, tags, fn ->
+            try do
+              raw_relations = Source.list_tables(repo, schemas, include_views?)
 
-            filtered =
-              raw_relations
-              |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+              filtered =
+                raw_relations
+                |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
 
-            result =
-              if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
-                # Schema-less database - return just table names
-                Enum.map(filtered, fn {nil, table} -> table end)
-              else
-                # Schema-aware database - return {schema, table} tuples
-                filtered
-              end
+              tables =
+                if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
+                  Enum.map(filtered, fn {nil, table} -> table end)
+                else
+                  filtered
+                end
 
-            {:ok, result}
-          rescue
-            e -> {:error, Exception.message(e)}
-          end
-        end)
+              {:ok, tables}
+            rescue
+              e -> {:error, Exception.message(e)}
+            end
+          end)
 
-      {:error, :schema_not_visible, denied: denied} ->
-        {:error, "Schema(s) not visible: #{Enum.join(denied, ", ")}"}
-    end
+        {:error, :schema_not_visible, denied: denied} ->
+          {:error, "Schema(s) not visible: #{Enum.join(denied, ", ")}"}
+      end
+
+    Telemetry.schema_introspection_stop(
+      start_time,
+      :list_tables,
+      repo_name,
+      result_status(result)
+    )
+
+    result
   end
 
   @doc """
@@ -193,26 +213,37 @@ defmodule Lotus.Schema do
           {:ok, [map()]} | {:error, term()}
   def get_table_schema(repo_or_name, table_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:get_table_schema, repo_name)
     schemas = effective_schemas(repo, opts)
 
-    case resolve_table_schema_with_cache(
-           repo,
-           repo_name,
-           table_name,
-           schemas,
-           opts[:cache],
-           :schema
-         ) do
-      nil when schemas == [] ->
-        # Schema-less database (SQLite) - nil is expected, proceed with nil schema
-        get_table_schema_cached(repo, repo_name, table_name, nil, opts)
+    result =
+      case resolve_table_schema_with_cache(
+             repo,
+             repo_name,
+             table_name,
+             schemas,
+             opts[:cache],
+             :schema
+           ) do
+        nil when schemas == [] ->
+          # Schema-less database (SQLite) - nil is expected, proceed with nil schema
+          get_table_schema_cached(repo, repo_name, table_name, nil, opts)
 
-      nil ->
-        {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
+        nil ->
+          {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
-      resolved_schema ->
-        get_table_schema_cached(repo, repo_name, table_name, resolved_schema, opts)
-    end
+        resolved_schema ->
+          get_table_schema_cached(repo, repo_name, table_name, resolved_schema, opts)
+      end
+
+    Telemetry.schema_introspection_stop(
+      start_time,
+      :get_table_schema,
+      repo_name,
+      result_status(result)
+    )
+
+    result
   end
 
   defp get_table_schema_cached(repo, repo_name, table_name, resolved_schema, opts) do
@@ -289,26 +320,36 @@ defmodule Lotus.Schema do
           {:ok, %{row_count: non_neg_integer()}} | {:error, binary()}
   def get_table_stats(repo_or_name, table_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:get_table_stats, repo_name)
     schemas = effective_schemas(repo, opts)
 
-    case resolve_table_schema_with_cache(
-           repo,
-           repo_name,
-           table_name,
-           schemas,
-           opts[:cache],
-           :results
-         ) do
-      nil when schemas == [] ->
-        # Schema-less database (SQLite) - nil is expected, proceed with nil schema
-        get_table_stats_cached(repo, repo_name, table_name, nil, opts)
+    result =
+      case resolve_table_schema_with_cache(
+             repo,
+             repo_name,
+             table_name,
+             schemas,
+             opts[:cache],
+             :results
+           ) do
+        nil when schemas == [] ->
+          get_table_stats_cached(repo, repo_name, table_name, nil, opts)
 
-      nil ->
-        {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
+        nil ->
+          {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
-      resolved_schema ->
-        get_table_stats_cached(repo, repo_name, table_name, resolved_schema, opts)
-    end
+        resolved_schema ->
+          get_table_stats_cached(repo, repo_name, table_name, resolved_schema, opts)
+      end
+
+    Telemetry.schema_introspection_stop(
+      start_time,
+      :get_table_stats,
+      repo_name,
+      result_status(result)
+    )
+
+    result
   end
 
   defp get_table_stats_cached(repo, repo_name, table_name, resolved_schema, opts) do
@@ -374,6 +415,7 @@ defmodule Lotus.Schema do
           {:ok, [{String.t() | nil, String.t()}]} | {:error, term()}
   def list_relations(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:list_relations, repo_name)
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
@@ -396,17 +438,27 @@ defmodule Lotus.Schema do
         :schema
       end
 
-    exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      try do
-        raw_relations = Source.list_tables(repo, schemas, include_views?)
+    result =
+      exec_with_cache(opts[:cache], profile, key, tags, fn ->
+        try do
+          raw_relations = Source.list_tables(repo, schemas, include_views?)
 
-        {:ok,
-         raw_relations
-         |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))}
-      rescue
-        e -> {:error, Exception.message(e)}
-      end
-    end)
+          {:ok,
+           raw_relations
+           |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))}
+        rescue
+          e -> {:error, Exception.message(e)}
+        end
+      end)
+
+    Telemetry.schema_introspection_stop(
+      start_time,
+      :list_relations,
+      repo_name,
+      result_status(result)
+    )
+
+    result
   end
 
   defp effective_schemas(repo, opts) do
@@ -654,4 +706,7 @@ defmodule Lotus.Schema do
       _ -> {"\"", "\""}
     end
   end
+
+  defp result_status({:ok, _}), do: :ok
+  defp result_status({:error, _}), do: :error
 end
