@@ -190,18 +190,16 @@ defmodule Lotus.Config do
       ## Options
 
       - `:enabled` (boolean) - Enable AI features. Default: false
-      - `:provider` (string) - LLM provider: "openai", "anthropic", or "gemini"
+      - `:model` (string) - ReqLLM model string, e.g. "openai:gpt-4o", "anthropic:claude-opus-4". Default: "openai:gpt-4o"
       - `:api_key` (string or tuple) - API key or {:system, "ENV_VAR"}
-      - `:model` (string) - Model name override (optional, defaults to provider's recommended model)
 
       ## Example
 
           config :lotus,
             ai: [
               enabled: true,
-              provider: "openai",
-              api_key: {:system, "OPENAI_API_KEY"},
-              model: "gpt-4o"
+              model: "openai:gpt-4o",
+              api_key: {:system, "OPENAI_API_KEY"}
             ]
       """
     ]

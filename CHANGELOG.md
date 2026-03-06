@@ -10,16 +10,22 @@
   - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)
   - Smart options strategy: `static_options` via `get_column_values()` for small cardinality, `options_query` for dynamic/large sets
   - `extract_variables/1` parser for ```` ```variables ```` JSON blocks with normalization (type validation, widget/list defaults, nil stripping)
-  - `extract_response/1` unified extractor combining SQL and variable extraction for providers
-  - All providers (OpenAI, Anthropic, Gemini) return `variables` in their response map
+  - `extract_response/1` unified extractor combining SQL and variable extraction
   - `generate_query/1` and `generate_query_with_context/1` now include `variables` in the result
   - Conversation history preserves and formats variable context across multi-turn exchanges
 
+### Breaking
+
+- Replaced `langchain` dependency with `req_llm` for AI query generation
+  - Removed provider abstraction layer (`Lotus.AI.Provider` behaviour, `Lotus.AI.ProviderRegistry`, and individual provider modules)
+  - New `Lotus.AI.SQLGenerator` module replaces `Lotus.AI.Providers.Core`
+  - AI config simplified from separate `provider` + `model` keys to a single `model` key using ReqLLM's `"provider:model"` format (e.g., `"openai:gpt-4o"`, `"anthropic:claude-sonnet-4-5-20250514"`)
+  - All providers supported by ReqLLM are now available (OpenAI, Anthropic, Google, Groq, Mistral, and more)
+  - `generate_query/1` and `generate_query_with_context/1` return `model` (full model string) instead of `provider`
+
 ### Changed
 
-- `Lotus.AI.Provider.response` type now includes a `variables` field
 - `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
-- Providers use `SQLGeneration.extract_response/1` instead of `extract_sql/1` for response parsing
 
 ## [0.14.0] - 2026-02-16
 
@@ -47,7 +53,7 @@
 
 ### Changed
 
-- **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17 (required by `langchain` dependency)
+- **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17
 
 ## [0.12.0] - 2026-02-10
 

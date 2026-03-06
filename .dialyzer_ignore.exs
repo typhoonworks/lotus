@@ -10,8 +10,8 @@
   # but not automatically detected from schema (requires additional pg_type queries)
   {"lib/lotus/storage/type_mapper.ex", :extra_range, 64},
 
-  # Tool metadata returns fixed structure that providers adapt to their formats
-  # map() type is intentionally broad to allow provider flexibility
+  # Tool metadata returns fixed structure
+  # map() type is intentionally broad to allow flexibility
   {"lib/lotus/ai/tools/schema_tools.ex", :contract_supertype, 99},
   {"lib/lotus/ai/tools/schema_tools.ex", :contract_supertype, 121}
 ]

@@ -1,8 +1,8 @@
 defmodule Lotus.AI.Prompts.SQLGeneration do
   @moduledoc """
-  Shared system prompts for SQL query generation across all providers.
+  System prompts for SQL query generation.
 
-  Prompts are provider-agnostic and focus on:
+  Prompts focus on:
   - Clear instructions for SQL generation
   - Handling non-SQL questions gracefully
   - Database-specific considerations
@@ -174,7 +174,7 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
   Extract both SQL and variables from LLM response content.
 
   Combines `extract_sql/1` and `extract_variables/1` into a single call.
-  This is the primary extraction entry point for providers.
+  This is the primary extraction entry point for response parsing.
 
   ## Parameters
 

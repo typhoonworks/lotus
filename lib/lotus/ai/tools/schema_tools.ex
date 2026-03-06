@@ -1,9 +1,8 @@
 defmodule Lotus.AI.Tools.SchemaTools do
   @moduledoc """
-  Shared tool implementations for schema introspection.
+  Tool implementations for schema introspection.
 
-  These tools are provider-agnostic and can be adapted to any LLM provider's
-  tool/function calling format. Each function returns JSON-encoded results.
+  Each function returns JSON-encoded results for use with ReqLLM tool callbacks.
   """
 
   @doc """
@@ -177,7 +176,7 @@ defmodule Lotus.AI.Tools.SchemaTools do
   Tool metadata for `list_schemas` tool.
 
   Returns a map describing the tool's purpose and parameters in a
-  provider-agnostic format. Providers adapt this to their specific schemas.
+  standard format for use with ReqLLM tool definitions.
 
   ## Returns
 
@@ -199,7 +198,7 @@ defmodule Lotus.AI.Tools.SchemaTools do
   Tool metadata for `list_tables` tool.
 
   Returns a map describing the tool's purpose and parameters in a
-  provider-agnostic format. Providers adapt this to their specific schemas.
+  standard format for use with ReqLLM tool definitions.
 
   ## Returns
 
@@ -221,7 +220,7 @@ defmodule Lotus.AI.Tools.SchemaTools do
   Tool metadata for `get_table_schema` tool.
 
   Returns a map describing the tool's purpose and parameters in a
-  provider-agnostic format. Providers adapt this to their specific schemas.
+  standard format for use with ReqLLM tool definitions.
 
   ## Returns
 
@@ -250,7 +249,7 @@ defmodule Lotus.AI.Tools.SchemaTools do
   Tool metadata for `get_column_values` tool.
 
   Returns a map describing the tool's purpose and parameters in a
-  provider-agnostic format. Providers adapt this to their specific schemas.
+  standard format for use with ReqLLM tool definitions.
 
   ## Returns
 
