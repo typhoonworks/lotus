@@ -53,6 +53,27 @@ defmodule Lotus.AI.Prompts.Variables do
     - `options_query` must return exactly two columns aliased as `value` and `label`
     - When unsure whether to use static or dynamic options, prefer `options_query` — it always stays up to date
 
+    ## Optional Variables (`[[...]]` syntax):
+    When a query has filters that should only apply when the user provides a value,
+    wrap those clauses in double brackets `[[...]]`. If the enclosed variable has no
+    value (missing, nil, or empty string), the entire `[[...]]` block is removed from
+    the query. If all variables inside the block have values, the brackets are stripped
+    and the clause is kept.
+
+    **Rules:**
+    - Always use a `WHERE 1=1` base so optional `[[AND ...]]` clauses can be safely removed
+    - Each `[[...]]` block is independent — one block being removed does not affect others
+    - A block with multiple variables requires ALL of them to have values; otherwise the block is removed
+    - Variables can appear both inside and outside `[[...]]` blocks — outside variables are always required
+    - Only wrap the filter clause, not the entire WHERE — e.g., `[[AND status = {{status}}]]`
+    - Use optional variables when the user asks for "optional filters", "dynamic filters",
+      "filters that can be left empty", or similar phrasing
+
+    **When to use optional variables:**
+    - User asks for a query where some filters are optional or can be left blank
+    - User wants a single query that works with or without certain filters
+    - User asks for a "search" or "filter" form where not all fields are required
+
     **Response format when variables are used:**
     Include BOTH a ```sql block AND a ```variables JSON block:
     #{examples()}
@@ -97,6 +118,38 @@ defmodule Lotus.AI.Prompts.Variables do
         "label": "User Names",
         "list": true,
         "default": "Alice, Bob"
+      }
+    ]
+    ```
+
+    Example with optional filters (user can leave them blank):
+    ```sql
+    SELECT "id", "name", "email", "status"
+    FROM public.users
+    WHERE 1=1
+      [[AND "name" ILIKE '%' || {{name}} || '%']]
+      [[AND "status" = {{status}}]]
+    ORDER BY "created_at" DESC
+    LIMIT 100
+    ```
+
+    ```variables
+    [
+      {
+        "name": "name",
+        "type": "text",
+        "widget": "input",
+        "label": "Name (optional)"
+      },
+      {
+        "name": "status",
+        "type": "text",
+        "widget": "select",
+        "label": "Status (optional)",
+        "static_options": [
+          {"value": "active", "label": "Active"},
+          {"value": "inactive", "label": "Inactive"}
+        ]
       }
     ]
     ```
