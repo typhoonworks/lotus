@@ -4,6 +4,13 @@
 
 ### Added
 
+- **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
+  - Computes per-column statistics from in-memory result sets without additional database queries
+  - Numeric columns: min, max, avg, median, sum, distinct count, null count/percentage, histogram (10 bins)
+  - String columns: distinct count, top values with counts, null count/percentage, min/max length
+  - Temporal columns: earliest, latest, null count/percentage, distribution over time
+  - Supports `Date`, `DateTime`, `NaiveDateTime`, `Time`, `Decimal`, and standard Elixir types
+  - Public API: `compute/2` (single column), `compute_all/1` (all columns), `detect_column_type/2`
 - **NEW:** Telemetry integration for observability
   - Query execution events: `[:lotus, :query, :start]`, `[:lotus, :query, :stop]`, `[:lotus, :query, :exception]`
   - Cache operation events: `[:lotus, :cache, :hit]`, `[:lotus, :cache, :miss]`, `[:lotus, :cache, :put]`
