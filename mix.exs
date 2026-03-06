@@ -49,6 +49,7 @@ defmodule Lotus.MixProject do
       {:nimble_csv, "~> 1.2"},
       {:nimble_options, "~> 1.0"},
       {:postgrex, "~> 0.20", optional: true},
+      {:telemetry, "~> 1.0"},
 
       # AI/LLM Integration
       {:req_llm, "~> 1.6"},
@@ -101,6 +102,7 @@ defmodule Lotus.MixProject do
         "Data Export": [Lotus.Export, ~r/Lotus\.Export\..+/],
         "Data Sources": [Lotus.Source, Lotus.Sources, ~r/Lotus\.Sources\..+/],
         "Schema Introspection": [Lotus.Schema, Lotus.Visibility],
+        Telemetry: [Lotus.Telemetry],
         Caching: [Lotus.Cache, ~r/Lotus\.Cache\..+/],
         "Database Migrations": [Lotus.Migration, Lotus.Migrations, ~r/Lotus\.Migrations\..+/],
         "OTP Application": [Lotus.Application, Lotus.Supervisor],
@@ -122,6 +124,7 @@ defmodule Lotus.MixProject do
       "guides/configuration.md",
       "guides/visibility.md",
       "guides/caching.md",
+      "guides/telemetry.md",
       "guides/contributing.md"
     ]
   end
