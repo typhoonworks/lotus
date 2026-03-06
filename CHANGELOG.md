@@ -4,6 +4,7 @@
 
 ### Added
 
+- **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
   - Computes per-column statistics from in-memory result sets without additional database queries
   - Numeric columns: min, max, avg, median, sum, distinct count, null count/percentage, histogram (10 bins)
