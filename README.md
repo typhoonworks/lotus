@@ -200,7 +200,7 @@ See the [configuration guide](guides/configuration.md) for all options including
 - Data repository setup (single and multi-database)
 - Schema, table, and column visibility controls
 - Cache backends and TTL profiles
-- AI provider configuration
+- AI configuration
 - Query execution options (timeouts, search paths)
 
 ## How Lotus Compares

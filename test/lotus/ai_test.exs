@@ -15,33 +15,15 @@ defmodule Lotus.AITest do
     end
 
     test "returns false when API key missing" do
-      set_ai_config(enabled: true, provider: "openai")
+      set_ai_config(enabled: true)
 
       refute AI.enabled?()
     end
 
     test "returns true when properly configured" do
-      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test123")
+      set_ai_config(enabled: true, api_key: "sk-test123")
 
       assert AI.enabled?()
-    end
-  end
-
-  describe "provider/0" do
-    test "returns error when not configured" do
-      assert {:error, :not_configured} = AI.provider()
-    end
-
-    test "returns configured provider" do
-      set_ai_config(enabled: true, provider: "anthropic", api_key: "sk-ant-test")
-
-      assert {:ok, "anthropic"} = AI.provider()
-    end
-
-    test "defaults to openai when provider not specified" do
-      set_ai_config(enabled: true, api_key: "sk-test")
-
-      assert {:ok, "openai"} = AI.provider()
     end
   end
 
@@ -50,16 +32,16 @@ defmodule Lotus.AITest do
       assert {:error, :not_configured} = AI.model()
     end
 
-    test "returns provider default when model not specified" do
-      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test")
+    test "returns default model when not specified" do
+      set_ai_config(enabled: true, api_key: "sk-test")
 
-      assert {:ok, "gpt-4o"} = AI.model()
+      assert {:ok, "openai:gpt-4o"} = AI.model()
     end
 
-    test "returns configured model override" do
-      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test", model: "gpt-3.5-turbo")
+    test "returns configured model" do
+      set_ai_config(enabled: true, api_key: "sk-test", model: "anthropic:claude-opus-4")
 
-      assert {:ok, "gpt-3.5-turbo"} = AI.model()
+      assert {:ok, "anthropic:claude-opus-4"} = AI.model()
     end
   end
 
@@ -71,7 +53,7 @@ defmodule Lotus.AITest do
       stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
       stub(Lotus.Schema, :list_tables, fn _ -> {:ok, table_list()} end)
 
-      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test")
+      set_ai_config(enabled: true, api_key: "sk-test")
 
       :ok
     end
@@ -88,8 +70,7 @@ defmodule Lotus.AITest do
       assert result.sql =~ "SELECT * FROM users"
       assert result.sql =~ "created_at >= NOW()"
       assert result.variables == []
-      assert result.provider == "openai"
-      assert result.model == "gpt-4o"
+      assert result.model == "openai:gpt-4o"
       assert result.usage.total_tokens == 200
     end
 
@@ -144,19 +125,9 @@ defmodule Lotus.AITest do
     end
 
     test "returns structured error when API key missing" do
-      set_ai_config(enabled: true, provider: "openai")
+      set_ai_config(enabled: true)
 
       assert {:error, :api_key_not_configured} =
-               AI.generate_query(
-                 prompt: "test",
-                 data_source: "postgres"
-               )
-    end
-
-    test "returns structured error when provider unknown" do
-      set_ai_config(enabled: true, provider: "unknown", api_key: "test")
-
-      assert {:error, :unknown_provider} =
                AI.generate_query(
                  prompt: "test",
                  data_source: "postgres"
@@ -197,7 +168,7 @@ defmodule Lotus.AITest do
 
     test "resolves {:system, env_var} API key" do
       System.put_env("TEST_AI_KEY", "sk-from-env")
-      set_ai_config(enabled: true, provider: "openai", api_key: {:system, "TEST_AI_KEY"})
+      set_ai_config(enabled: true, api_key: {:system, "TEST_AI_KEY"})
 
       mock_successful_generation()
 
@@ -218,7 +189,7 @@ defmodule Lotus.AITest do
       stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
       stub(Lotus.Schema, :list_tables, fn _ -> {:ok, table_list()} end)
 
-      set_ai_config(enabled: true, provider: "openai", api_key: "sk-test")
+      set_ai_config(enabled: true, api_key: "sk-test")
 
       :ok
     end

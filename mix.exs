@@ -51,7 +51,7 @@ defmodule Lotus.MixProject do
       {:postgrex, "~> 0.20", optional: true},
 
       # AI/LLM Integration
-      {:langchain, "~> 0.6.0"},
+      {:req_llm, "~> 1.6"},
 
       # Development and testing dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

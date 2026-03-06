@@ -34,13 +34,6 @@ defmodule Lotus.AI.SchemaOptimizer do
   - **Cost savings**: Fewer tokens = lower API costs
   """
 
-  alias LangChain.Chains.LLMChain
-  alias LangChain.ChatModels.ChatAnthropic
-  alias LangChain.ChatModels.ChatGoogleAI
-  alias LangChain.ChatModels.ChatOpenAI
-  alias LangChain.Message
-  alias Lotus.AI.ProviderRegistry
-
   @table_count_threshold 50
   @max_tables_to_identify 10
 
@@ -141,60 +134,22 @@ defmodule Lotus.AI.SchemaOptimizer do
   end
 
   defp call_llm(system_prompt, user_prompt, config) do
-    {:ok, provider_module} = ProviderRegistry.get_provider(config.provider)
+    messages = [
+      ReqLLM.Context.system(system_prompt),
+      ReqLLM.Context.user(user_prompt)
+    ]
 
-    model =
-      case config.provider do
-        "anthropic" ->
-          %ChatAnthropic{
-            model: config[:model] || provider_module.default_model(),
-            api_key: config.api_key,
-            temperature: 0.0
-          }
+    case ReqLLM.generate_text(config.model, messages,
+           api_key: config.api_key,
+           temperature: 0.0
+         ) do
+      {:ok, response} ->
+        {:ok, ReqLLM.Response.text(response)}
 
-        "openai" ->
-          %ChatOpenAI{
-            model: config[:model] || provider_module.default_model(),
-            api_key: config.api_key,
-            temperature: 0.0
-          }
-
-        "gemini" ->
-          %ChatGoogleAI{
-            model: config[:model] || provider_module.default_model(),
-            api_key: config.api_key,
-            temperature: 0.0
-          }
-      end
-
-    chain =
-      LLMChain.new!(%{llm: model})
-      |> LLMChain.add_messages([
-        Message.new_system!(system_prompt),
-        Message.new_user!(user_prompt)
-      ])
-
-    case LLMChain.run(chain) do
-      {:ok, updated_chain} ->
-        content = extract_content(updated_chain.last_message.content)
-        {:ok, content}
-
-      {:error, _chain, error} ->
-        {:error, error}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
-
-  defp extract_content(text) when is_binary(text), do: text
-
-  defp extract_content([%{type: :text, content: text} | _]), do: text
-
-  defp extract_content(parts) when is_list(parts) do
-    parts
-    |> Enum.filter(&(&1.type == :text))
-    |> Enum.map_join("\n", & &1.content)
-  end
-
-  defp extract_content(nil), do: ""
 
   defp parse_table_list(response, available_tables) do
     response = String.trim(response)
@@ -202,7 +157,6 @@ defmodule Lotus.AI.SchemaOptimizer do
     if String.upcase(response) == "NONE" do
       []
     else
-      # Extract table names from response
       response
       |> String.split("\n")
       |> Enum.map(&String.trim/1)
@@ -213,14 +167,10 @@ defmodule Lotus.AI.SchemaOptimizer do
     end
   end
 
-  # Extract table name from various formats
   defp extract_table_name(line) do
     line
-    # Remove numbering (1. users, - users, etc.)
     |> String.replace(~r/^[\d\-\*\+\.]\s*/, "")
-    # Remove quotes
     |> String.replace(~r/^['"`]|['"`]$/, "")
-    # Remove schema qualification if present (keep just table name)
     |> then(fn name ->
       case String.split(name, ".") do
         [_schema, table] -> table

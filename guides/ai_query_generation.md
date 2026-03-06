@@ -13,7 +13,7 @@ The AI query generation feature:
 - **Schema-aware** - Introspects your database structure automatically
 - **Respects visibility** - Only sees tables/columns allowed by your Lotus visibility rules
 - **Read-only** - Inherits Lotus's read-only execution guarantees
-- **Multi-provider** - Supports OpenAI, Anthropic (Claude), and Google Gemini
+- **Multi-provider** - Works with any provider supported by [ReqLLM](https://github.com/agentjido/req_llm) (OpenAI, Anthropic, Google, Groq, Mistral, and more)
 - **Conversational** - Multi-turn conversations for iterative query refinement and error fixing
 - **Variable-aware** - Generates query variable configurations with UI metadata (widget types, labels, dropdown options)
 
@@ -21,15 +21,21 @@ The AI query generation feature:
 
 ## Supported Providers
 
-| Provider | Models | Default Model |
-|----------|--------|---------------|
-| OpenAI | GPT-4, GPT-4o, GPT-3.5 Turbo | `gpt-4o` |
-| Anthropic | Claude Opus, Sonnet, Haiku | `claude-opus-4` |
-| Google | Gemini Pro, Gemini Flash | `gemini-2.0-flash-exp` |
+Any provider supported by ReqLLM can be used. Common examples:
+
+| Provider | Example Model String | Notes |
+|----------|---------------------|-------|
+| OpenAI | `"openai:gpt-4o"` | Default if no model configured |
+| Anthropic | `"anthropic:claude-opus-4"` | |
+| Google | `"google:gemini-2.0-flash"` | |
+| Groq | `"groq:llama-3.3-70b-versatile"` | |
+| Mistral | `"mistral:mistral-large-latest"` | |
+
+See the [ReqLLM documentation](https://hexdocs.pm/req_llm) for the full list of supported providers.
 
 ## Installation
 
-Lotus includes the `langchain` dependency automatically (v0.12+). No additional packages needed.
+Lotus includes the `req_llm` dependency automatically. No additional packages needed.
 
 ## Configuration
 
@@ -40,9 +46,11 @@ Configure in your `config/config.exs` or `config/runtime.exs`:
 ```elixir
 config :lotus, :ai,
   enabled: true,
-  provider: "openai",  # or "anthropic" or "gemini"
+  model: "openai:gpt-4o",
   api_key: {:system, "OPENAI_API_KEY"}
 ```
+
+The `model` key accepts any ReqLLM model string in `"provider:model"` format.
 
 ### Using Environment Variables (Recommended)
 
@@ -50,54 +58,16 @@ config :lotus, :ai,
 # config/runtime.exs
 config :lotus, :ai,
   enabled: true,
-  provider: System.get_env("AI_PROVIDER", "openai"),
+  model: System.get_env("AI_MODEL", "openai:gpt-4o"),
   api_key: System.get_env("AI_API_KEY")
 ```
 
 Then set environment variables:
 
 ```bash
-export AI_PROVIDER=openai
+export AI_MODEL=openai:gpt-4o
 export AI_API_KEY=sk-proj-...
 ```
-
-### Provider-Specific Setup
-
-#### OpenAI
-
-```elixir
-config :lotus, :ai,
-  enabled: true,
-  provider: "openai",
-  api_key: {:system, "OPENAI_API_KEY"},
-  model: "gpt-4o"  # optional, defaults to "gpt-4o"
-```
-
-Get your API key from: https://platform.openai.com/api-keys
-
-#### Anthropic (Claude)
-
-```elixir
-config :lotus, :ai,
-  enabled: true,
-  provider: "anthropic",
-  api_key: {:system, "ANTHROPIC_API_KEY"},
-  model: "claude-opus-4"  # optional
-```
-
-Get your API key from: https://console.anthropic.com/settings/keys
-
-#### Google Gemini
-
-```elixir
-config :lotus, :ai,
-  enabled: true,
-  provider: "gemini",
-  api_key: {:system, "GOOGLE_AI_KEY"},
-  model: "gemini-2.0-flash-exp"  # optional
-```
-
-Get your API key from: https://aistudio.google.com/app/apikey
 
 ## Usage
 
@@ -117,11 +87,8 @@ result.sql
 result.variables
 #=> []
 
-result.provider
-#=> "openai"
-
 result.model
-#=> "gpt-4o"
+#=> "openai:gpt-4o"
 
 result.usage
 #=> %{prompt_tokens: 245, completion_tokens: 28, total_tokens: 273}
@@ -336,7 +303,7 @@ Enable AI in your config:
 ```elixir
 config :lotus, :ai,
   enabled: true,
-  provider: "openai",
+  model: "openai:gpt-4o",
   api_key: "sk-..."
 ```
 
@@ -483,7 +450,7 @@ Generates SQL from natural language (single-turn).
 
 **Returns:**
 
-- `{:ok, %{sql: String.t(), variables: [map()], provider: String.t(), model: String.t(), usage: map()}}` - Success
+- `{:ok, %{sql: String.t(), variables: [map()], model: String.t(), usage: map()}}` - Success
 - `{:error, :not_configured}` - AI not enabled
 - `{:error, :api_key_not_configured}` - Missing API key
 - `{:error, {:unable_to_generate, reason}}` - LLM refused
@@ -526,4 +493,3 @@ if Lotus.AI.enabled?() do
   # Show AI button in UI
 end
 ```
-

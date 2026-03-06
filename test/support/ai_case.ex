@@ -26,7 +26,7 @@ defmodule Lotus.AICase do
 
       import Mimic
       import Lotus.AIFixtures
-      import Lotus.LangChainMocks
+      import Lotus.ReqLLMMocks
 
       setup :verify_on_exit!
 

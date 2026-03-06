@@ -9,10 +9,17 @@ defmodule Lotus.AI do
       config :lotus,
         ai: [
           enabled: true,
-          provider: "anthropic",
-          api_key: {:system, "ANTHROPIC_API_KEY"},
-          model: "claude-opus-4"
+          model: "anthropic:claude-opus-4",
+          api_key: {:system, "ANTHROPIC_API_KEY"}
         ]
+
+  The `model` key accepts any model string supported by ReqLLM, e.g.:
+
+  - `"openai:gpt-4o"` (default)
+  - `"anthropic:claude-opus-4"`
+  - `"google:gemini-2.0-flash"`
+  - `"groq:llama-3.3-70b-versatile"`
+  - Any other provider supported by ReqLLM
 
   ## Usage
 
@@ -25,16 +32,9 @@ defmodule Lotus.AI do
       # %{
       #   sql: "SELECT * FROM users WHERE created_at >= ...",
       #   variables: [],
-      #   provider: "openai",
-      #   model: "gpt-4o",
+      #   model: "openai:gpt-4o",
       #   usage: %{total_tokens: 150}
       # }
-
-  ## Supported Providers
-
-  - **OpenAI**: GPT-4o, GPT-4, GPT-3.5 Turbo
-  - **Anthropic**: Claude Opus 4, Claude Sonnet, Claude Haiku
-  - **Gemini**: Gemini 2.0 Flash, Gemini Pro
 
   ## Error Handling
 
@@ -44,12 +44,13 @@ defmodule Lotus.AI do
   - `{:ok, result}` - Successfully generated SQL query
   - `{:error, :not_configured}` - AI features not enabled in config
   - `{:error, :api_key_not_configured}` - API key missing or invalid
-  - `{:error, :unknown_provider}` - Unsupported provider
   - `{:error, {:unable_to_generate, reason}}` - LLM refused (non-SQL question)
   - `{:error, term}` - Other errors (API failures, network issues, etc.)
   """
 
-  alias Lotus.AI.ProviderRegistry
+  alias Lotus.AI.SQLGenerator
+
+  @default_model "openai:gpt-4o"
 
   @doc """
   Generate SQL query from natural language prompt with conversation context.
@@ -101,21 +102,19 @@ defmodule Lotus.AI do
   @spec generate_query_with_context(keyword()) :: {:ok, map()} | {:error, term()}
   def generate_query_with_context(opts) do
     with {:ok, config} <- get_ai_config(),
-         {:ok, provider_module} <- ProviderRegistry.get_provider(config.provider),
          {:ok, response} <-
-           provider_module.generate_sql(
+           SQLGenerator.generate_sql(config.model,
              prompt: opts[:prompt],
              data_source: opts[:data_source],
              conversation: opts[:conversation],
              query_context: opts[:query_context],
-             config: config,
+             api_key: config.api_key,
              read_only: Keyword.get(opts, :read_only, true)
            ) do
       {:ok,
        %{
          sql: response.content,
          variables: Map.get(response, :variables, []),
-         provider: config.provider,
          model: response.model,
          usage: response.usage
        }}
@@ -149,8 +148,8 @@ defmodule Lotus.AI do
       result.sql
       # => "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) FROM users WHERE status = 'active' GROUP BY month"
 
-      result.provider
-      # => "openai"
+      result.model
+      # => "openai:gpt-4o"
 
       result.usage
       # => %{prompt_tokens: 150, completion_tokens: 50, total_tokens: 200}
@@ -164,19 +163,17 @@ defmodule Lotus.AI do
   @spec generate_query(keyword()) :: {:ok, map()} | {:error, term()}
   def generate_query(opts) do
     with {:ok, config} <- get_ai_config(),
-         {:ok, provider_module} <- ProviderRegistry.get_provider(config.provider),
          {:ok, response} <-
-           provider_module.generate_sql(
+           SQLGenerator.generate_sql(config.model,
              prompt: opts[:prompt],
              data_source: opts[:data_source],
-             config: config,
+             api_key: config.api_key,
              read_only: Keyword.get(opts, :read_only, true)
            ) do
       {:ok,
        %{
          sql: response.content,
          variables: Map.get(response, :variables, []),
-         provider: config.provider,
          model: response.model,
          usage: response.usage
        }}
@@ -202,38 +199,20 @@ defmodule Lotus.AI do
   end
 
   @doc """
-  Get the configured AI provider name.
+  Get the configured AI model string.
 
-  Returns `{:ok, provider_name}` if configured, `{:error, :not_configured}` otherwise.
-
-  ## Examples
-
-      Lotus.AI.provider()
-      # => {:ok, "openai"}
-  """
-  @spec provider() :: {:ok, String.t()} | {:error, :not_configured}
-  def provider do
-    case get_ai_config() do
-      {:ok, config} -> {:ok, config.provider}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Get the configured AI model.
-
-  Returns the model name if configured, provider's default model otherwise.
+  Returns the full model string (e.g. `"openai:gpt-4o"`) if configured.
 
   ## Examples
 
       Lotus.AI.model()
-      # => {:ok, "gpt-4o"}
+      # => {:ok, "openai:gpt-4o"}
   """
   @spec model() :: {:ok, String.t()} | {:error, :not_configured}
   def model do
-    with {:ok, config} <- get_ai_config(),
-         {:ok, provider_module} <- ProviderRegistry.get_provider(config.provider) do
-      {:ok, config[:model] || provider_module.default_model()}
+    case get_ai_config() do
+      {:ok, config} -> {:ok, config.model}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -241,25 +220,18 @@ defmodule Lotus.AI do
     ai_config = Lotus.Config.get(:ai) || []
 
     if ai_config[:enabled] do
-      provider_name = ai_config[:provider] || "openai"
+      api_key = resolve_secret(ai_config[:api_key])
 
-      case ProviderRegistry.get_provider(provider_name) do
-        {:ok, _} ->
-          api_key = resolve_secret(ai_config[:api_key])
+      if api_key do
+        model = ai_config[:model] || @default_model
 
-          if api_key do
-            {:ok,
-             %{
-               provider: provider_name,
-               api_key: api_key,
-               model: ai_config[:model]
-             }}
-          else
-            {:error, :api_key_not_configured}
-          end
-
-        {:error, :unknown_provider} ->
-          {:error, :unknown_provider}
+        {:ok,
+         %{
+           model: model,
+           api_key: api_key
+         }}
+      else
+        {:error, :api_key_not_configured}
       end
     else
       {:error, :not_configured}
