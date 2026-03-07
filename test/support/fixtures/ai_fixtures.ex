@@ -221,6 +221,38 @@ defmodule Lotus.AIFixtures do
   end
 
   @doc """
+  Explanation response for a full query.
+  """
+  def explanation_response do
+    %{
+      content:
+        "This query retrieves all rows from the orders table where the order was created after January 1st, 2024. It returns every column for matching orders, sorted by the database's default order.",
+      model: "gpt-4o",
+      usage: %{
+        "prompt_tokens" => 300,
+        "completion_tokens" => 100,
+        "total_tokens" => 400
+      }
+    }
+  end
+
+  @doc """
+  Explanation response for a query fragment.
+  """
+  def fragment_explanation_response do
+    %{
+      content:
+        "This LEFT JOIN connects the departments table to the employees table by matching each department's id with the employee's department_id. It keeps all departments in the result even if they have no employees.",
+      model: "gpt-4o",
+      usage: %{
+        "prompt_tokens" => 350,
+        "completion_tokens" => 120,
+        "total_tokens" => 470
+      }
+    }
+  end
+
+  @doc """
   Sample PostgreSQL execution plan (JSON format).
   """
   def postgres_explain_plan do

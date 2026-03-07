@@ -33,7 +33,7 @@ We're running Lotus in production at [Accomplish](https://accomplish.dev).
 [Try the live demo](https://lotus.typhoon.works/) — a full Lotus Web instance with sample data.
 
 **What you get out of the box:**
-- Ask your database questions in plain English — AI-powered query generation with multi-turn conversations, plus query optimization suggestions (bring your own OpenAI, Anthropic, or Gemini key)
+- Ask your database questions in plain English — AI-powered query generation with multi-turn conversations, query explanations, and optimization suggestions (bring your own OpenAI, Anthropic, or Gemini key)
 - Web-based SQL editor with syntax highlighting and autocomplete
 - Interactive schema explorer for browsing tables and columns
 - 5 chart types (bar, line, area, scatter, pie) saved per query
@@ -119,6 +119,7 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **CSV export** — download query results with streaming support for large datasets
 - **Schema explorer** — browse tables, columns, and statistics interactively
 - **AI query generation** — ask your database questions in plain English; schema-aware, multi-turn conversations using OpenAI, Anthropic, or Gemini (BYOK)
+- **AI query explanation** — get plain-language explanations of what a query does, including selected fragments; understands Lotus `{{variable}}` and `[[optional]]` syntax
 - **AI query optimization** — get actionable optimization suggestions (indexes, rewrites, schema changes) powered by EXPLAIN plan analysis
 - **Read-only by default** — all queries run in read-only transactions with automatic timeout controls and session state management (opt out per-query with `read_only: false`)
 
@@ -190,6 +191,25 @@ Ask your database questions in plain English. The AI assistant discovers your sc
 
 result.sql
 #=> "SELECT c.id, c.name FROM reporting.customers c ..."
+```
+
+Get a plain-language explanation of any query (or a selected fragment):
+
+```elixir
+{:ok, result} = Lotus.AI.explain_query(
+  sql: "SELECT d.name, COUNT(o.id) FROM departments d LEFT JOIN orders o ...",
+  data_source: "my_repo"
+)
+
+result.explanation
+#=> "This query shows departments ranked by total order count..."
+
+# Explain just a highlighted fragment
+{:ok, result} = Lotus.AI.explain_query(
+  sql: "SELECT d.name FROM departments d LEFT JOIN employees e ON e.department_id = d.id",
+  fragment: "LEFT JOIN employees e ON e.department_id = d.id",
+  data_source: "my_repo"
+)
 ```
 
 Get optimization suggestions for existing queries:

@@ -25,6 +25,12 @@
   - Uses EXPLAIN plan analysis combined with AI to provide actionable recommendations
   - Schema-aware: uses `get_table_schema` tool to inspect relevant tables
   - Handles Lotus-specific `{{variable}}` and `[[optional clause]]` syntax — sanitizes before EXPLAIN, preserves original SQL for AI analysis
+- **NEW:** AI-powered query explanation (`Lotus.AI.explain_query/1`)
+  - Get plain-language explanations of what a SQL query does
+  - Supports explaining a full query or a selected fragment (e.g., a single JOIN, a HAVING clause)
+  - Fragment mode sends the full query as context so even isolated terms are explained accurately
+  - Understands Lotus-specific `{{variable}}` and `[[optional clause]]` syntax and explains their runtime behavior
+  - Schema-aware: uses `get_table_schema` tool to inspect relevant tables for richer explanations
 - **NEW:** AI-generated query variable configurations alongside SQL
   - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
   - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)

@@ -121,6 +121,24 @@ defmodule Lotus.ReqLLMMocks do
     end)
   end
 
+  @doc """
+  Mock successful query explanation from LLM.
+  """
+  def mock_explanation do
+    expect(ReqLLM, :generate_text, fn _model, _context, _opts ->
+      {:ok, build_response(explanation_response())}
+    end)
+  end
+
+  @doc """
+  Mock successful fragment explanation from LLM.
+  """
+  def mock_fragment_explanation do
+    expect(ReqLLM, :generate_text, fn _model, _context, _opts ->
+      {:ok, build_response(fragment_explanation_response())}
+    end)
+  end
+
   defp build_response(response_fixture) do
     usage = build_usage(response_fixture.usage)
     message = ReqLLM.Context.assistant(response_fixture.content)
