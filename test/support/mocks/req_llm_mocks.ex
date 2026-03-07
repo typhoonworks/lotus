@@ -103,6 +103,24 @@ defmodule Lotus.ReqLLMMocks do
     end)
   end
 
+  @doc """
+  Mock successful optimization suggestions from LLM.
+  """
+  def mock_optimization_suggestions do
+    expect(ReqLLM, :generate_text, fn _model, _context, _opts ->
+      {:ok, build_response(optimization_suggestions_response())}
+    end)
+  end
+
+  @doc """
+  Mock optimization response with no suggestions (already optimized).
+  """
+  def mock_no_optimizations do
+    expect(ReqLLM, :generate_text, fn _model, _context, _opts ->
+      {:ok, build_response(no_optimizations_response())}
+    end)
+  end
+
   defp build_response(response_fixture) do
     usage = build_usage(response_fixture.usage)
     message = ReqLLM.Context.assistant(response_fixture.content)

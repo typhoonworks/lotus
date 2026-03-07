@@ -282,6 +282,19 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
+  def explain_plan(repo, sql, params, _opts) do
+    explain_sql = "EXPLAIN FORMAT=JSON " <> sql
+
+    case repo.query(explain_sql, params) do
+      {:ok, %{rows: [[json]]}} ->
+        {:ok, json}
+
+      {:error, err} ->
+        {:error, format_error(err)}
+    end
+  end
+
+  @impl true
   def resolve_table_schema(repo, table, schemas) do
     placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
 

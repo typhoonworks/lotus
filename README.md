@@ -33,7 +33,7 @@ We're running Lotus in production at [Accomplish](https://accomplish.dev).
 [Try the live demo](https://lotus.typhoon.works/) — a full Lotus Web instance with sample data.
 
 **What you get out of the box:**
-- Ask your database questions in plain English — AI-powered query generation with multi-turn conversations (bring your own OpenAI, Anthropic, or Gemini key)
+- Ask your database questions in plain English — AI-powered query generation with multi-turn conversations, plus query optimization suggestions (bring your own OpenAI, Anthropic, or Gemini key)
 - Web-based SQL editor with syntax highlighting and autocomplete
 - Interactive schema explorer for browsing tables and columns
 - 5 chart types (bar, line, area, scatter, pie) saved per query
@@ -119,6 +119,7 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **CSV export** — download query results with streaming support for large datasets
 - **Schema explorer** — browse tables, columns, and statistics interactively
 - **AI query generation** — ask your database questions in plain English; schema-aware, multi-turn conversations using OpenAI, Anthropic, or Gemini (BYOK)
+- **AI query optimization** — get actionable optimization suggestions (indexes, rewrites, schema changes) powered by EXPLAIN plan analysis
 - **Read-only by default** — all queries run in read-only transactions with automatic timeout controls and session state management (opt out per-query with `read_only: false`)
 
 ## Production Ready
@@ -191,7 +192,20 @@ result.sql
 #=> "SELECT c.id, c.name FROM reporting.customers c ..."
 ```
 
-Bring your own OpenAI, Anthropic, or Gemini API key. See the [AI query generation guide](guides/ai_query_generation.md) for setup and multi-turn conversation support.
+Get optimization suggestions for existing queries:
+
+```elixir
+{:ok, result} = Lotus.AI.suggest_optimizations(
+  sql: "SELECT * FROM orders WHERE created_at > '2024-01-01'",
+  data_source: "my_repo"
+)
+
+result.suggestions
+#=> [%{"type" => "index", "impact" => "high",
+#=>    "title" => "Add index on orders.created_at", ...}]
+```
+
+Bring your own OpenAI, Anthropic, or Gemini API key. See the [AI query generation guide](guides/ai_query_generation.md) for setup, multi-turn conversation support, and query optimization.
 
 ## Configuration
 
