@@ -130,6 +130,14 @@ defmodule Lotus.Sources.Default do
 
   @impl true
   @doc """
+  Returns an error since the database type is unknown and EXPLAIN syntax varies.
+  """
+  def explain_plan(_repo, _sql, _params, _opts) do
+    {:error, "EXPLAIN not supported for this database adapter"}
+  end
+
+  @impl true
+  @doc """
   Generic resolve_table_schema that always returns nil.
   This is appropriate for databases without schema support or unknown sources.
   """

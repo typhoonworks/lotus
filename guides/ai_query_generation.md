@@ -16,6 +16,7 @@ The AI query generation feature:
 - **Multi-provider** - Works with any provider supported by [ReqLLM](https://github.com/agentjido/req_llm) (OpenAI, Anthropic, Google, Groq, Mistral, and more)
 - **Conversational** - Multi-turn conversations for iterative query refinement and error fixing
 - **Variable-aware** - Generates query variable configurations with UI metadata (widget types, labels, dropdown options)
+- **Query optimization** - Analyzes execution plans and suggests indexes, rewrites, and schema improvements
 
 > **Web-first design:** The AI module is designed to work hand-in-hand with the [Lotus Web](https://github.com/typhoonworks/lotus_web) interface. Generated variable configurations — widget types, labels, static options, and options queries — map directly to the web editor's `WidgetComponent`, which renders them as text inputs, dropdowns, multi-selects, date pickers, and tag inputs. While the API is usable standalone, the variable metadata is most valuable when paired with the web UI.
 
@@ -432,6 +433,109 @@ Prevent token overflow by pruning old messages:
 conversation = Conversation.prune_messages(conversation, 10)
 ```
 
+## Query Optimization
+
+Lotus can analyze your SQL queries and suggest performance improvements using AI-powered EXPLAIN plan analysis.
+
+### Basic Usage
+
+```elixir
+{:ok, result} = Lotus.AI.suggest_optimizations(
+  sql: "SELECT * FROM orders WHERE created_at > '2024-01-01'",
+  data_source: "my_repo"
+)
+
+result.suggestions
+#=> [
+#=>   %{
+#=>     "type" => "index",
+#=>     "impact" => "high",
+#=>     "title" => "Add index on orders.created_at",
+#=>     "suggestion" => "CREATE INDEX idx_orders_created_at ON orders (created_at);\n\nThe query filters on created_at but no index exists..."
+#=>   },
+#=>   %{
+#=>     "type" => "rewrite",
+#=>     "impact" => "medium",
+#=>     "title" => "Select only needed columns",
+#=>     "suggestion" => "Replace SELECT * with specific columns..."
+#=>   }
+#=> ]
+
+result.model
+#=> "openai:gpt-4o"
+```
+
+### Suggestion Types
+
+Each suggestion includes a `type` and `impact` level:
+
+| Type | Description |
+|------|-------------|
+| `index` | Missing or suboptimal indexes |
+| `rewrite` | Query structure improvements |
+| `schema` | Table or column design changes |
+| `configuration` | Database configuration tuning |
+
+| Impact | Description |
+|--------|-------------|
+| `high` | Significant performance improvement expected |
+| `medium` | Moderate improvement |
+| `low` | Minor improvement |
+
+### How It Works
+
+1. Runs `EXPLAIN` on the query to get the database execution plan
+2. Sends both the SQL and execution plan to the AI for analysis
+3. The AI can inspect table schemas via tools for deeper analysis
+4. Returns structured suggestions with actionable recommendations
+
+### Lotus Variable Syntax
+
+Queries using Lotus-specific syntax (`{{variables}}` and `[[optional clauses]]`) are handled automatically:
+
+- `[[...]]` brackets are removed (content kept) so EXPLAIN sees all clauses
+- `{{variable}}` placeholders are replaced with `NULL` for EXPLAIN
+- The original SQL (with Lotus syntax) is sent to the AI for analysis
+
+```elixir
+# Works with Lotus variable syntax
+{:ok, result} = Lotus.AI.suggest_optimizations(
+  sql: """
+  SELECT id, name FROM users
+  WHERE 1=1
+  [[AND status = {{status}}]]
+  [[AND created_at > {{start_date}}]]
+  ORDER BY id
+  """,
+  data_source: "my_repo"
+)
+```
+
+### Options
+
+- `:sql` (required) - The SQL query to optimize
+- `:data_source` (required) - Name of the data source
+- `:params` (optional) - Query parameters (default: `[]`)
+- `:search_path` (optional) - PostgreSQL search path
+
+### Error Handling
+
+```elixir
+case Lotus.AI.suggest_optimizations(sql: sql, data_source: repo) do
+  {:ok, %{suggestions: []}} ->
+    # Query is already well-optimized
+
+  {:ok, %{suggestions: suggestions}} ->
+    # Process suggestions
+
+  {:error, :not_configured} ->
+    # AI features not enabled
+
+  {:error, reason} ->
+    # Other error
+end
+```
+
 ## Limitations
 
 - **English prompts recommended** - Other languages may work but aren't tested
@@ -483,6 +587,24 @@ Manages conversational state for multi-turn interactions.
 - `Conversation.should_auto_retry?(conversation)` - Check if last message was an error
 - `Conversation.prune_messages(conversation, keep_last)` - Remove old messages to manage token usage
 - `Conversation.update_schema_context(conversation, tables)` - Track analyzed tables
+
+### `Lotus.AI.suggest_optimizations/1`
+
+Analyzes a SQL query and returns optimization suggestions.
+
+**Options:**
+
+- `:sql` (required) - The SQL query to optimize
+- `:data_source` (required) - Repository name
+- `:params` (optional) - Query parameters (default: `[]`)
+- `:search_path` (optional) - PostgreSQL search path
+
+**Returns:**
+
+- `{:ok, %{suggestions: [map()], model: String.t(), usage: map()}}` - Success
+- `{:error, :not_configured}` - AI not enabled
+- `{:error, :api_key_not_configured}` - Missing API key
+- `{:error, term()}` - Other error
 
 ### `Lotus.AI.enabled?/0`
 

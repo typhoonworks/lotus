@@ -19,6 +19,12 @@
   - New `Lotus.Telemetry` module with event reference documentation
   - Telemetry guide with setup instructions and LiveDashboard integration example
 - **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
+- **NEW:** AI-powered query optimization suggestions (`Lotus.AI.suggest_optimizations/1`)
+  - Analyzes SQL queries and execution plans to suggest performance improvements
+  - Returns categorized suggestions with type (index/rewrite/schema/configuration) and impact level (high/medium/low)
+  - Uses EXPLAIN plan analysis combined with AI to provide actionable recommendations
+  - Schema-aware: uses `get_table_schema` tool to inspect relevant tables
+  - Handles Lotus-specific `{{variable}}` and `[[optional clause]]` syntax — sanitizes before EXPLAIN, preserves original SQL for AI analysis
 - **NEW:** AI-generated query variable configurations alongside SQL
   - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
   - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)

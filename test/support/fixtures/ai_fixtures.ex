@@ -172,4 +172,72 @@ defmodule Lotus.AIFixtures do
       ]
     })
   end
+
+  @doc """
+  Optimization suggestions response with multiple suggestions.
+  """
+  def optimization_suggestions_response do
+    %{
+      content: """
+      ```json
+      [
+        {
+          "type": "index",
+          "impact": "high",
+          "title": "Add index on orders.created_at",
+          "suggestion": "The query performs a sequential scan on the orders table filtered by created_at. Adding an index would allow an index scan instead.\\n\\nCREATE INDEX idx_orders_created_at ON orders (created_at);"
+        },
+        {
+          "type": "rewrite",
+          "impact": "medium",
+          "title": "Select only needed columns instead of SELECT *",
+          "suggestion": "You're selecting all columns with SELECT * but may only need specific columns. Selecting only needed columns reduces I/O."
+        }
+      ]
+      ```
+      """,
+      model: "gpt-4o",
+      usage: %{
+        "prompt_tokens" => 500,
+        "completion_tokens" => 200,
+        "total_tokens" => 700
+      }
+    }
+  end
+
+  @doc """
+  Optimization response indicating the query is already well-optimized.
+  """
+  def no_optimizations_response do
+    %{
+      content: "[]",
+      model: "gpt-4o",
+      usage: %{
+        "prompt_tokens" => 400,
+        "completion_tokens" => 10,
+        "total_tokens" => 410
+      }
+    }
+  end
+
+  @doc """
+  Sample PostgreSQL execution plan (JSON format).
+  """
+  def postgres_explain_plan do
+    Lotus.JSON.encode!([
+      %{
+        "Plan" => %{
+          "Node Type" => "Seq Scan",
+          "Relation Name" => "orders",
+          "Schema" => "public",
+          "Alias" => "orders",
+          "Startup Cost" => 0.0,
+          "Total Cost" => 1234.56,
+          "Plan Rows" => 50_000,
+          "Plan Width" => 200,
+          "Filter" => "(created_at > '2024-01-01'::date)"
+        }
+      }
+    ])
+  end
 end

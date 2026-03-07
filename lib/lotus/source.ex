@@ -83,6 +83,23 @@ defmodule Lotus.Source do
               {limit_placeholder :: String.t(), offset_placeholder :: String.t()}
 
   @doc """
+  Retrieve the execution plan for a SQL query.
+
+  Uses the database-specific EXPLAIN syntax to return the query plan
+  as a string suitable for analysis.
+
+  Examples of source-specific behavior:
+    * Postgres → `EXPLAIN (FORMAT JSON) <sql>`
+    * MySQL    → `EXPLAIN FORMAT=JSON <sql>`
+    * SQLite   → `EXPLAIN QUERY PLAN <sql>`
+
+  Options:
+    * `:search_path` — PostgreSQL search path (optional)
+  """
+  @callback explain_plan(repo, sql :: String.t(), params :: list(), opts :: keyword()) ::
+              {:ok, String.t()} | {:error, term()}
+
+  @doc """
   List the exception modules that this source formats specially in `format_error/1`.
   """
   @callback handled_errors() :: [module()]
@@ -360,5 +377,20 @@ defmodule Lotus.Source do
           String.t() | nil
   def resolve_table_schema(repo, table, schemas) do
     impl_for(repo).resolve_table_schema(repo, table, schemas)
+  end
+
+  @doc """
+  Retrieves the execution plan for a SQL query.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  Returns the plan as a string suitable for AI analysis.
+
+  Options:
+  - `:search_path` - PostgreSQL search path (optional)
+  """
+  @spec explain_plan(repo, String.t(), list(), keyword()) ::
+          {:ok, String.t()} | {:error, term()}
+  def explain_plan(repo, sql, params \\ [], opts \\ []) do
+    impl_for(repo).explain_plan(repo, sql, params, opts)
   end
 end

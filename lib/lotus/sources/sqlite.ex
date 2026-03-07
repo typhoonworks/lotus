@@ -163,6 +163,22 @@ defmodule Lotus.Sources.SQLite3 do
   end
 
   @impl true
+  def explain_plan(repo, sql, params, _opts) do
+    explain_sql = "EXPLAIN QUERY PLAN " <> sql
+
+    case repo.query(explain_sql, params) do
+      {:ok, %{rows: rows}} ->
+        plan_text =
+          Enum.map_join(rows, "\n", fn row -> Enum.join(row, " | ") end)
+
+        {:ok, plan_text}
+
+      {:error, err} ->
+        {:error, format_error(err)}
+    end
+  end
+
+  @impl true
   def resolve_table_schema(_repo, _table, _schemas) do
     # SQLite doesn't have schemas, always return nil
     nil

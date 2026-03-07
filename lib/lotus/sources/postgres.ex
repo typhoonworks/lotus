@@ -182,6 +182,37 @@ defmodule Lotus.Sources.Postgres do
   end
 
   @impl true
+  def explain_plan(repo, sql, params, opts) do
+    explain_sql = "EXPLAIN (FORMAT JSON) " <> sql
+    search_path = Keyword.get(opts, :search_path)
+
+    result =
+      repo.transaction(fn ->
+        repo.query!("SET LOCAL transaction_read_only = on")
+        if search_path, do: repo.query!("SET LOCAL search_path = #{search_path}")
+        repo.query(explain_sql, params)
+      end)
+      |> case do
+        {:ok, query_result} -> query_result
+        {:error, err} -> {:error, err}
+      end
+
+    case result do
+      {:ok, %{rows: [[json]]}} ->
+        plan_text =
+          case json do
+            binary when is_binary(binary) -> binary
+            data -> Lotus.JSON.encode!(data)
+          end
+
+        {:ok, plan_text}
+
+      {:error, err} ->
+        {:error, format_error(err)}
+    end
+  end
+
+  @impl true
   def resolve_table_schema(repo, table, schemas) do
     sql = """
     SELECT table_schema
