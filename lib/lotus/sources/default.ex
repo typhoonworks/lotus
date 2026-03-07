@@ -8,6 +8,8 @@ defmodule Lotus.Sources.Default do
 
   @behaviour Lotus.Source
 
+  alias Lotus.SQL.FilterInjector
+
   @impl true
   @doc "Simple transaction wrapper for unsupported sources."
   def execute_in_transaction(repo, fun, opts) do
@@ -143,5 +145,18 @@ defmodule Lotus.Sources.Default do
   """
   def resolve_table_schema(_repo, _table, _schemas) do
     nil
+  end
+
+  @impl true
+  @doc "Double-quotes identifiers as a safe default for unknown SQL sources."
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "\"", "\"\"")
+    ~s("#{escaped}")
+  end
+
+  @impl true
+  @doc "Applies filters using standard SQL CTE wrapping with double-quoted identifiers."
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 end

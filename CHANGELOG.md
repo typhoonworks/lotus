@@ -4,6 +4,14 @@
 
 ### Added
 
+- **NEW:** Result filtering via `:filters` option on `Lotus.run_query/2` and `Lotus.run_sql/3`
+  - Pass a list of `Lotus.Query.Filter` structs to apply WHERE conditions on top of any query
+  - Filters are applied by wrapping the original query in a CTE, so they work safely with any SQL complexity (joins, subqueries, unions, etc.)
+  - Supports operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `IS NULL`, `IS NOT NULL`
+  - Source-aware: each database adapter (PostgreSQL, MySQL, SQLite) handles its own identifier quoting via new `quote_identifier/1` and `apply_filters/2` callbacks on `Lotus.Source`
+  - New `Lotus.Query.Filter` struct for source-agnostic filter representation
+  - New `Lotus.SQL.FilterInjector` shared helper for SQL-based sources
+- **FIX:** `Lotus.Source.param_placeholder/4` and `Lotus.Source.limit_offset_placeholders/3` no longer hardcode a fallback to PostgreSQL when the repo is `nil` — they now resolve via the configured default data repo
 - **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
   - Computes per-column statistics from in-memory result sets without additional database queries

@@ -117,6 +117,7 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **Multi-database support** — PostgreSQL, MySQL, and SQLite with per-query repo selection
 - **Result caching** — TTL-based caching with ETS backend, cache profiles, and tag-based invalidation
 - **CSV export** — download query results with streaming support for large datasets
+- **Result filters** — apply column-level filters on query results via `Lotus.Query.Filter`; multiple filters stack with AND and wrap the original query in a CTE for safe application
 - **Schema explorer** — browse tables, columns, and statistics interactively
 - **AI query generation** — ask your database questions in plain English; schema-aware, multi-turn conversations using OpenAI, Anthropic, or Gemini (BYOK)
 - **AI query explanation** — get plain-language explanations of what a query does, including selected fragments; understands Lotus `{{variable}}` and `[[optional]]` syntax

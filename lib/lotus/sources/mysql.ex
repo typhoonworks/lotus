@@ -5,6 +5,7 @@ defmodule Lotus.Sources.MySQL do
   require Logger
 
   alias Lotus.Sources.Default
+  alias Lotus.SQL.FilterInjector
 
   @myxql_error Module.concat([:MyXQL, :Error])
 
@@ -313,6 +314,17 @@ defmodule Lotus.Sources.MySQL do
       {:ok, %{rows: [[schema]]}} -> schema
       _ -> nil
     end
+  end
+
+  @impl true
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "`", "``")
+    "`#{escaped}`"
+  end
+
+  @impl true
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 
   defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
