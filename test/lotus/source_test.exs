@@ -172,8 +172,24 @@ defmodule Lotus.SourceTest do
                "CAST(? AS SIGNED)"
     end
 
-    test "defaults to Postgres when repo is nil" do
-      assert Source.param_placeholder(nil, 1, "id", :integer) == "$1::integer"
+    test "defaults to configured default repo when repo is nil" do
+      {_name, default_mod} = Lotus.Config.default_data_repo()
+      result = Source.param_placeholder(nil, 1, "id", :integer)
+
+      expected =
+        default_mod.__adapter__()
+        |> then(
+          &Map.get(
+            %{
+              Ecto.Adapters.Postgres => "$1::integer",
+              Ecto.Adapters.MyXQL => "CAST(? AS SIGNED)",
+              Ecto.Adapters.SQLite3 => "?"
+            },
+            &1
+          )
+        )
+
+      assert result == expected
     end
   end
 end

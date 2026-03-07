@@ -4,6 +4,7 @@ defmodule Lotus.Sources.Postgres do
   @behaviour Lotus.Source
 
   alias Lotus.Sources.Default
+  alias Lotus.SQL.FilterInjector
 
   @postgrex_error Module.concat([:Postgrex, :Error])
 
@@ -226,6 +227,17 @@ defmodule Lotus.Sources.Postgres do
       {:ok, %{rows: [[schema]]}} -> schema
       _ -> nil
     end
+  end
+
+  @impl true
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "\"", "\"\"")
+    ~s("#{escaped}")
+  end
+
+  @impl true
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 
   defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),

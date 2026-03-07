@@ -6,6 +6,7 @@ defmodule Lotus.Sources.SQLite3 do
   require Logger
 
   alias Lotus.Sources.Default
+  alias Lotus.SQL.FilterInjector
 
   @exlite_error Module.concat([:Exqlite, :Error])
 
@@ -182,5 +183,16 @@ defmodule Lotus.Sources.SQLite3 do
   def resolve_table_schema(_repo, _table, _schemas) do
     # SQLite doesn't have schemas, always return nil
     nil
+  end
+
+  @impl true
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "\"", "\"\"")
+    ~s("#{escaped}")
+  end
+
+  @impl true
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 end
