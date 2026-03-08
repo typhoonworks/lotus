@@ -60,7 +60,8 @@ defmodule Lotus do
           repo: binary() | nil,
           vars: map(),
           cache: [cache_opt] | :bypass | :refresh | nil,
-          window: window_opts
+          window: window_opts,
+          context: term()
         ]
 
   alias Lotus.Cache.Key

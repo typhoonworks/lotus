@@ -4,6 +4,12 @@
 
 ### Added
 
+- **NEW:** Middleware pipeline for query execution and schema discovery hooks (`Lotus.Middleware`)
+  - [Plug](https://hexdocs.pm/plug/readme.html)-style `init/1` + `call/2` callbacks with `{:cont, payload}` / `{:halt, reason}` control flow
+  - Query events: `:before_query`, `:after_query`
+  - Discovery events: `:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, `:after_list_relations`
+  - Compiled to `:persistent_term` at startup for zero-overhead runtime dispatch
+  - Opaque `:context` option allows user data to be provided to middleware (e.g. current user) through all middleware
 - **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
   - Computes per-column statistics from in-memory result sets without additional database queries

@@ -1,0 +1,118 @@
+defmodule Lotus.Middleware do
+  @moduledoc """
+  Generic middleware pipeline for query execution and schema discovery hooks.
+
+  Each middleware module implements `init/1` and `call/2`, following
+  the standard Plug pattern:
+
+      defmodule MyApp.AuditPlug do
+        def init(opts), do: opts
+
+        def call(payload, opts) do
+          {:cont, payload}   # continue to next middleware
+          # or
+          {:halt, "reason"}  # stop pipeline, Lotus returns {:error, reason}
+        end
+      end
+
+  ## Pipeline Events
+
+  | Event | Triggered |
+  |-------|-----------|
+  | `:before_query` | After preflight visibility check, before SQL execution |
+  | `:after_query` | After execution, before result returned to caller |
+  | `:after_list_schemas` | After schema discovery and visibility filtering |
+  | `:after_list_tables` | After table discovery and visibility filtering |
+  | `:after_get_table_schema` | After table schema introspection and column visibility |
+  | `:after_list_relations` | After relation discovery and visibility filtering |
+
+  ## Configuration
+
+      config :lotus,
+        middleware: %{
+          before_query: [
+            {MyApp.AccessControlPlug, []},
+            {MyApp.QueryAuditPlug, [repo: MyApp.AuditRepo]}
+          ],
+          after_query: [
+            {MyApp.QueryAuditPlug, [repo: MyApp.AuditRepo]}
+          ],
+          after_list_tables: [
+            {MyApp.TableFilterPlug, []}
+          ]
+        }
+
+  ## Context
+
+  A `:context` key carries opaque user data (e.g. the current user) through
+  to middleware. Lotus never inspects this value.
+  """
+
+  @persistent_term_key {__MODULE__, :compiled}
+
+  @type event ::
+          :before_query
+          | :after_query
+          | :after_list_schemas
+          | :after_list_tables
+          | :after_get_table_schema
+          | :after_list_relations
+  @type middleware_spec :: {module(), keyword()}
+  @type compiled_entry :: {module(), term()}
+  @type pipeline_result :: {:cont, map()} | {:halt, term()}
+
+  @doc """
+  Compiles all middleware by calling `init/1` on each module and stores
+  the result in `:persistent_term` for fast runtime access.
+  """
+  @spec compile(map()) :: :ok
+  def compile(middleware_config) when is_map(middleware_config) and middleware_config != %{} do
+    compiled =
+      Map.new(middleware_config, fn {event, plugs} ->
+        entries =
+          Enum.map(plugs, fn {mod, opts} ->
+            {mod, mod.init(opts)}
+          end)
+
+        {event, entries}
+      end)
+
+    :persistent_term.put(@persistent_term_key, compiled)
+  end
+
+  def compile(_), do: :ok
+
+  @doc """
+  Runs the middleware pipeline for the given event.
+
+  Returns `{:cont, payload}` if all middleware passed, or
+  `{:halt, reason}` if any middleware halted the pipeline.
+
+  When no middleware is configured for the event, returns `{:cont, payload}`
+  with zero overhead beyond the map lookup.
+  """
+  @spec run(event(), map()) :: {:cont, map()} | {:halt, term()}
+  def run(event, payload) do
+    case compiled_pipeline(event) do
+      [] -> {:cont, payload}
+      entries -> run_pipeline(entries, payload)
+    end
+  end
+
+  defp run_pipeline([], payload), do: {:cont, payload}
+
+  defp run_pipeline([{mod, compiled_opts} | rest], payload) do
+    case mod.call(payload, compiled_opts) do
+      {:cont, new_payload} -> run_pipeline(rest, new_payload)
+      {:halt, reason} -> {:halt, reason}
+    end
+  end
+
+  @doc false
+  def compiled_pipeline(event) do
+    case :persistent_term.get(@persistent_term_key, nil) do
+      nil -> []
+      compiled -> Map.get(compiled, event, [])
+    end
+  end
+end

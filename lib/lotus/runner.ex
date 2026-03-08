@@ -7,7 +7,7 @@ defmodule Lotus.Runner do
   `read_only: false` to allow write operations.
   """
 
-  alias Lotus.{Preflight, Result, Source, Sources, Telemetry, Visibility}
+  alias Lotus.{Middleware, Preflight, Result, Source, Sources, Telemetry, Visibility}
   alias Lotus.Preflight.Relations
   alias Lotus.Visibility.Policy
 
@@ -34,11 +34,16 @@ defmodule Lotus.Runner do
     start_time = Telemetry.query_start(telemetry_meta)
     read_only = Keyword.get(opts, :read_only, true)
 
+    context = Keyword.get(opts, :context)
+
     result =
       with :ok <- assert_single_statement(sql),
            :ok <- assert_not_denied(sql, read_only),
-           :ok <- preflight_visibility(repo, sql, params, opts) do
-        exec_read_only(repo, sql, params, opts)
+           :ok <- preflight_visibility(repo, sql, params, opts),
+           :ok <- run_before_query(repo, sql, params, context),
+           {:ok, %Result{} = res} <- exec_read_only(repo, sql, params, opts),
+           {:ok, %Result{} = res} <- run_after_query(repo, sql, params, res, context) do
+        {:ok, res}
       end
 
     case result do
@@ -286,6 +291,24 @@ defmodule Lotus.Runner do
     case :binary.match(bin, closer) do
       :nomatch -> <<>>
       {pos, len} -> :binary.part(bin, pos + len, byte_size(bin) - pos - len)
+    end
+  end
+
+  defp run_before_query(repo, sql, params, context) do
+    payload = %{repo: repo, sql: sql, params: params, context: context}
+
+    case Middleware.run(:before_query, payload) do
+      {:cont, _} -> :ok
+      {:halt, reason} -> {:error, reason}
+    end
+  end
+
+  defp run_after_query(repo, sql, params, %Result{} = result, context) do
+    payload = %{repo: repo, sql: sql, params: params, result: result, context: context}
+
+    case Middleware.run(:after_query, payload) do
+      {:cont, %{result: res}} -> {:ok, res}
+      {:halt, reason} -> {:error, reason}
     end
   end
 

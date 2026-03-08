@@ -17,6 +17,8 @@ defmodule Lotus.Supervisor do
   def init(opts) do
     cache_conf = Keyword.get(opts, :cache, Lotus.Config.cache_config())
 
+    compile_middleware(opts)
+
     children =
       case cache_conf do
         %{adapter: adapter} -> adapter.spec_config()
@@ -33,5 +35,10 @@ defmodule Lotus.Supervisor do
       start: {__MODULE__, :start_link, [opts]},
       type: :supervisor
     }
+  end
+
+  defp compile_middleware(opts) do
+    middleware_conf = Keyword.get(opts, :middleware, Lotus.Config.middleware())
+    if is_map(middleware_conf), do: Lotus.Middleware.compile(middleware_conf)
   end
 end
