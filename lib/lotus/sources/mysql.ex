@@ -6,6 +6,7 @@ defmodule Lotus.Sources.MySQL do
 
   alias Lotus.Sources.Default
   alias Lotus.SQL.FilterInjector
+  alias Lotus.SQL.SortInjector
 
   @myxql_error Module.concat([:MyXQL, :Error])
 
@@ -325,6 +326,11 @@ defmodule Lotus.Sources.MySQL do
   @impl true
   def apply_filters(sql, filters) do
     FilterInjector.apply(sql, filters, &quote_identifier/1)
+  end
+
+  @impl true
+  def apply_sorts(sql, sorts) do
+    SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
   defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),

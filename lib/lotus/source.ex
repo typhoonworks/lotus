@@ -33,6 +33,16 @@ defmodule Lotus.Source do
   @callback apply_filters(sql :: String.t(), filters :: [Lotus.Query.Filter.t()]) :: String.t()
 
   @doc """
+  Applies a list of sorts to an existing query, returning a new query string.
+
+  For SQL sources, this appends an ORDER BY clause. Applied after filters
+  so the ORDER BY operates on the filtered result set.
+
+  Returns the original query unchanged when sorts is empty.
+  """
+  @callback apply_sorts(sql :: String.t(), sorts :: [Lotus.Query.Sort.t()]) :: String.t()
+
+  @doc """
   Return the list of built-in deny rules for system tables and metadata relations
   that should be hidden from the schema browser for this source.
 
@@ -429,5 +439,18 @@ defmodule Lotus.Source do
 
   def apply_filters(repo_or_name, sql, filters) do
     impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, filters)
+  end
+
+  @doc """
+  Applies sorts to a query using the source-specific implementation.
+
+  Returns the original query unchanged when sorts is empty.
+  """
+  @spec apply_sorts(repo | String.t() | nil, String.t(), [Lotus.Query.Sort.t()]) ::
+          String.t()
+  def apply_sorts(_repo_or_name, sql, []), do: sql
+
+  def apply_sorts(repo_or_name, sql, sorts) do
+    impl_for(resolve_repo!(repo_or_name)).apply_sorts(sql, sorts)
   end
 end

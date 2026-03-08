@@ -9,6 +9,7 @@ defmodule Lotus.Sources.Default do
   @behaviour Lotus.Source
 
   alias Lotus.SQL.FilterInjector
+  alias Lotus.SQL.SortInjector
 
   @impl true
   @doc "Simple transaction wrapper for unsupported sources."
@@ -158,5 +159,11 @@ defmodule Lotus.Sources.Default do
   @doc "Applies filters using standard SQL CTE wrapping with double-quoted identifiers."
   def apply_filters(sql, filters) do
     FilterInjector.apply(sql, filters, &quote_identifier/1)
+  end
+
+  @impl true
+  @doc "Applies sorts by appending ORDER BY clause with double-quoted identifiers."
+  def apply_sorts(sql, sorts) do
+    SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 end

@@ -8,6 +8,7 @@ defmodule Lotus.Sources.SQLite3 do
   alias Lotus.Sources.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.Identifier
+  alias Lotus.SQL.SortInjector
 
   @exlite_error Module.concat([:Exqlite, :Error])
 
@@ -196,5 +197,10 @@ defmodule Lotus.Sources.SQLite3 do
   @impl true
   def apply_filters(sql, filters) do
     FilterInjector.apply(sql, filters, &quote_identifier/1)
+  end
+
+  @impl true
+  def apply_sorts(sql, sorts) do
+    SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 end

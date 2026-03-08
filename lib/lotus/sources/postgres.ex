@@ -6,6 +6,7 @@ defmodule Lotus.Sources.Postgres do
   alias Lotus.Sources.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.Identifier
+  alias Lotus.SQL.SortInjector
 
   @postgrex_error Module.concat([:Postgrex, :Error])
 
@@ -249,6 +250,11 @@ defmodule Lotus.Sources.Postgres do
   @impl true
   def apply_filters(sql, filters) do
     FilterInjector.apply(sql, filters, &quote_identifier/1)
+  end
+
+  @impl true
+  def apply_sorts(sql, sorts) do
+    SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
   defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),

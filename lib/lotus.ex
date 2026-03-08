@@ -448,6 +448,9 @@ defmodule Lotus do
     filters = Keyword.get(opts, :filters, [])
     sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
 
+    sorts = Keyword.get(opts, :sorts, [])
+    sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)
+
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(
         sql,
@@ -596,6 +599,9 @@ defmodule Lotus do
 
     filters = Keyword.get(opts, :filters, [])
     sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
+
+    sorts = Keyword.get(opts, :sorts, [])
+    sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)
 
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(
