@@ -17,6 +17,7 @@
   - Source-aware: each database adapter (PostgreSQL, MySQL, SQLite) handles its own identifier quoting via new `quote_identifier/1` and `apply_filters/2` callbacks on `Lotus.Source`
   - New `Lotus.Query.Filter` struct for source-agnostic filter representation
   - New `Lotus.SQL.FilterInjector` shared helper for SQL-based sources
+- **FIX:** AI SQL generation no longer treats conversational LLM responses as valid SQL queries — responses without a `` ```sql `` code block are now rejected as `{:error, {:unable_to_generate, content}}` ([#127](https://github.com/typhoonworks/lotus/issues/127))
 - **FIX:** `Lotus.Source.param_placeholder/4` and `Lotus.Source.limit_offset_placeholders/3` no longer hardcode a fallback to PostgreSQL when the repo is `nil` — they now resolve via the configured default data repo
 - **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
