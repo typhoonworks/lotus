@@ -5,6 +5,7 @@ defmodule Lotus.Sources.Postgres do
 
   alias Lotus.Sources.Default
   alias Lotus.SQL.FilterInjector
+  alias Lotus.SQL.Identifier
 
   @postgrex_error Module.concat([:Postgrex, :Error])
 
@@ -19,7 +20,11 @@ defmodule Lotus.Sources.Postgres do
       fn ->
         if read_only?, do: repo.query!("SET LOCAL transaction_read_only = on")
         repo.query!("SET LOCAL statement_timeout = #{stmt_ms}")
-        if search_path, do: repo.query!("SET LOCAL search_path = #{search_path}")
+
+        if search_path do
+          Identifier.validate_search_path!(search_path)
+          repo.query!("SET LOCAL search_path = #{search_path}")
+        end
 
         fun.()
       end,
@@ -37,6 +42,7 @@ defmodule Lotus.Sources.Postgres do
 
   @impl true
   def set_search_path(repo, search_path) when is_binary(search_path) do
+    Identifier.validate_search_path!(search_path)
     repo.query!("SET LOCAL search_path = #{search_path}")
     :ok
   end
@@ -190,7 +196,12 @@ defmodule Lotus.Sources.Postgres do
     result =
       repo.transaction(fn ->
         repo.query!("SET LOCAL transaction_read_only = on")
-        if search_path, do: repo.query!("SET LOCAL search_path = #{search_path}")
+
+        if search_path do
+          Identifier.validate_search_path!(search_path)
+          repo.query!("SET LOCAL search_path = #{search_path}")
+        end
+
         repo.query(explain_sql, params)
       end)
       |> case do

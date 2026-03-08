@@ -8,7 +8,7 @@ defmodule Lotus.AI.Actions.GetColumnValues do
 
   @behaviour Lotus.AI.Action
 
-  alias Lotus.AI.Actions.Helpers
+  alias Lotus.SQL.Identifier
 
   @impl true
   def name, do: "get_column_values"
@@ -43,10 +43,10 @@ defmodule Lotus.AI.Actions.GetColumnValues do
 
   @impl true
   def run(params, _context) do
-    {schema, table} = Helpers.parse_table_name(params.table_name)
+    {schema, table} = Identifier.parse_table_name(params.table_name)
 
-    with :ok <- Helpers.validate_table_parts(schema, table),
-         :ok <- Helpers.validate_identifier(params.column_name, "column name") do
+    with :ok <- Identifier.validate_table_parts(schema, table),
+         :ok <- Identifier.validate_identifier(params.column_name, "column name") do
       execute_query(schema, table, params)
     end
   end

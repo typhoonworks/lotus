@@ -64,6 +64,10 @@
   - Supports parameter binding via `:bind` option to hide/pre-fill parameters from the LLM
   - Built-in actions: `ListSchemas`, `ListTables`, `GetTableSchema`, `GetColumnValues`, `ListDataSources`, `ExecuteSQL`
 - **NEW:** `Lotus.AI.Tool.run/4` — shared tool-calling loop that replaces duplicated loops in `SQLGenerator`, `QueryOptimizer`, and `QueryExplainer`
+- **NEW:** `Lotus.SQL.Identifier` — shared module for SQL identifier validation and parsing
+  - Validates identifiers against `[a-zA-Z_][a-zA-Z0-9_]*` to prevent SQL injection in interpolated values
+  - `validate_identifier!/2` and `validate_search_path!/1` guard Postgres `search_path` and SQLite `PRAGMA` interpolations
+  - Consolidates `parse_table_name/1`, `validate_identifier/2`, and `validate_table_parts/2` previously in `Lotus.AI.Actions.Helpers`
 - Added `JSON.Encoder` derive for `Lotus.Result` struct
 
 ### Breaking

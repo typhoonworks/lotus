@@ -8,7 +8,7 @@ defmodule Lotus.AI.Actions.GetTableSchema do
 
   @behaviour Lotus.AI.Action
 
-  alias Lotus.AI.Actions.Helpers
+  alias Lotus.SQL.Identifier
 
   @impl true
   def name, do: "get_table_schema"
@@ -33,9 +33,9 @@ defmodule Lotus.AI.Actions.GetTableSchema do
 
   @impl true
   def run(params, _context) do
-    {schema, table} = Helpers.parse_table_name(params.table_name)
+    {schema, table} = Identifier.parse_table_name(params.table_name)
 
-    with :ok <- Helpers.validate_table_parts(schema, table) do
+    with :ok <- Identifier.validate_table_parts(schema, table) do
       fetch_schema(params.data_source, schema, table, params.table_name)
     end
   end
