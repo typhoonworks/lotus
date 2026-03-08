@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-03-08
+
+### Fixed
+
+- **FIX:** Strip trailing semicolons from SQL queries before wrapping them in CTEs in `FilterInjector` and `SortInjector` — queries ending with `;` (e.g. CTE queries) would trigger the "Only a single statement is allowed" error when filters or sorts were applied
+- **NEW:** Extract shared `Lotus.SQL.Sanitizer` module for SQL string cleanup helpers used by injectors
+
 ## [0.16.1] - 2026-03-08
 
 ### Fixed
