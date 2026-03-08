@@ -48,6 +48,14 @@ defmodule Lotus.AI.Prompts.Explanation do
     - Keep the explanation concise but complete — aim for a short paragraph or a few bullet points
     - Do NOT suggest improvements or optimizations — only explain what the query does
     - Write the explanation as plain text, not markdown
+
+    ## Fragment Explanations
+
+    When the user selects a specific fragment of a query and asks for it to be explained:
+    - Focus ONLY on what the selected fragment does — do NOT explain the rest of the query
+    - Use the full query only as context to understand the fragment's role, but do not describe unselected parts
+    - Keep the explanation short and focused — typically 1-3 sentences
+    - If the fragment is a single keyword or clause (e.g., `FROM`, `GROUP BY`), explain its specific role in this query
     """
   end
 
@@ -88,7 +96,7 @@ defmodule Lotus.AI.Prompts.Explanation do
       "The user selected the following fragment from a SQL query and wants it explained.\n",
       "\n## Selected Fragment\n\n```sql\n#{fragment}\n```",
       "\n\n## Full Query (for context)\n\n```sql\n#{full_sql}\n```",
-      "\n\nExplain what the selected fragment does in the context of the full query.",
+      "\n\nExplain ONLY what the selected fragment does. Use the full query for context but do not describe other parts of the query.",
       if(schema_context, do: "\n\n## Schema Context\n\n#{schema_context}")
     ]
     |> Enum.reject(&is_nil/1)
