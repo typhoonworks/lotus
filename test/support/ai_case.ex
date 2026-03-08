@@ -34,6 +34,12 @@ defmodule Lotus.AICase do
       setup do
         Mimic.copy(Lotus.Schema)
         Mimic.copy(Lotus.Sources)
+        Mimic.copy(Lotus.SQL.Validator)
+
+        stub(Lotus.SQL.Validator, :validate, fn _sql, _ds ->
+          {:error, "syntax error"}
+        end)
+
         :ok
       end
     end

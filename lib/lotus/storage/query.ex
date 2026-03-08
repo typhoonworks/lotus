@@ -91,11 +91,7 @@ defmodule Lotus.Storage.Query do
     transformed_sql = Transformer.transform(processed_sql, source_type)
 
     # Extract variables from SQL
-    regex = ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
-
-    vars_in_order =
-      Regex.scan(regex, transformed_sql)
-      |> Enum.map(fn [_, var] -> var end)
+    vars_in_order = Lotus.Variables.extract_names(transformed_sql)
 
     variable_bindings = VariableResolver.resolve_variables(transformed_sql)
 

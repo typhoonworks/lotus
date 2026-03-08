@@ -54,13 +54,16 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     - `list_tables()` - Get full table list with schema names
     - `get_table_schema(table_name)` - Get columns for a table (use schema-qualified name if available)
     - `get_column_values(table_name, column_name)` - Get distinct values for a column (e.g., status codes, categories)
+    - `validate_sql(sql)` - Check SQL syntax against the database without executing it
 
     ## Workflow:
     1. Identify relevant tables for the question
     2. Use `get_table_schema()` for those tables (with schema-qualified names)
     3. **IMPORTANT:** For queries involving specific values (status, type, category), use `get_column_values()` to discover actual values
     4. Validate required data exists
-    5. Generate SQL or respond UNABLE_TO_GENERATE
+    5. Generate SQL and use `validate_sql()` to verify syntax before returning
+    6. If invalid, fix errors and re-validate
+    7. If the question cannot be answered with SQL, respond UNABLE_TO_GENERATE
 
     ## Best Practices:
     - When query mentions terms like "outstanding", "active", "pending" - use `get_column_values()` to find actual status values
@@ -121,13 +124,13 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
       reason = String.replace_prefix(content, "UNABLE_TO_GENERATE: ", "")
       {:error, {:unable_to_generate, reason}}
     else
-      sql =
-        case Regex.run(~r/```sql\s*\n(.*?)\n```/s, content) do
-          [_, sql] -> String.trim(sql)
-          nil -> String.trim(content)
-        end
+      case Regex.run(~r/```sql\s*\n(.*?)\n```/s, content) do
+        [_, sql] ->
+          {:ok, String.trim(sql)}
 
-      {:ok, sql}
+        nil ->
+          {:error, {:unable_to_generate, content}}
+      end
     end
   end
 

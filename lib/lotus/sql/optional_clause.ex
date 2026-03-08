@@ -18,7 +18,6 @@ defmodule Lotus.SQL.OptionalClause do
   """
 
   @optional_clause_regex ~r/\[\[(.*?)\]\]/s
-  @variable_regex ~r/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/
 
   @doc """
   Processes optional clauses in SQL. Removes `[[...]]` blocks where any
@@ -32,8 +31,8 @@ defmodule Lotus.SQL.OptionalClause do
   def process(sql, supplied_vars) do
     Regex.replace(@optional_clause_regex, sql, fn _full, content ->
       vars_in_block =
-        Regex.scan(@variable_regex, content)
-        |> Enum.map(fn [_, name] -> name end)
+        content
+        |> Lotus.Variables.extract_names()
         |> Enum.uniq()
 
       if Enum.all?(vars_in_block, &has_value?(supplied_vars, &1)) do
@@ -51,10 +50,26 @@ defmodule Lotus.SQL.OptionalClause do
   def extract_optional_variable_names(sql) do
     Regex.scan(@optional_clause_regex, sql)
     |> Enum.flat_map(fn [_, content] ->
-      Regex.scan(@variable_regex, content)
-      |> Enum.map(fn [_, name] -> name end)
+      Lotus.Variables.extract_names(content)
     end)
     |> MapSet.new()
+  end
+
+  @doc """
+  Strips `[[` and `]]` brackets from the string, keeping the inner content.
+
+  Unlike `process/2`, this does not evaluate variables — it unconditionally
+  removes all bracket pairs. Useful for preparing SQL for validation where
+  all optional clauses should be included.
+
+  ## Examples
+
+      iex> Lotus.SQL.OptionalClause.strip_brackets("WHERE 1=1 [[AND status = 'active']]")
+      "WHERE 1=1 AND status = 'active'"
+  """
+  @spec strip_brackets(String.t()) :: String.t()
+  def strip_brackets(content) do
+    Regex.replace(@optional_clause_regex, content, "\\1")
   end
 
   defp has_value?(supplied_vars, name) do

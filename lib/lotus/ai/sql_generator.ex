@@ -11,6 +11,7 @@ defmodule Lotus.AI.SQLGenerator do
   alias Lotus.AI.Conversation
   alias Lotus.AI.Prompts.SQLGeneration
   alias Lotus.AI.Tool
+  alias Lotus.SQL.Validator
 
   @doc """
   Validate that a config contains a non-empty API key string.
@@ -40,7 +41,18 @@ defmodule Lotus.AI.SQLGenerator do
   - `:read_only` - Whether to restrict to read-only SQL (default: true)
   - `:temperature` - LLM temperature (default: 0.1)
   """
-  @spec generate_sql(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @type sql_response :: %{
+          content: String.t(),
+          model: String.t(),
+          variables: [map()],
+          usage: %{
+            prompt_tokens: non_neg_integer(),
+            completion_tokens: non_neg_integer(),
+            total_tokens: non_neg_integer()
+          }
+        }
+
+  @spec generate_sql(String.t(), keyword()) :: {:ok, sql_response()} | {:error, term()}
   def generate_sql(model_string, opts) do
     data_source = Keyword.fetch!(opts, :data_source)
     prompt = Keyword.fetch!(opts, :prompt)
@@ -63,22 +75,29 @@ defmodule Lotus.AI.SQLGenerator do
     context = build_context(messages)
 
     Tool.run(model_string, context, tools, api_key: api_key, temperature: temperature)
-    |> handle_response(model_string)
+    |> handle_response(model_string, data_source)
   end
 
-  defp handle_response({:ok, response}, model_string) do
+  defp handle_response({:ok, response}, model_string, data_source) do
     content = ReqLLM.Response.text(response)
 
     case SQLGeneration.extract_response(content) do
       {:ok, %{sql: sql, variables: variables}} ->
         {:ok, build_success_response(response, model_string, sql, variables)}
 
-      {:error, {:unable_to_generate, reason}} ->
-        {:error, {:unable_to_generate, reason}}
+      {:error, {:unable_to_generate, candidate}} ->
+        case Validator.validate(candidate, data_source) do
+          :ok ->
+            variables = SQLGeneration.extract_variables(candidate)
+            {:ok, build_success_response(response, model_string, candidate, variables)}
+
+          {:error, _reason} ->
+            {:error, {:unable_to_generate, candidate}}
+        end
     end
   end
 
-  defp handle_response({:error, error}, _model_string), do: {:error, error}
+  defp handle_response({:error, error}, _model_string, _data_source), do: {:error, error}
 
   defp build_success_response(response, model_string, sql, variables) do
     %{
@@ -98,7 +117,8 @@ defmodule Lotus.AI.SQLGenerator do
       Tool.from_action(Actions.ListSchemas, bind: bind),
       Tool.from_action(Actions.ListTables, bind: bind),
       Tool.from_action(Actions.GetTableSchema, bind: bind),
-      Tool.from_action(Actions.GetColumnValues, bind: bind)
+      Tool.from_action(Actions.GetColumnValues, bind: bind),
+      Tool.from_action(Actions.ValidateSQL, bind: bind)
     ]
   end
 

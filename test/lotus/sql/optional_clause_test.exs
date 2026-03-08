@@ -106,4 +106,31 @@ defmodule Lotus.SQL.OptionalClauseTest do
       assert OptionalClause.extract_optional_variable_names(sql) == MapSet.new(["name"])
     end
   end
+
+  describe "strip_brackets/1" do
+    test "removes brackets and keeps inner content" do
+      assert OptionalClause.strip_brackets("WHERE 1=1 [[AND status = 'active']]") ==
+               "WHERE 1=1 AND status = 'active'"
+    end
+
+    test "handles multiple bracket pairs" do
+      sql = "WHERE 1=1 [[AND a = 1]] [[AND b = 2]]"
+      assert OptionalClause.strip_brackets(sql) == "WHERE 1=1 AND a = 1 AND b = 2"
+    end
+
+    test "preserves variables inside brackets" do
+      sql = "WHERE 1=1 [[AND name = {{name}}]]"
+      assert OptionalClause.strip_brackets(sql) == "WHERE 1=1 AND name = {{name}}"
+    end
+
+    test "passes through SQL with no brackets" do
+      sql = "SELECT * FROM users"
+      assert OptionalClause.strip_brackets(sql) == sql
+    end
+
+    test "handles multiline content inside brackets" do
+      sql = "WHERE 1=1\n[[AND a = 1\nAND b = 2]]"
+      assert OptionalClause.strip_brackets(sql) == "WHERE 1=1\nAND a = 1\nAND b = 2"
+    end
+  end
 end
