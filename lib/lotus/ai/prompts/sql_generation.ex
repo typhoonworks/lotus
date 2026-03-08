@@ -121,13 +121,13 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
       reason = String.replace_prefix(content, "UNABLE_TO_GENERATE: ", "")
       {:error, {:unable_to_generate, reason}}
     else
-      sql =
-        case Regex.run(~r/```sql\s*\n(.*?)\n```/s, content) do
-          [_, sql] -> String.trim(sql)
-          nil -> String.trim(content)
-        end
+      case Regex.run(~r/```sql\s*\n(.*?)\n```/s, content) do
+        [_, sql] ->
+          {:ok, String.trim(sql)}
 
-      {:ok, sql}
+        nil ->
+          {:error, {:unable_to_generate, content}}
+      end
     end
   end
 

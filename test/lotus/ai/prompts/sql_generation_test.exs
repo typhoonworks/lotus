@@ -128,11 +128,10 @@ defmodule Lotus.AI.Prompts.SQLGenerationTest do
       assert sql == "SELECT * FROM users\nWHERE created_at >= NOW() - INTERVAL '30 days'"
     end
 
-    test "extracts plain SQL without markdown" do
+    test "returns error for plain SQL without markdown code block" do
       content = "SELECT COUNT(*) FROM users"
 
-      assert {:ok, sql} = SQLGeneration.extract_sql(content)
-      assert sql == "SELECT COUNT(*) FROM users"
+      assert {:error, {:unable_to_generate, _}} = SQLGeneration.extract_sql(content)
     end
 
     test "trims whitespace from SQL" do
@@ -190,6 +189,21 @@ defmodule Lotus.AI.Prompts.SQLGenerationTest do
 
       assert {:error, {:unable_to_generate, reason}} = SQLGeneration.extract_sql(content)
       assert reason == "Some reason"
+    end
+
+    test "returns error for conversational text without SQL code block" do
+      content =
+        "To generate a query for a heatmap, I'll need some more information. What data points would you like to visualize?"
+
+      assert {:error, {:unable_to_generate, reason}} = SQLGeneration.extract_sql(content)
+      assert reason =~ "heatmap"
+    end
+
+    test "returns error for conversational text with follow-up questions" do
+      content =
+        "I can help you with that! Could you specify which tables you'd like to query and what time range you're interested in?"
+
+      assert {:error, {:unable_to_generate, _}} = SQLGeneration.extract_sql(content)
     end
   end
 
