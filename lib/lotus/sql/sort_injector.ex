@@ -19,6 +19,8 @@ defmodule Lotus.SQL.SortInjector do
 
   alias Lotus.Query.Sort
 
+  import Lotus.SQL.Sanitizer, only: [strip_trailing_semicolon: 1]
+
   @doc """
   Wraps the given SQL in a CTE and appends ORDER BY for each sort directive.
 
@@ -31,7 +33,8 @@ defmodule Lotus.SQL.SortInjector do
 
   def apply(sql, sorts, quote_fn) when is_list(sorts) and is_function(quote_fn, 1) do
     order_clause = Enum.map_join(sorts, ", ", &build_sort_clause(&1, quote_fn))
-    "WITH _sorted AS (#{sql}) SELECT * FROM _sorted ORDER BY #{order_clause}"
+    bare = strip_trailing_semicolon(sql)
+    "WITH _sorted AS (#{bare}) SELECT * FROM _sorted ORDER BY #{order_clause}"
   end
 
   defp build_sort_clause(%Sort{column: column, direction: direction}, quote_fn) do

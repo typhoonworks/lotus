@@ -108,6 +108,41 @@ defmodule Lotus.SQL.FilterInjectorTest do
       end
     end
 
+    test "strips trailing semicolon before wrapping in CTE" do
+      sql = "SELECT * FROM users;"
+      filters = [Filter.new("region", :eq, "US")]
+
+      result = FilterInjector.apply(sql, filters, &double_quote/1)
+
+      assert result ==
+               ~s[WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = 'US']
+    end
+
+    test "strips trailing semicolon with surrounding whitespace" do
+      sql = "SELECT * FROM users ;  "
+      filters = [Filter.new("region", :eq, "US")]
+
+      result = FilterInjector.apply(sql, filters, &double_quote/1)
+
+      assert result ==
+               ~s[WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = 'US']
+    end
+
+    test "handles CTE query with trailing semicolon" do
+      sql = """
+      WITH cte AS (SELECT id, name FROM users)
+      SELECT * FROM cte;
+      """
+
+      filters = [Filter.new("name", :eq, "test")]
+
+      result = FilterInjector.apply(sql, filters, &double_quote/1)
+
+      assert result =~ "WITH _base AS ("
+      refute result =~ ";"
+      assert result =~ ~s(SELECT * FROM _base WHERE "name" = 'test')
+    end
+
     test "wraps complex queries safely" do
       sql =
         "SELECT a.*, b.name FROM a JOIN b ON a.id = b.a_id WHERE a.active = true UNION SELECT c.*, d.name FROM c JOIN d ON c.id = d.c_id"

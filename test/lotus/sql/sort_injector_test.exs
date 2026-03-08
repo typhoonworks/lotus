@@ -66,6 +66,26 @@ defmodule Lotus.SQL.SortInjectorTest do
       assert result =~ ~s("col""name" DESC)
     end
 
+    test "strips trailing semicolon before wrapping in CTE" do
+      sql = "SELECT * FROM users;"
+      sorts = [Sort.new("name", :asc)]
+
+      result = SortInjector.apply(sql, sorts, &double_quote/1)
+
+      assert result ==
+               ~s[WITH _sorted AS (SELECT * FROM users) SELECT * FROM _sorted ORDER BY "name" ASC]
+    end
+
+    test "strips trailing semicolon with surrounding whitespace" do
+      sql = "SELECT * FROM users ;  "
+      sorts = [Sort.new("name", :asc)]
+
+      result = SortInjector.apply(sql, sorts, &double_quote/1)
+
+      assert result ==
+               ~s[WITH _sorted AS (SELECT * FROM users) SELECT * FROM _sorted ORDER BY "name" ASC]
+    end
+
     test "safely wraps queries that already have ORDER BY" do
       sql = "SELECT * FROM users ORDER BY id"
       sorts = [Sort.new("name", :desc)]

@@ -16,6 +16,8 @@ defmodule Lotus.SQL.FilterInjector do
 
   alias Lotus.Query.Filter
 
+  import Lotus.SQL.Sanitizer, only: [strip_trailing_semicolon: 1]
+
   @doc """
   Wraps the given SQL in a CTE and appends WHERE clauses for each filter.
 
@@ -28,7 +30,8 @@ defmodule Lotus.SQL.FilterInjector do
 
   def apply(sql, filters, quote_fn) when is_list(filters) and is_function(quote_fn, 1) do
     conditions = Enum.map_join(filters, " AND ", &build_condition(&1, quote_fn))
-    "WITH _base AS (#{sql}) SELECT * FROM _base WHERE #{conditions}"
+    bare = strip_trailing_semicolon(sql)
+    "WITH _base AS (#{bare}) SELECT * FROM _base WHERE #{conditions}"
   end
 
   defp build_condition(%Filter{column: column, op: :is_null}, quote_fn) do
