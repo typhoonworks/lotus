@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-03-08
+
 ### Added
 
 - **NEW:** Middleware pipeline for query execution and schema discovery hooks (`Lotus.Middleware`)
@@ -44,7 +46,6 @@
   - Schema introspection events: `[:lotus, :schema, :introspection, :start]`, `[:lotus, :schema, :introspection, :stop]`
   - New `Lotus.Telemetry` module with event reference documentation
   - Telemetry guide with setup instructions and LiveDashboard integration example
-- **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
 - **NEW:** AI-powered query optimization suggestions (`Lotus.AI.suggest_optimizations/1`)
   - Analyzes SQL queries and execution plans to suggest performance improvements
   - Returns categorized suggestions with type (index/rewrite/schema/configuration) and impact level (high/medium/low)
@@ -57,14 +58,6 @@
   - Fragment mode sends the full query as context so even isolated terms are explained accurately
   - Understands Lotus-specific `{{variable}}` and `[[optional clause]]` syntax and explains their runtime behavior
   - Schema-aware: uses `get_table_schema` tool to inspect relevant tables for richer explanations
-- **NEW:** AI-generated query variable configurations alongside SQL
-  - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
-  - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)
-  - Smart options strategy: `static_options` via `get_column_values()` for small cardinality, `options_query` for dynamic/large sets
-  - `extract_variables/1` parser for ```` ```variables ```` JSON blocks with normalization (type validation, widget/list defaults, nil stripping)
-  - `extract_response/1` unified extractor combining SQL and variable extraction
-  - `generate_query/1` and `generate_query_with_context/1` now include `variables` in the result
-  - Conversation history preserves and formats variable context across multi-turn exchanges
 - **NEW:** `Lotus.AI.Action` behaviour and `Lotus.AI.Tool.from_action/2` for declarative AI tool definitions
   - Define tools as modules with `name/0`, `description/0`, `schema/0` (NimbleOptions), and `run/2` callbacks
   - `Tool.from_action/2` converts action modules to `ReqLLM.tool()` structs with automatic JSON Schema generation
@@ -88,11 +81,38 @@
 
 ### Changed
 
-- `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
 - Refactored `SQLGenerator`, `QueryExplainer`, and `QueryOptimizer` to use `Action` modules + `Tool.from_action/2` instead of inline tool construction
 - Replaced duplicated tool-calling loops in each AI module with shared `Tool.run/4`
 - Replaced per-module usage normalization with shared `Tool.normalize_usage/1`
 - Removed `Lotus.AI.Tools.SchemaTools` — replaced by `Lotus.AI.Actions.*` modules
+
+## [0.15.0] - 2026-03-05
+
+### Added
+
+- **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
+- **NEW:** AI-generated query variable configurations alongside SQL
+  - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
+  - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)
+  - Smart options strategy: `static_options` via `get_column_values()` for small cardinality, `options_query` for dynamic/large sets
+  - `extract_variables/1` parser for ```` ```variables ```` JSON blocks with normalization (type validation, widget/list defaults, nil stripping)
+  - `extract_response/1` unified extractor combining SQL and variable extraction for providers
+  - All providers (OpenAI, Anthropic, Gemini) return `variables` in their response map
+  - `generate_query/1` and `generate_query_with_context/1` now include `variables` in the result
+  - Conversation history preserves and formats variable context across multi-turn exchanges
+
+### Changed
+
+- `Lotus.AI.Provider.response` type now includes a `variables` field
+- `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
+- Providers use `SQLGeneration.extract_response/1` instead of `extract_sql/1` for response parsing
+- Fixed cache adapter constraint that prevented custom cache adapters from being used
+
+### Dependencies
+
+- Bumped `langchain` from 0.5.2 to 0.6.0
+- Bumped `ecto_sql` from 3.13.4 to 3.13.5
+- Bumped `credo` from 1.7.16 to 1.7.17
 
 ## [0.14.0] - 2026-02-16
 
@@ -120,7 +140,7 @@
 
 ### Changed
 
-- **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17
+- **BREAKING:** Minimum Elixir version bumped from 1.16 to 1.17 (required by `langchain` dependency)
 
 ## [0.12.0] - 2026-02-10
 
@@ -236,7 +256,7 @@
 
 If you have existing queries stored in your database with `static_options` in the old format, you will need to migrate them. See the [Migration Guide in README.md](README.md#upgrading-from-versions--090) for detailed instructions and migration script.
 
-## [0.9.0] - 2025-09-03
+## [0.8.0] - 2025-09-03
 
 ### Added
 - **NEW:** Two-level schema and table visibility system with schema rules taking precedence over table rules
@@ -418,7 +438,7 @@ If you have existing queries stored in your database with `static_options` in th
 - Add comprehensive adapter tests for `Lotus.Adapter` module
 - Add `get_query` to fetch queries without raising when they don't exist
 
-## [0.2.0] - 2025-08-21
+## [0.2.0] - 2025-01-21
 
 - **BREAKING:** Removed support for fk and pk configuration options
 - **BREAKING:** Changed configuration structure - `repo` config replaced with `ecto_repo` and `data_repos`
@@ -439,7 +459,7 @@ If you have existing queries stored in your database with `static_options` in th
 - Add comprehensive development environment setup with sample data
 - Add read-only repository configuration guidance
 
-## [0.1.0] - 2025-08-09
+## [0.1.0] - 2025-01-09
 - Initial release
 - Query storage, execution, and basic filtering
 - Read-only SQL runner with safety checks
