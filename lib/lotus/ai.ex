@@ -48,7 +48,7 @@ defmodule Lotus.AI do
   - `{:error, term}` - Other errors (API failures, network issues, etc.)
   """
 
-  alias Lotus.AI.SQLGenerator
+  alias Lotus.AI.{QueryExplainer, QueryOptimizer, SQLGenerator}
 
   @default_model "openai:gpt-4o"
 
@@ -177,6 +177,102 @@ defmodule Lotus.AI do
          model: response.model,
          usage: response.usage
        }}
+    end
+  end
+
+  @doc """
+  Get AI-powered optimization suggestions for a SQL query.
+
+  Runs EXPLAIN on the query to get the execution plan, then uses AI to
+  analyze both the SQL and plan for potential improvements.
+
+  ## Options
+
+  - `:sql` (required) - The SQL query to optimize
+  - `:data_source` (required) - Name of the data source to run against
+  - `:params` (optional) - Query parameters (default: `[]`)
+  - `:search_path` (optional) - PostgreSQL search path
+
+  ## Returns
+
+  - `{:ok, result}` - Map with suggestions list, model, and usage info
+  - `{:error, term}` - Structured error tuple
+
+  ## Examples
+
+      {:ok, result} = Lotus.AI.suggest_optimizations(
+        sql: "SELECT * FROM orders WHERE created_at > '2024-01-01'",
+        data_source: "postgres"
+      )
+
+      result.suggestions
+      # => [
+      #   %{
+      #     "type" => "index",
+      #     "impact" => "high",
+      #     "title" => "Add index on orders.created_at",
+      #     "suggestion" => "..."
+      #   }
+      # ]
+  """
+  @spec suggest_optimizations(keyword()) :: {:ok, map()} | {:error, term()}
+  def suggest_optimizations(opts) do
+    with {:ok, config} <- get_ai_config() do
+      QueryOptimizer.suggest_optimizations(config.model,
+        sql: opts[:sql],
+        data_source: opts[:data_source],
+        params: Keyword.get(opts, :params, []),
+        search_path: opts[:search_path],
+        api_key: config.api_key
+      )
+    end
+  end
+
+  @doc """
+  Get an AI-powered plain-language explanation of a SQL query.
+
+  Supports explaining a full query or a selected fragment. When a fragment
+  is provided, the full query is sent as context so the AI can explain even
+  isolated terms accurately.
+
+  ## Options
+
+  - `:sql` (required) - The full SQL query
+  - `:fragment` (optional) - A selected portion of the query to explain
+  - `:data_source` (required) - Name of the data source to resolve schema context
+
+  ## Returns
+
+  - `{:ok, result}` - Map with `:explanation`, `:model`, and `:usage`
+  - `{:error, term}` - Structured error tuple
+
+  ## Examples
+
+      # Explain a full query
+      {:ok, result} = Lotus.AI.explain_query(
+        sql: "SELECT d.name, COUNT(o.id) FROM departments d LEFT JOIN orders o ...",
+        data_source: "postgres"
+      )
+
+      result.explanation
+      # => "This query shows departments ranked by total order count..."
+
+      # Explain a selected fragment
+      {:ok, result} = Lotus.AI.explain_query(
+        sql: "SELECT d.name FROM departments d LEFT JOIN employees e ON e.department_id = d.id",
+        fragment: "LEFT JOIN employees e ON e.department_id = d.id",
+        data_source: "postgres"
+      )
+  """
+  @spec explain_query(keyword()) :: {:ok, map()} | {:error, term()}
+  def explain_query(opts) do
+    with {:ok, config} <- get_ai_config() do
+      QueryExplainer.explain_query(config.model,
+        sql: opts[:sql],
+        fragment: opts[:fragment],
+        data_source: opts[:data_source],
+        api_key: config.api_key
+      )
     end
   end
 

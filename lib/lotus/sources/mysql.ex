@@ -5,6 +5,7 @@ defmodule Lotus.Sources.MySQL do
   require Logger
 
   alias Lotus.Sources.Default
+  alias Lotus.SQL.FilterInjector
 
   @myxql_error Module.concat([:MyXQL, :Error])
 
@@ -282,6 +283,19 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
+  def explain_plan(repo, sql, params, _opts) do
+    explain_sql = "EXPLAIN FORMAT=JSON " <> sql
+
+    case repo.query(explain_sql, params) do
+      {:ok, %{rows: [[json]]}} ->
+        {:ok, json}
+
+      {:error, err} ->
+        {:error, format_error(err)}
+    end
+  end
+
+  @impl true
   def resolve_table_schema(repo, table, schemas) do
     placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
 
@@ -300,6 +314,17 @@ defmodule Lotus.Sources.MySQL do
       {:ok, %{rows: [[schema]]}} -> schema
       _ -> nil
     end
+  end
+
+  @impl true
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "`", "``")
+    "`#{escaped}`"
+  end
+
+  @impl true
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 
   defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),

@@ -61,6 +61,7 @@ defmodule Lotus do
           vars: map(),
           cache: [cache_opt] | :bypass | :refresh | nil,
           window: window_opts,
+          filters: [Lotus.Query.Filter.t()],
           context: term()
         ]
 
@@ -444,6 +445,9 @@ defmodule Lotus do
     search_path = Keyword.get(opts, :search_path) || q.search_path
     final_opts = prepare_final_opts(opts, search_path)
 
+    filters = Keyword.get(opts, :filters, [])
+    sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
+
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(
         sql,
@@ -589,6 +593,9 @@ defmodule Lotus do
       |> Keyword.put_new_lazy(:read_only, &Config.read_only?/0)
 
     search_path = Keyword.get(runner_opts, :search_path)
+
+    filters = Keyword.get(opts, :filters, [])
+    sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
 
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(

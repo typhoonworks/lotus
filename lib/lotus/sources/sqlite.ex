@@ -6,6 +6,7 @@ defmodule Lotus.Sources.SQLite3 do
   require Logger
 
   alias Lotus.Sources.Default
+  alias Lotus.SQL.FilterInjector
 
   @exlite_error Module.concat([:Exqlite, :Error])
 
@@ -163,8 +164,35 @@ defmodule Lotus.Sources.SQLite3 do
   end
 
   @impl true
+  def explain_plan(repo, sql, params, _opts) do
+    explain_sql = "EXPLAIN QUERY PLAN " <> sql
+
+    case repo.query(explain_sql, params) do
+      {:ok, %{rows: rows}} ->
+        plan_text =
+          Enum.map_join(rows, "\n", fn row -> Enum.join(row, " | ") end)
+
+        {:ok, plan_text}
+
+      {:error, err} ->
+        {:error, format_error(err)}
+    end
+  end
+
+  @impl true
   def resolve_table_schema(_repo, _table, _schemas) do
     # SQLite doesn't have schemas, always return nil
     nil
+  end
+
+  @impl true
+  def quote_identifier(identifier) do
+    escaped = String.replace(identifier, "\"", "\"\"")
+    ~s("#{escaped}")
+  end
+
+  @impl true
+  def apply_filters(sql, filters) do
+    FilterInjector.apply(sql, filters, &quote_identifier/1)
   end
 end

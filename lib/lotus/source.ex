@@ -13,6 +13,26 @@ defmodule Lotus.Source do
   @callback format_error(any()) :: String.t()
 
   @doc """
+  Quotes an identifier (column name, table name) using source-specific syntax.
+
+  Examples:
+    * PostgreSQL → `"column_name"`
+    * MySQL      → `` `column_name` ``
+    * SQLite     → `"column_name"`
+  """
+  @callback quote_identifier(String.t()) :: String.t()
+
+  @doc """
+  Applies a list of filters to an existing query, returning a new query string.
+
+  For SQL sources, this typically wraps the original query in a CTE and appends
+  WHERE clauses. Non-SQL sources may implement entirely different strategies.
+
+  Returns the original query unchanged when filters is empty.
+  """
+  @callback apply_filters(sql :: String.t(), filters :: [Lotus.Query.Filter.t()]) :: String.t()
+
+  @doc """
   Return the list of built-in deny rules for system tables and metadata relations
   that should be hidden from the schema browser for this source.
 
@@ -81,6 +101,23 @@ defmodule Lotus.Source do
               offset_index :: pos_integer()
             ) ::
               {limit_placeholder :: String.t(), offset_placeholder :: String.t()}
+
+  @doc """
+  Retrieve the execution plan for a SQL query.
+
+  Uses the database-specific EXPLAIN syntax to return the query plan
+  as a string suitable for analysis.
+
+  Examples of source-specific behavior:
+    * Postgres → `EXPLAIN (FORMAT JSON) <sql>`
+    * MySQL    → `EXPLAIN FORMAT=JSON <sql>`
+    * SQLite   → `EXPLAIN QUERY PLAN <sql>`
+
+  Options:
+    * `:search_path` — PostgreSQL search path (optional)
+  """
+  @callback explain_plan(repo, sql :: String.t(), params :: list(), opts :: keyword()) ::
+              {:ok, String.t()} | {:error, term()}
 
   @doc """
   List the exception modules that this source formats specially in `format_error/1`.
@@ -255,15 +292,12 @@ defmodule Lotus.Source do
   - `index` is 1-based (for drivers like Postgres that need `$1`, `$2`, …).
   - `var` and `type` are available to sources if they need special handling.
 
-  If the repo cannot be resolved, we default to Postgres-style placeholders.
+  Falls back to the configured default data repo when `nil` is given.
   """
   @spec param_placeholder(repo | String.t() | nil, pos_integer(), String.t(), atom() | nil) ::
           String.t()
   def param_placeholder(repo_or_name, index, var, type) when is_integer(index) and index > 0 do
-    case resolve_repo_safe(repo_or_name) do
-      nil -> Lotus.Sources.Postgres.param_placeholder(index, var, type)
-      repo -> impl_for(repo).param_placeholder(index, var, type)
-    end
+    impl_for(resolve_repo!(repo_or_name)).param_placeholder(index, var, type)
   end
 
   @doc """
@@ -272,26 +306,25 @@ defmodule Lotus.Source do
   - `repo_or_name` can be the Repo module or a data-repo name string.
   - `limit_index` and `offset_index` are 1-based indexes for the parameters.
 
-  If the repo cannot be resolved, we default to Postgres-style placeholders.
+  Falls back to the configured default data repo when `nil` is given.
   """
   @spec limit_offset_placeholders(repo | String.t() | nil, pos_integer(), pos_integer()) ::
           {String.t(), String.t()}
   def limit_offset_placeholders(repo_or_name, limit_index, offset_index)
       when is_integer(limit_index) and limit_index > 0 and is_integer(offset_index) and
              offset_index > 0 do
-    case resolve_repo_safe(repo_or_name) do
-      nil -> Lotus.Sources.Postgres.limit_offset_placeholders(limit_index, offset_index)
-      repo -> impl_for(repo).limit_offset_placeholders(limit_index, offset_index)
-    end
+    impl_for(resolve_repo!(repo_or_name)).limit_offset_placeholders(limit_index, offset_index)
   end
 
-  defp resolve_repo_safe(nil), do: nil
-  defp resolve_repo_safe(repo) when is_atom(repo), do: repo
+  defp resolve_repo!(repo) when is_atom(repo) and not is_nil(repo), do: repo
 
-  defp resolve_repo_safe(repo_name) when is_binary(repo_name) do
+  defp resolve_repo!(repo_name) when is_binary(repo_name) do
     Lotus.Config.get_data_repo!(repo_name)
-  rescue
-    _ -> nil
+  end
+
+  defp resolve_repo!(nil) do
+    {_name, mod} = Lotus.Config.default_data_repo()
+    mod
   end
 
   defp impl_for(repo) do
@@ -360,5 +393,41 @@ defmodule Lotus.Source do
           String.t() | nil
   def resolve_table_schema(repo, table, schemas) do
     impl_for(repo).resolve_table_schema(repo, table, schemas)
+  end
+
+  @doc """
+  Retrieves the execution plan for a SQL query.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  Returns the plan as a string suitable for AI analysis.
+
+  Options:
+  - `:search_path` - PostgreSQL search path (optional)
+  """
+  @spec explain_plan(repo, String.t(), list(), keyword()) ::
+          {:ok, String.t()} | {:error, term()}
+  def explain_plan(repo, sql, params \\ [], opts \\ []) do
+    impl_for(repo).explain_plan(repo, sql, params, opts)
+  end
+
+  @doc """
+  Quotes an identifier (column name, table name) using source-specific syntax.
+  """
+  @spec quote_identifier(repo | String.t() | nil, String.t()) :: String.t()
+  def quote_identifier(repo_or_name, identifier) do
+    impl_for(resolve_repo!(repo_or_name)).quote_identifier(identifier)
+  end
+
+  @doc """
+  Applies filters to a query using the source-specific implementation.
+
+  Returns the original query unchanged when filters is empty.
+  """
+  @spec apply_filters(repo | String.t() | nil, String.t(), [Lotus.Query.Filter.t()]) ::
+          String.t()
+  def apply_filters(_repo_or_name, sql, []), do: sql
+
+  def apply_filters(repo_or_name, sql, filters) do
+    impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, filters)
   end
 end

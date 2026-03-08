@@ -10,6 +10,14 @@
   - Discovery events: `:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, `:after_list_relations`
   - Compiled to `:persistent_term` at startup for zero-overhead runtime dispatch
   - Opaque `:context` option allows user data to be provided to middleware (e.g. current user) through all middleware
+- **NEW:** Result filtering via `:filters` option on `Lotus.run_query/2` and `Lotus.run_sql/3`
+  - Pass a list of `Lotus.Query.Filter` structs to apply WHERE conditions on top of any query
+  - Filters are applied by wrapping the original query in a CTE, so they work safely with any SQL complexity (joins, subqueries, unions, etc.)
+  - Supports operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `IS NULL`, `IS NOT NULL`
+  - Source-aware: each database adapter (PostgreSQL, MySQL, SQLite) handles its own identifier quoting via new `quote_identifier/1` and `apply_filters/2` callbacks on `Lotus.Source`
+  - New `Lotus.Query.Filter` struct for source-agnostic filter representation
+  - New `Lotus.SQL.FilterInjector` shared helper for SQL-based sources
+- **FIX:** `Lotus.Source.param_placeholder/4` and `Lotus.Source.limit_offset_placeholders/3` no longer hardcode a fallback to PostgreSQL when the repo is `nil` — they now resolve via the configured default data repo
 - **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)
   - Computes per-column statistics from in-memory result sets without additional database queries
@@ -25,6 +33,18 @@
   - New `Lotus.Telemetry` module with event reference documentation
   - Telemetry guide with setup instructions and LiveDashboard integration example
 - **NEW:** `read_only: false` option for `run_sql` — disables the application-level deny list, allowing write queries (INSERT, UPDATE, DELETE, DDL). Single-statement validation and visibility rules still apply.
+- **NEW:** AI-powered query optimization suggestions (`Lotus.AI.suggest_optimizations/1`)
+  - Analyzes SQL queries and execution plans to suggest performance improvements
+  - Returns categorized suggestions with type (index/rewrite/schema/configuration) and impact level (high/medium/low)
+  - Uses EXPLAIN plan analysis combined with AI to provide actionable recommendations
+  - Schema-aware: uses `get_table_schema` tool to inspect relevant tables
+  - Handles Lotus-specific `{{variable}}` and `[[optional clause]]` syntax — sanitizes before EXPLAIN, preserves original SQL for AI analysis
+- **NEW:** AI-powered query explanation (`Lotus.AI.explain_query/1`)
+  - Get plain-language explanations of what a SQL query does
+  - Supports explaining a full query or a selected fragment (e.g., a single JOIN, a HAVING clause)
+  - Fragment mode sends the full query as context so even isolated terms are explained accurately
+  - Understands Lotus-specific `{{variable}}` and `[[optional clause]]` syntax and explains their runtime behavior
+  - Schema-aware: uses `get_table_schema` tool to inspect relevant tables for richer explanations
 - **NEW:** AI-generated query variable configurations alongside SQL
   - LLM can now produce `{{variable}}` placeholders with full variable metadata (type, widget, label, default, list, static_options, options_query)
   - System prompt teaches the LLM when and how to generate variables (only on explicit user request, never proactively)
