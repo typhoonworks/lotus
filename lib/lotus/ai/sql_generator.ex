@@ -7,11 +7,10 @@ defmodule Lotus.AI.SQLGenerator do
   string like `"openai:gpt-4o"` or `"anthropic:claude-opus-4"`.
   """
 
+  alias Lotus.AI.Actions
   alias Lotus.AI.Conversation
   alias Lotus.AI.Prompts.SQLGeneration
-  alias Lotus.AI.Tools.SchemaTools
-
-  @max_tool_iterations 10
+  alias Lotus.AI.Tool
 
   @doc """
   Validate that a config contains a non-empty API key string.
@@ -63,40 +62,8 @@ defmodule Lotus.AI.SQLGenerator do
     messages = build_messages(conversation, prompt, system_prompt, query_context)
     context = build_context(messages)
 
-    run_with_tools(model_string, context, tools, api_key, temperature)
+    Tool.run(model_string, context, tools, api_key: api_key, temperature: temperature)
     |> handle_response(model_string)
-  end
-
-  defp run_with_tools(model_string, context, tools, api_key, temperature, iteration \\ 1) do
-    messages = ReqLLM.Context.to_list(context)
-
-    case ReqLLM.generate_text(model_string, messages,
-           tools: tools,
-           api_key: api_key,
-           temperature: temperature
-         ) do
-      {:ok, response} ->
-        case ReqLLM.Response.classify(response) do
-          %{type: :tool_calls, tool_calls: tool_calls} when iteration < @max_tool_iterations ->
-            updated_context =
-              ReqLLM.Context.execute_and_append_tools(response.context, tool_calls, tools)
-
-            run_with_tools(
-              model_string,
-              updated_context,
-              tools,
-              api_key,
-              temperature,
-              iteration + 1
-            )
-
-          _ ->
-            {:ok, response}
-        end
-
-      {:error, _} = error ->
-        error
-    end
   end
 
   defp handle_response({:ok, response}, model_string) do
@@ -114,123 +81,25 @@ defmodule Lotus.AI.SQLGenerator do
   defp handle_response({:error, error}, _model_string), do: {:error, error}
 
   defp build_success_response(response, model_string, sql, variables) do
-    usage = ReqLLM.Response.usage(response) || %{}
-
     %{
       content: sql,
       model: model_string,
       variables: variables,
-      usage: %{
-        prompt_tokens: usage[:input_tokens] || 0,
-        completion_tokens: usage[:output_tokens] || 0,
-        total_tokens: usage[:total_tokens] || 0
-      }
+      usage: Tool.normalize_usage(ReqLLM.Response.usage(response))
     }
   end
 
   # Tools
 
   defp build_tools(data_source) do
+    bind = %{data_source: data_source}
+
     [
-      build_list_schemas_tool(data_source),
-      build_list_tables_tool(data_source),
-      build_get_table_schema_tool(data_source),
-      build_get_column_values_tool(data_source)
+      Tool.from_action(Actions.ListSchemas, bind: bind),
+      Tool.from_action(Actions.ListTables, bind: bind),
+      Tool.from_action(Actions.GetTableSchema, bind: bind),
+      Tool.from_action(Actions.GetColumnValues, bind: bind)
     ]
-  end
-
-  defp build_list_schemas_tool(data_source) do
-    metadata = SchemaTools.list_schemas_metadata()
-
-    ReqLLM.tool(
-      name: metadata.name,
-      description: metadata.description,
-      parameter_schema: %{
-        type: "object",
-        properties: metadata.parameters,
-        required: []
-      },
-      callback: fn _args ->
-        case SchemaTools.list_schemas(data_source) do
-          {:ok, json} -> {:ok, json}
-          {:error, reason} -> {:ok, Lotus.JSON.encode!(%{error: inspect(reason)})}
-        end
-      end
-    )
-  end
-
-  defp build_list_tables_tool(data_source) do
-    metadata = SchemaTools.list_tables_metadata()
-
-    ReqLLM.tool(
-      name: metadata.name,
-      description: metadata.description,
-      parameter_schema: %{
-        type: "object",
-        properties: metadata.parameters,
-        required: []
-      },
-      callback: fn _args ->
-        case SchemaTools.list_tables(data_source) do
-          {:ok, json} -> {:ok, json}
-          {:error, reason} -> {:ok, Lotus.JSON.encode!(%{error: inspect(reason)})}
-        end
-      end
-    )
-  end
-
-  defp build_get_table_schema_tool(data_source) do
-    metadata = SchemaTools.get_table_schema_metadata()
-
-    ReqLLM.tool(
-      name: metadata.name,
-      description: metadata.description,
-      parameter_schema: %{
-        type: "object",
-        properties: %{
-          table_name: %{
-            type: "string",
-            description: metadata.parameters.table_name.description
-          }
-        },
-        required: ["table_name"]
-      },
-      callback: fn %{"table_name" => table} ->
-        case SchemaTools.get_table_schema(data_source, table) do
-          {:ok, json} -> {:ok, json}
-          {:error, reason} -> {:ok, Lotus.JSON.encode!(%{error: inspect(reason)})}
-        end
-      end
-    )
-  end
-
-  defp build_get_column_values_tool(data_source) do
-    metadata = SchemaTools.get_column_values_metadata()
-
-    ReqLLM.tool(
-      name: metadata.name,
-      description: metadata.description,
-      parameter_schema: %{
-        type: "object",
-        properties: %{
-          table_name: %{
-            type: "string",
-            description: metadata.parameters.table_name.description
-          },
-          column_name: %{
-            type: "string",
-            description: metadata.parameters.column_name.description
-          }
-        },
-        required: ["table_name", "column_name"]
-      },
-      callback: fn %{"table_name" => table, "column_name" => column} ->
-        case SchemaTools.get_column_values(data_source, table, column) do
-          {:ok, json} -> {:ok, json}
-          {:error, reason} -> {:ok, Lotus.JSON.encode!(%{error: inspect(reason)})}
-        end
-      end
-    )
   end
 
   # Messages

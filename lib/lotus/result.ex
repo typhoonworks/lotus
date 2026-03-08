@@ -5,6 +5,9 @@ defmodule Lotus.Result do
   Contains the columns, rows, and metadata about the query result.
   """
 
+  @derive {Lotus.JSON.encoder(),
+           only: [:columns, :rows, :num_rows, :duration_ms, :command, :meta]}
+
   @enforce_keys [:columns, :rows]
 
   defstruct columns: [],

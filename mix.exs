@@ -106,6 +106,17 @@ defmodule Lotus.MixProject do
         Caching: [Lotus.Cache, ~r/Lotus\.Cache\..+/],
         "Database Migrations": [Lotus.Migration, Lotus.Migrations, ~r/Lotus\.Migrations\..+/],
         "OTP Application": [Lotus.Application, Lotus.Supervisor],
+        AI: [
+          Lotus.AI,
+          Lotus.AI.SQLGenerator,
+          Lotus.AI.QueryExplainer,
+          Lotus.AI.QueryOptimizer,
+          Lotus.AI.Conversation,
+          Lotus.AI.Action,
+          Lotus.AI.Actions,
+          Lotus.AI.Tool,
+          ~r/Lotus\.AI\.Actions\..+/
+        ],
         "SQL Processing": [Lotus.SQL.Transformer],
         Utilities: [Lotus.JSON]
       ]
