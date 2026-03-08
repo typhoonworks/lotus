@@ -16,7 +16,7 @@ Add `lotus` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.16.0"}
+    {:lotus, "~> 0.16.1"}
   ]
 end
 ```
@@ -244,7 +244,7 @@ Add `lotus_web` to your dependencies:
 ```elixir
 def deps do
   [
-    {:lotus, "~> 0.16.0"},
+    {:lotus, "~> 0.16.1"},
     {:lotus_web, "~> 0.14.0"}
   ]
 end

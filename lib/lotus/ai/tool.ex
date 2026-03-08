@@ -19,6 +19,8 @@ defmodule Lotus.AI.Tool do
       {:ok, response} = Tool.run("openai:gpt-4o", context, tools, api_key: "sk-...")
   """
 
+  alias Lotus.AI.Error
+
   require Logger
 
   @default_max_iterations 10
@@ -135,8 +137,9 @@ defmodule Lotus.AI.Tool do
             {:ok, response}
         end
 
-      {:error, _} = error ->
-        error
+      {:error, raw_error} ->
+        Logger.error("AI service error: #{inspect(raw_error)}")
+        {:error, Error.wrap(raw_error)}
     end
   end
 

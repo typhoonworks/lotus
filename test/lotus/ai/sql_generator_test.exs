@@ -138,10 +138,10 @@ defmodule Lotus.AI.SQLGeneratorTest do
       assert reason == "This is a weather question, not a database query"
     end
 
-    test "returns error when API fails" do
+    test "returns wrapped error when API fails" do
       mock_api_error("Invalid API key")
 
-      assert {:error, "Invalid API key"} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                SQLGenerator.generate_sql("openai:gpt-4o",
                  prompt: "Test",
                  data_source: "postgres",
@@ -149,10 +149,10 @@ defmodule Lotus.AI.SQLGeneratorTest do
                )
     end
 
-    test "returns error when request times out" do
+    test "returns wrapped error when request times out" do
       mock_timeout()
 
-      assert {:error, :timeout} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                SQLGenerator.generate_sql("openai:gpt-4o",
                  prompt: "Test",
                  data_source: "postgres",
