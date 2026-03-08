@@ -172,12 +172,21 @@ defmodule Lotus.Storage.TypeCaster do
   end
 
   def cast_value(value, :datetime, column_info) do
-    case NaiveDateTime.from_iso8601(to_string(value)) do
+    value_str = to_string(value)
+
+    case NaiveDateTime.from_iso8601(value_str) do
       {:ok, datetime} ->
         {:ok, datetime}
 
       {:error, _} ->
-        {:error, format_error(:datetime, value, column_info)}
+        # Fall back to parsing as a date (e.g. "2025-07-01" -> ~N[2025-07-01 00:00:00])
+        case Date.from_iso8601(value_str) do
+          {:ok, date} ->
+            {:ok, NaiveDateTime.new!(date, ~T[00:00:00])}
+
+          {:error, _} ->
+            {:error, format_error(:datetime, value, column_info)}
+        end
     end
   end
 

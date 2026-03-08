@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-03-08
+
+### Fixed
+
+- **FIX:** Accept date-only strings (e.g. `"2025-07-01"`) when casting to `:datetime` type — the `TypeCaster` now falls back to parsing as a `Date` and converts to midnight (`~N[2025-07-01 00:00:00]`) instead of raising "Invalid datetime format". This fixes a regression where query variables typed as `:date` were overridden by auto-detected `:datetime` column types from the database
+
 ## [0.16.2] - 2026-03-08
 
 ### Fixed

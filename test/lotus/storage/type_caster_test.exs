@@ -216,8 +216,9 @@ defmodule Lotus.Storage.TypeCasterTest do
       assert datetime.microsecond == {123_456, 6}
     end
 
-    test "returns error for date-only string" do
-      assert {:error, _} = TypeCaster.cast_value("2024-01-15", :datetime, @column_info)
+    test "casts date-only string to datetime at midnight" do
+      assert {:ok, datetime} = TypeCaster.cast_value("2024-01-15", :datetime, @column_info)
+      assert datetime == ~N[2024-01-15 00:00:00]
     end
 
     test "returns error for invalid datetime" do
