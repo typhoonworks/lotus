@@ -17,6 +17,13 @@
   - Source-aware: each database adapter (PostgreSQL, MySQL, SQLite) handles its own identifier quoting via new `quote_identifier/1` and `apply_filters/2` callbacks on `Lotus.Source`
   - New `Lotus.Query.Filter` struct for source-agnostic filter representation
   - New `Lotus.SQL.FilterInjector` shared helper for SQL-based sources
+- **NEW:** Result sorting via `:sorts` option on `Lotus.run_query/2` and `Lotus.run_sql/3`
+  - Pass a list of `Lotus.Query.Sort` structs to apply ORDER BY on top of any query
+  - Sorts are applied by wrapping the original query in a CTE, so they work safely with any SQL complexity (joins, subqueries, unions, existing ORDER BY, etc.)
+  - Supports `:asc` and `:desc` directions
+  - Source-aware: each database adapter handles its own identifier quoting via new `apply_sorts/2` callback on `Lotus.Source`
+  - New `Lotus.Query.Sort` struct for source-agnostic sort representation
+  - New `Lotus.SQL.SortInjector` shared helper for SQL-based sources
 - **FIX:** AI SQL generation now validates plain SQL responses (without `` ```sql `` code blocks) against the database using EXPLAIN before rejecting them — valid SQL is accepted, conversational text is still rejected as `{:error, {:unable_to_generate, content}}` ([#127](https://github.com/typhoonworks/lotus/issues/127))
 - **NEW:** `Lotus.SQL.Validator` — validates SQL syntax against the database without executing, using EXPLAIN. Neutralizes `{{var}}` and `[[...]]` template syntax before validation
 - **NEW:** `Lotus.AI.Actions.ValidateSQL` — AI tool action that lets the LLM validate its SQL against the database before returning it
