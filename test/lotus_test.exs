@@ -263,8 +263,6 @@ defmodule LotusTest do
         "12/25/2023",
         # EU format
         "25/12/2023",
-        # Date only (no time component)
-        "2023-12-25",
         # Named month
         "Dec 25, 2023",
         # Invalid day
@@ -299,7 +297,9 @@ defmodule LotusTest do
         # With seconds
         "2023-01-01T00:00:00",
         # End of year
-        "2023-12-31T23:59:59"
+        "2023-12-31T23:59:59",
+        # Date only (falls back to midnight)
+        "2023-12-25"
       ]
 
       for valid_datetime <- valid_datetimes do
