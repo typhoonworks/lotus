@@ -7,6 +7,7 @@ defmodule Lotus.Sources.SQLite3 do
 
   alias Lotus.Sources.Default
   alias Lotus.SQL.FilterInjector
+  alias Lotus.SQL.Identifier
 
   @exlite_error Module.concat([:Exqlite, :Error])
 
@@ -146,6 +147,7 @@ defmodule Lotus.Sources.SQLite3 do
   @impl true
   def get_table_schema(repo, _schema, table_name) do
     # SQLite doesn't use schemas, ignore the schema parameter
+    Identifier.validate_identifier!(table_name, "table name")
     query = "PRAGMA table_info(#{table_name})"
 
     result = repo.query!(query)
