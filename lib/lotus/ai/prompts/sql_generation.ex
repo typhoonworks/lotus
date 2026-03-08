@@ -134,10 +134,10 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
     end
   end
 
-  @doc """
+  @doc ~S"""
   Extract variable configurations from LLM response content.
 
-  Parses a ```variables JSON block from the response. Returns an empty list
+  Parses a ```` ```variables ```` JSON block from the response. Returns an empty list
   if no block is found or if the JSON is malformed.
 
   ## Parameters
@@ -150,7 +150,7 @@ defmodule Lotus.AI.Prompts.SQLGeneration do
 
   ## Examples
 
-      iex> extract_variables("```variables\\n[{\\"name\\": \\"status\\", \\"type\\": \\"text\\"}]\\n```")
+      iex> extract_variables("```variables\n[{\"name\": \"status\", \"type\": \"text\"}]\n```")
       [%{"name" => "status", "type" => "text", "widget" => "input", "list" => false}]
 
       iex> extract_variables("Just some SQL without variables")
