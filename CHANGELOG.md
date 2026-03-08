@@ -4,6 +4,12 @@
 
 ### Added
 
+- **NEW:** Middleware pipeline for query execution and schema discovery hooks (`Lotus.Middleware`)
+  - [Plug](https://hexdocs.pm/plug/readme.html)-style `init/1` + `call/2` callbacks with `{:cont, payload}` / `{:halt, reason}` control flow
+  - Query events: `:before_query`, `:after_query`
+  - Discovery events: `:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, `:after_list_relations`
+  - Compiled to `:persistent_term` at startup for zero-overhead runtime dispatch
+  - Opaque `:context` option allows user data to be provided to middleware (e.g. current user) through all middleware
 - **NEW:** Result filtering via `:filters` option on `Lotus.run_query/2` and `Lotus.run_sql/3`
   - Pass a list of `Lotus.Query.Filter` structs to apply WHERE conditions on top of any query
   - Filters are applied by wrapping the original query in a CTE, so they work safely with any SQL complexity (joins, subqueries, unions, etc.)

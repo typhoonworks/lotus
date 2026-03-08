@@ -24,7 +24,7 @@ defmodule Lotus.Schema do
   - **SQLite**: Returns table names as strings (schema-less)
   """
 
-  alias Lotus.{Config, Source, Sources, Telemetry, Visibility}
+  alias Lotus.{Config, Middleware, Source, Sources, Telemetry, Visibility}
   alias Lotus.Visibility.Policy
 
   @doc """
@@ -55,6 +55,7 @@ defmodule Lotus.Schema do
           {:ok, [String.t()]} | {:error, term()}
   def list_schemas(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    context = Keyword.get(opts, :context)
     start_time = Telemetry.schema_introspection_start(:list_schemas, repo_name)
 
     key = schema_key(:list_schemas, repo_name)
@@ -72,7 +73,13 @@ defmodule Lotus.Schema do
         try do
           raw_schemas = Source.list_schemas(repo)
           filtered_schemas = Visibility.filter_schemas(raw_schemas, repo_name)
-          {:ok, filtered_schemas}
+
+          run_after_discover(:after_list_schemas, :schemas, %{
+            repo: repo,
+            repo_name: repo_name,
+            schemas: filtered_schemas,
+            context: context
+          })
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -125,6 +132,7 @@ defmodule Lotus.Schema do
           {:ok, [{String.t(), String.t()}] | [String.t()]} | {:error, term()}
   def list_tables(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    context = Keyword.get(opts, :context)
     start_time = Telemetry.schema_introspection_start(:list_tables, repo_name)
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
@@ -166,7 +174,12 @@ defmodule Lotus.Schema do
                   filtered
                 end
 
-              {:ok, tables}
+              run_after_discover(:after_list_tables, :tables, %{
+                repo: repo,
+                repo_name: repo_name,
+                tables: tables,
+                context: context
+              })
             rescue
               e -> {:error, Exception.message(e)}
             end
@@ -213,6 +226,7 @@ defmodule Lotus.Schema do
           {:ok, [map()]} | {:error, term()}
   def get_table_schema(repo_or_name, table_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    context = Keyword.get(opts, :context)
     start_time = Telemetry.schema_introspection_start(:get_table_schema, repo_name)
     schemas = effective_schemas(repo, opts)
 
@@ -227,13 +241,13 @@ defmodule Lotus.Schema do
            ) do
         nil when schemas == [] ->
           # Schema-less database (SQLite) - nil is expected, proceed with nil schema
-          get_table_schema_cached(repo, repo_name, table_name, nil, opts)
+          get_table_schema_cached(repo, repo_name, table_name, nil, context, opts)
 
         nil ->
           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
         resolved_schema ->
-          get_table_schema_cached(repo, repo_name, table_name, resolved_schema, opts)
+          get_table_schema_cached(repo, repo_name, table_name, resolved_schema, context, opts)
       end
 
     Telemetry.schema_introspection_stop(
@@ -246,7 +260,7 @@ defmodule Lotus.Schema do
     result
   end
 
-  defp get_table_schema_cached(repo, repo_name, table_name, resolved_schema, opts) do
+  defp get_table_schema_cached(repo, repo_name, table_name, resolved_schema, context, opts) do
     key = schema_key(:get_table_schema, repo_name, resolved_schema, table_name)
 
     tags = [
@@ -285,7 +299,14 @@ defmodule Lotus.Schema do
             end)
             |> Enum.reverse()
 
-          {:ok, annotated}
+          run_after_discover(:after_get_table_schema, :columns, %{
+            repo: repo,
+            repo_name: repo_name,
+            table_name: table_name,
+            schema: resolved_schema,
+            columns: annotated,
+            context: context
+          })
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -415,6 +436,7 @@ defmodule Lotus.Schema do
           {:ok, [{String.t() | nil, String.t()}]} | {:error, term()}
   def list_relations(repo_or_name, opts \\ []) do
     {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    context = Keyword.get(opts, :context)
     start_time = Telemetry.schema_introspection_start(:list_relations, repo_name)
     schemas = effective_schemas(repo, opts)
     include_views? = Keyword.get(opts, :include_views, false)
@@ -443,9 +465,16 @@ defmodule Lotus.Schema do
         try do
           raw_relations = Source.list_tables(repo, schemas, include_views?)
 
-          {:ok,
-           raw_relations
-           |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))}
+          filtered =
+            raw_relations
+            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+
+          run_after_discover(:after_list_relations, :relations, %{
+            repo: repo,
+            repo_name: repo_name,
+            relations: filtered,
+            context: context
+          })
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -459,6 +488,13 @@ defmodule Lotus.Schema do
     )
 
     result
+  end
+
+  defp run_after_discover(event, result_key, payload) do
+    case Middleware.run(event, payload) do
+      {:cont, updated} -> {:ok, Map.fetch!(updated, result_key)}
+      {:halt, reason} -> {:error, reason}
+    end
   end
 
   defp effective_schemas(repo, opts) do

@@ -61,7 +61,8 @@ defmodule Lotus do
           vars: map(),
           cache: [cache_opt] | :bypass | :refresh | nil,
           window: window_opts,
-          filters: [Lotus.Query.Filter.t()]
+          filters: [Lotus.Query.Filter.t()],
+          context: term()
         ]
 
   alias Lotus.Cache.Key

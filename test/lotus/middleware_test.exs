@@ -1,0 +1,342 @@
+defmodule Lotus.MiddlewareTest do
+  use Lotus.Case, async: false
+
+  alias Lotus.{Middleware, Result, Runner}
+
+  import Lotus.Fixtures
+
+  # --- Middleware modules for testing ---
+
+  defmodule PassthroughPlug do
+    def init(opts), do: opts
+
+    def call(payload, _opts) do
+      {:cont, payload}
+    end
+  end
+
+  defmodule HaltPlug do
+    def init(opts), do: opts
+
+    def call(_payload, opts) do
+      {:halt, Keyword.get(opts, :reason, "halted by middleware")}
+    end
+  end
+
+  defmodule ContextCapturePlug do
+    def init(opts), do: opts
+
+    def call(payload, _opts) do
+      send(self(), {:middleware_context, payload.context})
+      {:cont, payload}
+    end
+  end
+
+  defmodule InitTransformPlug do
+    def init(opts) do
+      Keyword.put(opts, :compiled, true)
+    end
+
+    def call(payload, opts) do
+      send(self(), {:init_opts, opts})
+      {:cont, payload}
+    end
+  end
+
+  defmodule TableFilterPlug do
+    def init(opts), do: opts
+
+    def call(%{tables: tables} = payload, opts) do
+      blocked = Keyword.get(opts, :block_tables, [])
+      filtered = Enum.reject(tables, fn t -> table_name(t) in blocked end)
+      {:cont, %{payload | tables: filtered}}
+    end
+
+    defp table_name({_schema, name}), do: name
+    defp table_name(name) when is_binary(name), do: name
+  end
+
+  defp reset_middleware do
+    :persistent_term.erase({Lotus.Middleware, :compiled})
+    :ok
+  end
+
+  setup do
+    on_exit(fn -> reset_middleware() end)
+
+    setup_test_data()
+  end
+
+  describe "compile/1" do
+    test "compiles middleware and stores in persistent_term" do
+      Middleware.compile(%{
+        before_query: [{InitTransformPlug, [key: :value]}]
+      })
+
+      entries = Middleware.compiled_pipeline(:before_query)
+      assert [{InitTransformPlug, compiled_opts}] = entries
+      assert compiled_opts[:compiled] == true
+      assert compiled_opts[:key] == :value
+    end
+
+    test "handles empty middleware config" do
+      Middleware.compile(%{})
+
+      assert Middleware.compiled_pipeline(:before_query) == []
+      assert Middleware.compiled_pipeline(:after_query) == []
+      assert Middleware.compiled_pipeline(:after_list_tables) == []
+    end
+
+    test "empty map returns :ok without error" do
+      assert :ok = Middleware.compile(%{})
+    end
+  end
+
+  describe "run/2" do
+    test "returns {:cont, payload} when no middleware configured" do
+      payload = %{sql: "SELECT 1", context: nil}
+
+      assert {:cont, ^payload} = Middleware.run(:before_query, payload)
+    end
+
+    test "passes payload through passthrough middleware" do
+      Middleware.compile(%{
+        before_query: [{PassthroughPlug, []}]
+      })
+
+      payload = %{sql: "SELECT 1", context: nil}
+
+      assert {:cont, ^payload} = Middleware.run(:before_query, payload)
+    end
+
+    test "halts pipeline when middleware returns :halt" do
+      Middleware.compile(%{
+        before_query: [{HaltPlug, [reason: "access denied"]}]
+      })
+
+      payload = %{sql: "SELECT 1", context: nil}
+
+      assert {:halt, "access denied"} = Middleware.run(:before_query, payload)
+    end
+
+    test "stops at first halting middleware" do
+      Middleware.compile(%{
+        before_query: [
+          {HaltPlug, [reason: "stopped"]},
+          {ContextCapturePlug, []}
+        ]
+      })
+
+      Middleware.run(:before_query, %{context: :should_not_reach})
+
+      refute_received {:middleware_context, _}
+    end
+
+    test "chains multiple middleware in order" do
+      Middleware.compile(%{
+        before_query: [
+          {PassthroughPlug, []},
+          {ContextCapturePlug, []}
+        ]
+      })
+
+      Middleware.run(:before_query, %{context: :test_user})
+
+      assert_received {:middleware_context, :test_user}
+    end
+  end
+
+  describe "before_query integration" do
+    test "passthrough middleware does not affect query execution" do
+      Middleware.compile(%{
+        before_query: [{PassthroughPlug, []}]
+      })
+
+      assert {:ok, %Result{}} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "halting middleware prevents query execution" do
+      Middleware.compile(%{
+        before_query: [{HaltPlug, [reason: "not allowed"]}]
+      })
+
+      assert {:error, "not allowed"} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "context is passed to before_query middleware" do
+      Middleware.compile(%{
+        before_query: [{ContextCapturePlug, []}]
+      })
+
+      Runner.run_sql(Lotus.Test.Repo, "SELECT 1", [], context: %{user: "alice@example.com"})
+
+      assert_received {:middleware_context, %{user: "alice@example.com"}}
+    end
+
+    test "nil context when not provided" do
+      Middleware.compile(%{
+        before_query: [{ContextCapturePlug, []}]
+      })
+
+      Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+
+      assert_received {:middleware_context, nil}
+    end
+  end
+
+  describe "after_query integration" do
+    test "passthrough middleware returns result unchanged" do
+      Middleware.compile(%{
+        after_query: [{PassthroughPlug, []}]
+      })
+
+      assert {:ok, %Result{rows: [[1]]}} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "halting middleware in after_query returns error" do
+      Middleware.compile(%{
+        after_query: [{HaltPlug, [reason: "post-query denied"]}]
+      })
+
+      assert {:error, "post-query denied"} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "context flows to after_query middleware" do
+      Middleware.compile(%{
+        after_query: [{ContextCapturePlug, []}]
+      })
+
+      Runner.run_sql(Lotus.Test.Repo, "SELECT 1", [], context: %{role: :admin})
+
+      assert_received {:middleware_context, %{role: :admin}}
+    end
+  end
+
+  describe "after_list_tables integration" do
+    test "passthrough middleware does not affect list_tables" do
+      Middleware.compile(%{
+        after_list_tables: [{PassthroughPlug, []}]
+      })
+
+      assert {:ok, tables} = Lotus.list_tables("postgres")
+      refute tables == []
+    end
+
+    test "halting middleware blocks table discovery" do
+      Middleware.compile(%{
+        after_list_tables: [{HaltPlug, [reason: "discovery denied"]}]
+      })
+
+      assert {:error, "discovery denied"} = Lotus.list_tables("postgres")
+    end
+
+    test "middleware can filter discovery results" do
+      Middleware.compile(%{
+        after_list_tables: [{TableFilterPlug, [block_tables: ["users"]]}]
+      })
+
+      assert {:ok, tables} = Lotus.list_tables("postgres")
+
+      table_names = Enum.map(tables, fn {_s, t} -> t end)
+      refute "users" in table_names
+    end
+
+    test "context flows to after_list_tables middleware" do
+      Middleware.compile(%{
+        after_list_tables: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.list_tables("postgres", context: %{tenant: "acme"})
+
+      assert_received {:middleware_context, %{tenant: "acme"}}
+    end
+  end
+
+  describe "after_list_schemas integration" do
+    test "halting middleware blocks schema discovery" do
+      Middleware.compile(%{
+        after_list_schemas: [{HaltPlug, [reason: "schema denied"]}]
+      })
+
+      assert {:error, "schema denied"} = Lotus.list_schemas("postgres")
+    end
+
+    test "context flows to after_list_schemas middleware" do
+      Middleware.compile(%{
+        after_list_schemas: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.list_schemas("postgres", context: %{user: "eve@example.com"})
+
+      assert_received {:middleware_context, %{user: "eve@example.com"}}
+    end
+  end
+
+  describe "context passing from public API" do
+    test "run_query passes context through" do
+      Middleware.compile(%{
+        before_query: [{ContextCapturePlug, []}]
+      })
+
+      query = query_fixture(%{name: "ctx_test", statement: "SELECT 1"})
+      Lotus.run_query(query, context: %{user: "bob@example.com"})
+
+      assert_received {:middleware_context, %{user: "bob@example.com"}}
+    end
+
+    test "run_sql passes context through" do
+      Middleware.compile(%{
+        before_query: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.run_sql("SELECT 1", [], context: %{user: "carol@example.com"})
+
+      assert_received {:middleware_context, %{user: "carol@example.com"}}
+    end
+
+    @tag :sqlite
+    test "get_table_schema passes context through" do
+      Middleware.compile(%{
+        after_get_table_schema: [{ContextCapturePlug, []}]
+      })
+
+      assert {:ok, _} =
+               Lotus.get_table_schema("sqlite", "products", context: %{user: "dave@example.com"})
+
+      assert_received {:middleware_context, %{user: "dave@example.com"}}
+    end
+
+    test "list_schemas passes context through" do
+      Middleware.compile(%{
+        after_list_schemas: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.list_schemas("postgres", context: %{user: "eve@example.com"})
+
+      assert_received {:middleware_context, %{user: "eve@example.com"}}
+    end
+  end
+
+  describe "backward compatibility" do
+    test "no middleware configured has zero overhead" do
+      # No compile call - persistent_term is empty
+      assert {:ok, %Result{}} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "empty middleware map works" do
+      Middleware.compile(%{})
+      assert {:ok, %Result{}} = Runner.run_sql(Lotus.Test.Repo, "SELECT 1")
+    end
+
+    test "existing callers without context work unchanged" do
+      Middleware.compile(%{
+        before_query: [{PassthroughPlug, []}]
+      })
+
+      # No context option passed
+      assert {:ok, %Result{}} = Lotus.run_sql("SELECT 1")
+      assert {:ok, tables} = Lotus.list_tables("postgres")
+      refute tables == []
+    end
+  end
+end

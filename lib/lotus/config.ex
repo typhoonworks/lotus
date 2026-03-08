@@ -202,6 +202,27 @@ defmodule Lotus.Config do
               api_key: {:system, "OPENAI_API_KEY"}
             ]
       """
+    ],
+    middleware: [
+      type: {:or, [:map, nil]},
+      default: nil,
+      doc: """
+      Middleware pipeline configuration for query execution and schema discovery hooks.
+
+      Format: %{event => [{Module, opts}]}
+
+      Events: :before_query, :after_query, :after_list_schemas, :after_list_tables,
+      :after_get_table_schema, :after_list_relations
+
+      ## Example
+
+          config :lotus,
+            middleware: %{
+              before_query: [{MyApp.AuditPlug, []}],
+              after_query: [{MyApp.AuditPlug, []}],
+              after_list_tables: [{MyApp.TableFilterPlug, []}]
+            }
+      """
     ]
   ]
 
@@ -231,7 +252,8 @@ defmodule Lotus.Config do
       :column_visibility,
       :schema_visibility,
       :cache,
-      :ai
+      :ai,
+      :middleware
     ])
   end
 
@@ -478,6 +500,12 @@ defmodule Lotus.Config do
   """
   @spec default_page_size() :: pos_integer() | nil
   def default_page_size, do: load!()[:default_page_size]
+
+  @doc """
+  Returns middleware configuration map, or empty map if not configured.
+  """
+  @spec middleware() :: map()
+  def middleware, do: get(:middleware) || %{}
 
   @doc """
   Returns AI configuration keyword list.
