@@ -47,6 +47,13 @@
   - `extract_response/1` unified extractor combining SQL and variable extraction
   - `generate_query/1` and `generate_query_with_context/1` now include `variables` in the result
   - Conversation history preserves and formats variable context across multi-turn exchanges
+- **NEW:** `Lotus.AI.Action` behaviour and `Lotus.AI.Tool.from_action/2` for declarative AI tool definitions
+  - Define tools as modules with `name/0`, `description/0`, `schema/0` (NimbleOptions), and `run/2` callbacks
+  - `Tool.from_action/2` converts action modules to `ReqLLM.tool()` structs with automatic JSON Schema generation
+  - Supports parameter binding via `:bind` option to hide/pre-fill parameters from the LLM
+  - Built-in actions: `ListSchemas`, `ListTables`, `GetTableSchema`, `GetColumnValues`, `ListDataSources`, `ExecuteSQL`
+- **NEW:** `Lotus.AI.Tool.run/4` — shared tool-calling loop that replaces duplicated loops in `SQLGenerator`, `QueryOptimizer`, and `QueryExplainer`
+- Added `JSON.Encoder` derive for `Lotus.Result` struct
 
 ### Breaking
 
@@ -60,6 +67,10 @@
 ### Changed
 
 - `Conversation.add_assistant_response/4` accepts an optional `variables` parameter (defaults to `[]`)
+- Refactored `SQLGenerator`, `QueryExplainer`, and `QueryOptimizer` to use `Action` modules + `Tool.from_action/2` instead of inline tool construction
+- Replaced duplicated tool-calling loops in each AI module with shared `Tool.run/4`
+- Replaced per-module usage normalization with shared `Tool.normalize_usage/1`
+- Removed `Lotus.AI.Tools.SchemaTools` — replaced by `Lotus.AI.Actions.*` modules
 
 ## [0.14.0] - 2026-02-16
 

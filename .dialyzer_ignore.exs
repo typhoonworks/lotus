@@ -10,9 +10,9 @@
   # but not automatically detected from schema (requires additional pg_type queries)
   {"lib/lotus/storage/type_mapper.ex", :extra_range, 64},
 
-  # Tool metadata returns fixed structure
-  # map() type is intentionally broad to allow flexibility
-  {"lib/lotus/ai/tools/schema_tools.ex", :contract_supertype, 99},
-  {"lib/lotus/ai/tools/schema_tools.ex", :contract_supertype, 121}
+  # Return maps are intentionally typed as map() for API flexibility
+  {"lib/lotus/ai/query_explainer.ex", :contract_supertype, 29},
+  {"lib/lotus/ai/query_optimizer.ex", :contract_supertype, 33},
+  {"lib/lotus/ai/sql_generator.ex", :contract_supertype, 43}
 ]
 
