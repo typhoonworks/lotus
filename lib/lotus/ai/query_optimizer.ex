@@ -9,6 +9,8 @@ defmodule Lotus.AI.QueryOptimizer do
   alias Lotus.AI.Actions
   alias Lotus.AI.Prompts.Optimization
   alias Lotus.AI.Tool
+  alias Lotus.SQL.OptionalClause
+  alias Lotus.Variables
 
   @doc """
   Generate optimization suggestions for a SQL query.
@@ -30,7 +32,18 @@ defmodule Lotus.AI.QueryOptimizer do
   - `{:ok, result}` - Map with `:suggestions`, `:model`, and `:usage`
   - `{:error, term}` - Error tuple
   """
-  @spec suggest_optimizations(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @type optimization_response :: %{
+          suggestions: [map()],
+          model: String.t(),
+          usage: %{
+            prompt_tokens: non_neg_integer(),
+            completion_tokens: non_neg_integer(),
+            total_tokens: non_neg_integer()
+          }
+        }
+
+  @spec suggest_optimizations(String.t(), keyword()) ::
+          {:ok, optimization_response()} | {:error, term()}
   def suggest_optimizations(model_string, opts) do
     data_source = Keyword.fetch!(opts, :data_source)
     sql = Keyword.fetch!(opts, :sql)
@@ -70,8 +83,8 @@ defmodule Lotus.AI.QueryOptimizer do
   # Note: nested [[ ]] is not part of Lotus syntax and is not supported.
   defp prepare_sql_for_explain(sql) do
     sql
-    |> String.replace(~r/\[\[(.*?)\]\]/s, "\\1")
-    |> String.replace(~r/\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/, "NULL")
+    |> OptionalClause.strip_brackets()
+    |> Variables.neutralize("NULL")
   end
 
   defp build_tools(data_source) do

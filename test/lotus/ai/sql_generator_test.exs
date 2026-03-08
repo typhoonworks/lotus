@@ -72,13 +72,14 @@ defmodule Lotus.AI.SQLGeneratorTest do
     test "includes schema query tools" do
       mock_with_assertion(fn _model, _context, opts ->
         tools = opts[:tools]
-        assert length(tools) == 4
+        assert length(tools) == 5
 
         tool_names = Enum.map(tools, & &1.name)
         assert "list_schemas" in tool_names
         assert "list_tables" in tool_names
         assert "get_table_schema" in tool_names
         assert "get_column_values" in tool_names
+        assert "validate_sql" in tool_names
       end)
 
       assert {:ok, _} =

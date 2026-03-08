@@ -17,6 +17,11 @@
   - Source-aware: each database adapter (PostgreSQL, MySQL, SQLite) handles its own identifier quoting via new `quote_identifier/1` and `apply_filters/2` callbacks on `Lotus.Source`
   - New `Lotus.Query.Filter` struct for source-agnostic filter representation
   - New `Lotus.SQL.FilterInjector` shared helper for SQL-based sources
+- **FIX:** AI SQL generation now validates plain SQL responses (without `` ```sql `` code blocks) against the database using EXPLAIN before rejecting them — valid SQL is accepted, conversational text is still rejected as `{:error, {:unable_to_generate, content}}` ([#127](https://github.com/typhoonworks/lotus/issues/127))
+- **NEW:** `Lotus.SQL.Validator` — validates SQL syntax against the database without executing, using EXPLAIN. Neutralizes `{{var}}` and `[[...]]` template syntax before validation
+- **NEW:** `Lotus.AI.Actions.ValidateSQL` — AI tool action that lets the LLM validate its SQL against the database before returning it
+- **NEW:** `Lotus.Variables` — universal utilities for `{{variable}}` template syntax: `regex/0`, `extract_names/1`, `neutralize/2`. Consolidates the variable regex previously duplicated across `OptionalClause`, `Query`, and `QueryOptimizer`
+- **NEW:** `Lotus.SQL.OptionalClause.strip_brackets/1` — strips `[[` / `]]` brackets unconditionally, keeping inner content. Used by `Validator` and `QueryOptimizer` for preparing SQL for EXPLAIN
 - **FIX:** `Lotus.Source.param_placeholder/4` and `Lotus.Source.limit_offset_placeholders/3` no longer hardcode a fallback to PostgreSQL when the repo is `nil` — they now resolve via the configured default data repo
 - **NEW:** Optional variables with [[ ]] syntax
 - **NEW:** Column-level statistics for query results (`Lotus.Result.Statistics`)

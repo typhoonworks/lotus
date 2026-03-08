@@ -46,6 +46,8 @@ defmodule Lotus.ReqLLMMocks do
     expect(ReqLLM, :generate_text, fn _model, _context, _opts ->
       {:ok, build_response(plain_sql_response())}
     end)
+
+    expect(Lotus.SQL.Validator, :validate, fn _sql, _ds -> :ok end)
   end
 
   @doc """
