@@ -107,10 +107,10 @@ defmodule Lotus.AI.QueryOptimizerTest do
                )
     end
 
-    test "returns error when API fails" do
+    test "returns wrapped error when API fails" do
       mock_api_error("Invalid API key")
 
-      assert {:error, "Invalid API key"} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
                  sql: "SELECT * FROM orders",
                  data_source: "postgres",
@@ -118,10 +118,10 @@ defmodule Lotus.AI.QueryOptimizerTest do
                )
     end
 
-    test "returns error when request times out" do
+    test "returns wrapped error when request times out" do
       mock_timeout()
 
-      assert {:error, :timeout} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
                  sql: "SELECT * FROM orders",
                  data_source: "postgres",

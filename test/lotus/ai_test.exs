@@ -146,20 +146,20 @@ defmodule Lotus.AITest do
       assert reason == "This is a weather question, not a database query"
     end
 
-    test "returns error when API fails" do
+    test "returns wrapped error when API fails" do
       mock_api_error("Rate limit exceeded")
 
-      assert {:error, "Rate limit exceeded"} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                AI.generate_query(
                  prompt: "test",
                  data_source: "postgres"
                )
     end
 
-    test "returns error when request times out" do
+    test "returns wrapped error when request times out" do
       mock_timeout()
 
-      assert {:error, :timeout} =
+      assert {:error, %Lotus.AI.Error.ServiceError{}} =
                AI.generate_query(
                  prompt: "test",
                  data_source: "postgres"

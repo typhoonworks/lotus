@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-03-08
+
+### Fixed
+
+- **FIX:** Wrap raw LLM provider errors in `Lotus.AI.Error` domain exceptions before returning them to callers — raw errors from ReqLLM (containing API endpoints, stack traces, provider metadata) are now logged server-side and replaced with user-safe error structs: `RateLimitError`, `AuthenticationError`, `ServerError`, `TimeoutError`, `ServiceError`
+
 ## [0.16.0] - 2026-03-08
 
 ### Added
