@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **FIX:** Remove `@derive {Lotus.JSON.encoder(), ...}` from `Result` struct that caused `{:invalid_byte, 255}` crashes when query results contained raw UUID binaries from PostgreSQL. Added `Result.to_encodable/1` for explicit JSON-safe serialization with value normalization. Regression introduced in v0.16.0 (#135)
+
+### Changed
+
+- **REFACTOR:** Extract `Lotus.Normalizer` protocol from `Lotus.Export.Normalizer` into a top-level module for general-purpose value normalization (UUID binaries, Dates, Decimals, Postgrex/MyXQL types). `Lotus.Export.Value` now delegates to `Lotus.Normalizer`
+- **NEW:** Added `guides/middleware.md` documentation for the middleware pipeline
+
 ## [0.16.3] - 2026-03-08
 
 ### Fixed

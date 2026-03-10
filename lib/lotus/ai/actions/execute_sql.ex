@@ -43,7 +43,10 @@ defmodule Lotus.AI.Actions.ExecuteSQL do
 
     case Lotus.run_sql(params.sql, [], repo: params.data_source, read_only: true) do
       {:ok, result} ->
-        preview_rows = Enum.take(result.rows, @max_preview_rows)
+        preview_rows =
+          result.rows
+          |> Enum.take(@max_preview_rows)
+          |> Enum.map(fn row -> Enum.map(row, &Lotus.Normalizer.normalize/1) end)
 
         {:ok,
          %{

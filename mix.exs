@@ -133,6 +133,7 @@ defmodule Lotus.MixProject do
       "guides/advanced-variables.md",
       "guides/ai_query_generation.md",
       "guides/configuration.md",
+      "guides/middleware.md",
       "guides/visibility.md",
       "guides/caching.md",
       "guides/telemetry.md",

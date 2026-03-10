@@ -27,5 +27,11 @@ defmodule Lotus.Test.Repo.Migrations.CreateTestTables do
 
     create(index(:test_posts, [:user_id]))
     create(index(:test_posts, [:published]))
+
+    create table(:test_uuid_records, primary_key: false) do
+      add(:id, :uuid, primary_key: true)
+      add(:name, :string, null: false)
+      add(:ref_id, :uuid)
+    end
   end
 end

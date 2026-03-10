@@ -2,7 +2,7 @@
 # Only compiled when MyXQL types are available
 
 if Code.ensure_loaded?(MyXQL.Geometry) do
-  defimpl Lotus.Export.Normalizer, for: MyXQL.Geometry do
+  defimpl Lotus.Normalizer, for: MyXQL.Geometry do
     def normalize(%MyXQL.Geometry{} = geom) do
       # Export as WKT (Well-Known Text) or WKB Base64
       Base.encode64(geom.wkb || "")
