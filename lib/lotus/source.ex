@@ -130,6 +130,26 @@ defmodule Lotus.Source do
               {:ok, String.t()} | {:error, term()}
 
   @doc """
+  Wraps a base SQL query with source-specific pagination (LIMIT/OFFSET or equivalent).
+
+  The default uses standard `LIMIT ... OFFSET ...` with `AS` subquery alias, but
+  some databases (e.g., Oracle 12c+) use `OFFSET ... ROWS FETCH NEXT ... ROWS ONLY`.
+  """
+  @callback wrap_paginated_sql(
+              base_sql :: String.t(),
+              limit_placeholder :: String.t(),
+              offset_placeholder :: String.t()
+            ) :: String.t()
+
+  @doc """
+  Wraps a base SQL query in a `SELECT COUNT(*)` for total-count computation.
+
+  The default uses `SELECT COUNT(*) FROM (...) AS lotus_sub`, but some databases
+  (e.g., Oracle) don't support `AS` for subquery aliases.
+  """
+  @callback wrap_count_sql(base_sql :: String.t()) :: String.t()
+
+  @doc """
   List the exception modules that this source formats specially in `format_error/1`.
   """
   @callback handled_errors() :: [module()]
@@ -217,7 +237,8 @@ defmodule Lotus.Source do
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
     Ecto.Adapters.SQLite3 => Lotus.Sources.SQLite3,
-    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL
+    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL,
+    Ecto.Adapters.Jamdb.Oracle => Lotus.Sources.Oracle
   }
 
   @doc """
@@ -337,7 +358,18 @@ defmodule Lotus.Source do
     mod
   end
 
-  defp impl_for(repo) do
+  @doc """
+  Returns the source implementation module for a given repo or repo name.
+  """
+  def impl_for(repo_or_name) when is_binary(repo_or_name) do
+    impl_for(resolve_repo!(repo_or_name))
+  end
+
+  def impl_for(nil) do
+    impl_for(resolve_repo!(nil))
+  end
+
+  def impl_for(repo) when is_atom(repo) do
     source_mod = repo.__adapter__()
     Map.get(@impls, source_mod, Lotus.Sources.Default)
   end

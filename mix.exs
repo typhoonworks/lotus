@@ -13,7 +13,7 @@ defmodule Lotus.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error]],
+      xref: [exclude: [Postgrex.Error, Exqlite.Error, MyXQL.Error, Jamdb.Oracle.Error]],
       deps: deps(),
       docs: docs(),
       package: package(),
@@ -44,6 +44,7 @@ defmodule Lotus.MixProject do
       {:ecto, "~> 3.10"},
       {:ecto_sql, "~> 3.10"},
       {:ecto_sqlite3, "~> 0.21", optional: true},
+      {:jamdb_oracle, "~> 0.5", optional: true},
       {:jason, "~> 1.4"},
       {:myxql, "~> 0.8", optional: true},
       {:nimble_csv, "~> 1.2"},
@@ -83,7 +84,7 @@ defmodule Lotus.MixProject do
 
   defp dialyzer do
     [
-      plt_add_apps: [:mix, :ex_unit, :ecto, :ecto_sql, :postgrex, :myxql],
+      plt_add_apps: [:mix, :ex_unit, :ecto, :ecto_sql, :postgrex, :myxql, :jamdb_oracle],
       plt_core_path: "_build/#{Mix.env()}",
       flags: [:error_handling, :missing_return, :underspecs],
       ignore_warnings: ".dialyzer_ignore.exs"
