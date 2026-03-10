@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-03-10
+
 ### Fixed
 
 - **FIX:** Remove `@derive {Lotus.JSON.encoder(), ...}` from `Result` struct that caused `{:invalid_byte, 255}` crashes when query results contained raw UUID binaries from PostgreSQL. Added `Result.to_encodable/1` for explicit JSON-safe serialization with value normalization. Regression introduced in v0.16.0 (#135)
