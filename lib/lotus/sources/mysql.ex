@@ -333,6 +333,16 @@ defmodule Lotus.Sources.MySQL do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
+  @impl true
+  def wrap_paginated_sql(base_sql, limit_ph, offset_ph) do
+    "SELECT * FROM (" <> base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+  end
+
+  @impl true
+  def wrap_count_sql(base_sql) do
+    "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub"
+  end
+
   defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
     do: "varchar(#{char_len})"
 
