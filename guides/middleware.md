@@ -122,6 +122,8 @@ defmodule MyApp.TenantMiddleware do
 end
 ```
 
+> **Note:** The `String.contains?` check above is intentionally simplified for illustration. It can be bypassed (e.g. via SQL comments). For real row-level security, inject a parameterized filter using the `:filters` option on `Lotus.run_query/2` instead of inspecting raw SQL text.
+
 ### Redacting Sensitive Data in Results
 
 Mask PII columns (emails, phone numbers, etc.) so non-admin users only see partial values:
@@ -162,7 +164,7 @@ defmodule MyApp.ResultRedactionMiddleware do
   defp admin?(%{role: :admin}), do: true
   defp admin?(_), do: false
 
-  defp mask(val) when is_binary(val) and byte_size(val) > 4 do
+  defp mask(val) when is_binary(val) and String.length(val) > 4 do
     String.slice(val, 0, 2) <> String.duplicate("*", max(String.length(val) - 4, 3)) <> String.slice(val, -2, 2)
   end
 

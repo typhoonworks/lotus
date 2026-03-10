@@ -22,7 +22,9 @@ end
 defimpl Lotus.Normalizer, for: BitString do
   def normalize(value) when is_binary(value) do
     cond do
-      # Check if it's a 16-byte UUID binary
+      # Some databases return UUID values as raw 16-byte binaries rather than strings.
+      # Detect by checking for exactly 16 non-UTF-8 bytes, which avoids misidentifying
+      # valid UTF-8 strings that happen to be 16 bytes long.
       byte_size(value) == 16 and not String.valid?(value) ->
         case Ecto.UUID.load(value) do
           {:ok, uuid} -> uuid
@@ -60,13 +62,15 @@ defimpl Lotus.Normalizer, for: List do
     if List.ascii_printable?(value) do
       to_string(value)
     else
-      value
+      Enum.map(value, &Lotus.Normalizer.normalize/1)
     end
   end
 end
 
 defimpl Lotus.Normalizer, for: Map do
-  def normalize(value), do: value
+  def normalize(value) do
+    Map.new(value, fn {k, v} -> {k, Lotus.Normalizer.normalize(v)} end)
+  end
 end
 
 defimpl Lotus.Normalizer, for: Tuple do
