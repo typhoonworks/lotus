@@ -3,8 +3,8 @@ defmodule Lotus.Value do
   Central value normalization for JSON/CSV/UI display.
 
   This module provides a unified interface for normalizing database values
-  for different output formats while keeping the underlying normalization
-  logic centralized in the Export.Value module.
+  for different output formats. The underlying normalization logic is provided
+  by the `Lotus.Normalizer` protocol.
   """
 
   alias Lotus.Export.Value

@@ -68,7 +68,7 @@ defmodule Lotus.AI.Actions.GetColumnValues do
   defp run_and_format(query, params) do
     case Lotus.run_sql(query, [], repo: params.data_source) do
       {:ok, result} ->
-        values = Enum.map(result.rows, fn [value] -> value end)
+        values = Enum.map(result.rows, fn [value] -> Lotus.Normalizer.normalize(value) end)
 
         {:ok,
          %{

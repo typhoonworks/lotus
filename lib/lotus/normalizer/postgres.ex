@@ -2,7 +2,7 @@
 # Only compiled when Postgrex types are available
 
 if Code.ensure_loaded?(Postgrex.Range) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Range do
+  defimpl Lotus.Normalizer, for: Postgrex.Range do
     def normalize(%Postgrex.Range{} = range) do
       lower_bound = if range.lower_inclusive, do: "[", else: "("
       upper_bound = if range.upper_inclusive, do: "]", else: ")"
@@ -17,13 +17,13 @@ if Code.ensure_loaded?(Postgrex.Range) do
     defp format_range_value(:unbound), do: ""
 
     defp format_range_value(value) do
-      Lotus.Export.Normalizer.normalize(value)
+      Lotus.Normalizer.normalize(value)
     end
   end
 end
 
 if Code.ensure_loaded?(Postgrex.INET) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.INET do
+  defimpl Lotus.Normalizer, for: Postgrex.INET do
     def normalize(%Postgrex.INET{address: address, netmask: netmask}) do
       addr_str = format_address(address)
 
@@ -47,15 +47,14 @@ if Code.ensure_loaded?(Postgrex.INET) do
         8 ->
           address
           |> Tuple.to_list()
-          |> Enum.map(&Integer.to_string(&1, 16))
-          |> Enum.join(":")
+          |> Enum.map_join(":", &Integer.to_string(&1, 16))
       end
     end
   end
 end
 
 if Code.ensure_loaded?(Postgrex.Interval) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Interval do
+  defimpl Lotus.Normalizer, for: Postgrex.Interval do
     # Postgrex.Interval has: months, days, secs, microsecs
     def normalize(%Postgrex.Interval{} = interval) do
       parts = build_date_parts(interval)
@@ -134,7 +133,7 @@ if Code.ensure_loaded?(Postgrex.Interval) do
 end
 
 if Code.ensure_loaded?(Postgrex.Point) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Point do
+  defimpl Lotus.Normalizer, for: Postgrex.Point do
     def normalize(%Postgrex.Point{x: x, y: y}) do
       "(#{x},#{y})"
     end
@@ -142,28 +141,25 @@ if Code.ensure_loaded?(Postgrex.Point) do
 end
 
 if Code.ensure_loaded?(Postgrex.LineSegment) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.LineSegment do
+  defimpl Lotus.Normalizer, for: Postgrex.LineSegment do
     def normalize(%Postgrex.LineSegment{point1: p1, point2: p2}) do
-      "[#{Lotus.Export.Normalizer.normalize(p1)},#{Lotus.Export.Normalizer.normalize(p2)}]"
+      "[#{Lotus.Normalizer.normalize(p1)},#{Lotus.Normalizer.normalize(p2)}]"
     end
   end
 end
 
 if Code.ensure_loaded?(Postgrex.Box) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Box do
+  defimpl Lotus.Normalizer, for: Postgrex.Box do
     def normalize(%Postgrex.Box{upper_right: ur, bottom_left: bl}) do
-      "(#{Lotus.Export.Normalizer.normalize(ur)},#{Lotus.Export.Normalizer.normalize(bl)})"
+      "(#{Lotus.Normalizer.normalize(ur)},#{Lotus.Normalizer.normalize(bl)})"
     end
   end
 end
 
 if Code.ensure_loaded?(Postgrex.Path) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Path do
+  defimpl Lotus.Normalizer, for: Postgrex.Path do
     def normalize(%Postgrex.Path{points: points, open: open}) do
-      points_str =
-        points
-        |> Enum.map(&Lotus.Export.Normalizer.normalize/1)
-        |> Enum.join(",")
+      points_str = Enum.map_join(points, ",", &Lotus.Normalizer.normalize/1)
 
       if open do
         "[#{points_str}]"
@@ -175,12 +171,9 @@ if Code.ensure_loaded?(Postgrex.Path) do
 end
 
 if Code.ensure_loaded?(Postgrex.Polygon) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Polygon do
+  defimpl Lotus.Normalizer, for: Postgrex.Polygon do
     def normalize(%Postgrex.Polygon{vertices: vertices}) do
-      points_str =
-        vertices
-        |> Enum.map(&Lotus.Export.Normalizer.normalize/1)
-        |> Enum.join(",")
+      points_str = Enum.map_join(vertices, ",", &Lotus.Normalizer.normalize/1)
 
       "(#{points_str})"
     end
@@ -188,9 +181,9 @@ if Code.ensure_loaded?(Postgrex.Polygon) do
 end
 
 if Code.ensure_loaded?(Postgrex.Circle) do
-  defimpl Lotus.Export.Normalizer, for: Postgrex.Circle do
+  defimpl Lotus.Normalizer, for: Postgrex.Circle do
     def normalize(%Postgrex.Circle{center: center, radius: radius}) do
-      "<#{Lotus.Export.Normalizer.normalize(center)},#{radius}>"
+      "<#{Lotus.Normalizer.normalize(center)},#{radius}>"
     end
   end
 end

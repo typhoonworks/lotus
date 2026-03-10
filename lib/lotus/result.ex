@@ -5,9 +5,6 @@ defmodule Lotus.Result do
   Contains the columns, rows, and metadata about the query result.
   """
 
-  @derive {Lotus.JSON.encoder(),
-           only: [:columns, :rows, :num_rows, :duration_ms, :command, :meta]}
-
   @enforce_keys [:columns, :rows]
 
   defstruct columns: [],
@@ -50,5 +47,29 @@ defmodule Lotus.Result do
       command: Keyword.get(opts, :command),
       meta: Keyword.get(opts, :meta, %{})
     }
+  end
+
+  @doc """
+  Returns a JSON-safe map representation of the result.
+
+  Normalizes all row values (UUID binaries, Dates, Decimals, etc.) using
+  `Lotus.Normalizer` so the output is safe for JSON encoding.
+  """
+  @spec to_encodable(t()) :: map()
+  def to_encodable(%__MODULE__{} = result) do
+    %{
+      columns: result.columns,
+      rows: normalize_rows(result.rows),
+      num_rows: result.num_rows,
+      duration_ms: result.duration_ms,
+      command: result.command,
+      meta: result.meta
+    }
+  end
+
+  defp normalize_rows(rows) do
+    Enum.map(rows, fn row ->
+      Enum.map(row, &Lotus.Normalizer.normalize/1)
+    end)
   end
 end

@@ -914,4 +914,56 @@ defmodule Lotus.RunnerTest do
       assert is_list(meta.messages)
     end
   end
+
+  describe "UUID column handling" do
+    setup do
+      uuid1 = Ecto.UUID.generate()
+      uuid2 = Ecto.UUID.generate()
+      {:ok, uuid1_bin} = Ecto.UUID.dump(uuid1)
+      {:ok, uuid2_bin} = Ecto.UUID.dump(uuid2)
+
+      Repo.query!(
+        "INSERT INTO test_uuid_records (id, name, ref_id) VALUES ($1, $2, $3)",
+        [uuid1_bin, "Record A", uuid2_bin]
+      )
+
+      Repo.query!(
+        "INSERT INTO test_uuid_records (id, name, ref_id) VALUES ($1, $2, NULL)",
+        [uuid2_bin, "Record B"]
+      )
+
+      %{uuid1: uuid1, uuid2: uuid2}
+    end
+
+    test "returns raw UUID binaries in result rows", %{uuid1: uuid1} do
+      {:ok, result} =
+        Runner.run_sql(Repo, "SELECT id, name FROM test_uuid_records WHERE name = $1", [
+          "Record A"
+        ])
+
+      assert %{columns: ["id", "name"], rows: [[id_bin, "Record A"]]} = result
+      # Postgrex returns UUIDs as raw 16-byte binaries
+      assert byte_size(id_bin) == 16
+      {:ok, loaded} = Ecto.UUID.load(id_bin)
+      assert loaded == uuid1
+    end
+
+    test "result with UUID columns is JSON-encodable via to_encodable", %{
+      uuid1: uuid1,
+      uuid2: uuid2
+    } do
+      {:ok, result} =
+        Runner.run_sql(Repo, "SELECT id, name, ref_id FROM test_uuid_records ORDER BY name")
+
+      # to_encodable normalizes UUIDs to strings
+      encodable = Lotus.Result.to_encodable(result)
+      encoded = Lotus.JSON.encode!(encodable)
+      decoded = Lotus.JSON.decode!(encoded)
+
+      assert [[id_a, "Record A", ref_a], [id_b, "Record B", nil]] = decoded["rows"]
+      assert id_a == uuid1
+      assert ref_a == uuid2
+      assert id_b == uuid2
+    end
+  end
 end

@@ -146,7 +146,7 @@ defmodule Lotus.ExportTest do
   end
 
   describe "date/time handling" do
-    test "normalizes DateTime values" do
+    test "normalizes DateTime values in CSV" do
       dt = ~U[2024-01-15 10:30:00Z]
       result = Result.new(["timestamp"], [[dt]])
 
@@ -156,7 +156,7 @@ defmodule Lotus.ExportTest do
       assert csv_string =~ "2024-01-15T10:30:00Z"
     end
 
-    test "normalizes Date values" do
+    test "normalizes Date values in CSV" do
       date = ~D[2024-01-15]
       result = Result.new(["date"], [[date]])
 
@@ -166,7 +166,7 @@ defmodule Lotus.ExportTest do
       assert csv_string =~ "2024-01-15"
     end
 
-    test "normalizes NaiveDateTime values" do
+    test "normalizes NaiveDateTime values in CSV" do
       ndt = ~N[2024-01-15 10:30:00]
       result = Result.new(["timestamp"], [[ndt]])
 
@@ -174,6 +174,114 @@ defmodule Lotus.ExportTest do
       csv_string = IO.iodata_to_binary(csv_iodata)
 
       assert csv_string =~ "2024-01-15T10:30:00"
+    end
+
+    test "normalizes DateTime values in JSON" do
+      dt = ~U[2024-01-15 10:30:00Z]
+      result = Result.new(["timestamp"], [[dt]])
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+      assert [%{"timestamp" => "2024-01-15T10:30:00Z"}] = decoded
+    end
+
+    test "normalizes Date values in JSON" do
+      date = ~D[2024-01-15]
+      result = Result.new(["date"], [[date]])
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+      assert [%{"date" => "2024-01-15"}] = decoded
+    end
+
+    test "normalizes NaiveDateTime values in JSON" do
+      ndt = ~N[2024-01-15 10:30:00]
+      result = Result.new(["timestamp"], [[ndt]])
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+      assert [%{"timestamp" => "2024-01-15T10:30:00"}] = decoded
+    end
+  end
+
+  describe "raw database type handling" do
+    test "exports UUID binaries in CSV" do
+      {:ok, uuid_binary} = Ecto.UUID.dump("550e8400-e29b-41d4-a716-446655440000")
+      result = Result.new(["id", "name"], [[uuid_binary, "Alice"]])
+
+      csv_string = result |> Export.to_csv() |> IO.iodata_to_binary()
+
+      assert csv_string =~ "550e8400-e29b-41d4-a716-446655440000"
+      assert csv_string =~ "Alice"
+    end
+
+    test "exports UUID binaries in JSON" do
+      {:ok, uuid_binary} = Ecto.UUID.dump("550e8400-e29b-41d4-a716-446655440000")
+      result = Result.new(["id", "name"], [[uuid_binary, "Alice"]])
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+
+      assert [%{"id" => "550e8400-e29b-41d4-a716-446655440000", "name" => "Alice"}] = decoded
+    end
+
+    test "exports UUID binaries in JSONL" do
+      {:ok, uuid_binary} = Ecto.UUID.dump("550e8400-e29b-41d4-a716-446655440000")
+      result = Result.new(["id"], [[uuid_binary]])
+
+      decoded = result |> Export.to_jsonl() |> Lotus.JSON.decode!()
+
+      assert %{"id" => "550e8400-e29b-41d4-a716-446655440000"} = decoded
+    end
+
+    test "exports Decimal values in JSON" do
+      result = Result.new(["amount"], [[Decimal.new("123.45")]])
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+
+      assert [%{"amount" => "123.45"}] = decoded
+    end
+
+    test "exports Decimal values in CSV" do
+      result = Result.new(["amount"], [[Decimal.new("123.45")]])
+
+      csv_string = result |> Export.to_csv() |> IO.iodata_to_binary()
+
+      assert csv_string =~ "123.45"
+    end
+
+    test "exports mixed raw database types in JSON" do
+      {:ok, uuid_binary} = Ecto.UUID.dump("550e8400-e29b-41d4-a716-446655440000")
+
+      result =
+        Result.new(
+          ["id", "name", "created_at", "amount"],
+          [[uuid_binary, "Alice", ~D[2024-06-15], Decimal.new("99.99")]]
+        )
+
+      decoded = result |> Export.to_json() |> Lotus.JSON.decode!()
+
+      assert [
+               %{
+                 "id" => "550e8400-e29b-41d4-a716-446655440000",
+                 "name" => "Alice",
+                 "created_at" => "2024-06-15",
+                 "amount" => "99.99"
+               }
+             ] = decoded
+    end
+
+    test "exports mixed raw database types in CSV" do
+      {:ok, uuid_binary} = Ecto.UUID.dump("550e8400-e29b-41d4-a716-446655440000")
+
+      result =
+        Result.new(
+          ["id", "name", "created_at", "amount"],
+          [[uuid_binary, "Alice", ~D[2024-06-15], Decimal.new("99.99")]]
+        )
+
+      csv_string = result |> Export.to_csv() |> IO.iodata_to_binary()
+
+      assert csv_string =~ "550e8400-e29b-41d4-a716-446655440000"
+      assert csv_string =~ "Alice"
+      assert csv_string =~ "2024-06-15"
+      assert csv_string =~ "99.99"
     end
   end
 end
