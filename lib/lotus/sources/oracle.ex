@@ -18,10 +18,12 @@ defmodule Lotus.Sources.Oracle do
   def execute_in_transaction(repo, fun, opts) do
     read_only? = Keyword.get(opts, :read_only, true)
     timeout = Keyword.get(opts, :timeout, 15_000)
+    search_path = Keyword.get(opts, :search_path)
 
     repo.transaction(
       fn ->
         if read_only?, do: repo.query!("SET TRANSACTION READ ONLY")
+        if search_path, do: set_search_path(repo, search_path)
 
         fun.()
       end,
@@ -41,6 +43,14 @@ defmodule Lotus.Sources.Oracle do
 
   @impl true
   def set_search_path(repo, schema) when is_binary(schema) do
+    # Oracle only supports a single schema — reject comma-separated input
+    # that Postgres-oriented validate_search_path! would silently accept.
+    if String.contains?(schema, ",") do
+      raise ArgumentError,
+            "Oracle only supports a single schema in set_search_path, got: #{inspect(schema)}"
+    end
+
+    schema = String.trim(schema)
     Identifier.validate_search_path!(schema)
     repo.query!("ALTER SESSION SET CURRENT_SCHEMA = #{schema}")
     :ok
@@ -73,10 +83,7 @@ defmodule Lotus.Sources.Oracle do
   # ── Identifier quoting ─────────────────────────────────────────────
 
   @impl true
-  def quote_identifier(identifier) do
-    escaped = String.replace(identifier, "\"", "\"\"")
-    ~s("#{escaped}")
-  end
+  defdelegate quote_identifier(identifier), to: Default
 
   # ── Filter / Sort injection ──────────────────────────────────────────
 
@@ -139,13 +146,19 @@ defmodule Lotus.Sources.Oracle do
   @impl true
   def explain_plan(repo, sql, params, _opts) do
     # Oracle EXPLAIN PLAN approach:
-    # 1. Execute EXPLAIN PLAN FOR <sql>
-    # 2. Read the plan from PLAN_TABLE via DBMS_XPLAN
-    explain_sql = "EXPLAIN PLAN FOR " <> sql
+    # 1. Execute EXPLAIN PLAN FOR <sql> with a unique STATEMENT_ID
+    # 2. Read the plan from PLAN_TABLE via DBMS_XPLAN scoped to that ID
+    # Using a unique STATEMENT_ID avoids race conditions when concurrent
+    # sessions write to the shared PLAN_TABLE.
+    statement_id = "lotus_#{:erlang.unique_integer([:positive])}"
+    explain_sql = "EXPLAIN PLAN SET STATEMENT_ID = '#{statement_id}' FOR " <> sql
 
     case repo.query(explain_sql, params) do
       {:ok, _} ->
-        case repo.query("SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', NULL, 'ALL'))") do
+        display_sql =
+          "SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', '#{statement_id}', 'ALL'))"
+
+        case repo.query(display_sql) do
           {:ok, %{rows: rows}} ->
             plan_text = Enum.map_join(rows, "\n", fn [line] -> line end)
             {:ok, plan_text}
@@ -283,6 +296,8 @@ defmodule Lotus.Sources.Oracle do
       |> Enum.map(&"'#{&1}'")
       |> Enum.join(", ")
 
+    # Safety: exact_denies are compile-time string constants from builtin_schema_denies/1,
+    # not user input, so direct interpolation is safe here.
     sql = """
     SELECT username
     FROM all_users
@@ -376,10 +391,13 @@ defmodule Lotus.Sources.Oracle do
       {placeholders, params} = build_in_clause(schemas)
       all_params = [table | params]
 
+      # Use all_objects instead of all_tables to also resolve views,
+      # matching the behavior of list_tables which queries all_objects.
       sql = """
       SELECT owner
-      FROM all_tables
-      WHERE table_name = :1
+      FROM all_objects
+      WHERE object_name = :1
+        AND object_type IN ('TABLE', 'VIEW')
         AND owner IN (#{shift_placeholders(placeholders, 1)})
       FETCH FIRST 1 ROWS ONLY
       """
@@ -397,10 +415,10 @@ defmodule Lotus.Sources.Oracle do
     values
     |> Enum.with_index(1)
     |> Enum.reduce({[], []}, fn {value, idx}, {placeholders, params} ->
-      {[":#{idx}" | placeholders], params ++ [value]}
+      {[":#{idx}" | placeholders], [value | params]}
     end)
     |> then(fn {placeholders, params} ->
-      {placeholders |> Enum.reverse() |> Enum.join(", "), params}
+      {placeholders |> Enum.reverse() |> Enum.join(", "), Enum.reverse(params)}
     end)
   end
 

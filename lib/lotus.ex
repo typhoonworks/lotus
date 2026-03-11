@@ -861,9 +861,7 @@ defmodule Lotus do
         length(params) + 2
       )
 
-    source_impl = Lotus.Source.impl_for(repo_or_name)
-
-    paged_sql = source_impl.wrap_paginated_sql(base_sql, limit_ph, offset_ph)
+    paged_sql = Lotus.Source.wrap_paginated_sql(repo_or_name, base_sql, limit_ph, offset_ph)
     paged_params = params ++ [limit, offset]
 
     window_meta =
@@ -873,7 +871,7 @@ defmodule Lotus do
             window: %{limit: limit, offset: offset},
             total_count: :pending,
             total_mode: :exact,
-            count_sql: source_impl.wrap_count_sql(base_sql),
+            count_sql: Lotus.Source.wrap_count_sql(repo_or_name, base_sql),
             count_params: params,
             repo_or_name: repo_or_name,
             search_path: search_path

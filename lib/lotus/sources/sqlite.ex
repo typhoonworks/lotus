@@ -205,13 +205,8 @@ defmodule Lotus.Sources.SQLite3 do
   end
 
   @impl true
-  def wrap_paginated_sql(base_sql, limit_ph, offset_ph) do
-    "SELECT * FROM (" <>
-      base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
-  end
+  defdelegate wrap_paginated_sql(base_sql, limit_ph, offset_ph), to: Default
 
   @impl true
-  def wrap_count_sql(base_sql) do
-    "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub"
-  end
+  defdelegate wrap_count_sql(base_sql), to: Default
 end

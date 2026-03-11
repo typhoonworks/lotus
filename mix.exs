@@ -42,7 +42,7 @@ defmodule Lotus.MixProject do
     [
       {:cachex, "~> 4.0", optional: true},
       {:ecto, "~> 3.10"},
-      {:ecto_sql, "~> 3.10"},
+      {:ecto_sql, "~> 3.12"},
       {:ecto_sqlite3, "~> 0.21", optional: true},
       {:jamdb_oracle, "~> 0.5", optional: true},
       {:jason, "~> 1.4"},

@@ -358,18 +358,15 @@ defmodule Lotus.Source do
     mod
   end
 
-  @doc """
-  Returns the source implementation module for a given repo or repo name.
-  """
-  def impl_for(repo_or_name) when is_binary(repo_or_name) do
+  defp impl_for(repo_or_name) when is_binary(repo_or_name) do
     impl_for(resolve_repo!(repo_or_name))
   end
 
-  def impl_for(nil) do
+  defp impl_for(nil) do
     impl_for(resolve_repo!(nil))
   end
 
-  def impl_for(repo) when is_atom(repo) do
+  defp impl_for(repo) when is_atom(repo) do
     source_mod = repo.__adapter__()
     Map.get(@impls, source_mod, Lotus.Sources.Default)
   end
@@ -450,6 +447,27 @@ defmodule Lotus.Source do
           {:ok, String.t()} | {:error, term()}
   def explain_plan(repo, sql, params \\ [], opts \\ []) do
     impl_for(repo).explain_plan(repo, sql, params, opts)
+  end
+
+  @doc """
+  Wraps a base SQL query with source-specific pagination.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec wrap_paginated_sql(repo | String.t() | nil, String.t(), String.t(), String.t()) ::
+          String.t()
+  def wrap_paginated_sql(repo_or_name, base_sql, limit_ph, offset_ph) do
+    impl_for(resolve_repo!(repo_or_name)).wrap_paginated_sql(base_sql, limit_ph, offset_ph)
+  end
+
+  @doc """
+  Wraps a base SQL query in a SELECT COUNT(*) for total-count computation.
+
+  Dispatches to the source-specific implementation based on the repo's adapter.
+  """
+  @spec wrap_count_sql(repo | String.t() | nil, String.t()) :: String.t()
+  def wrap_count_sql(repo_or_name, base_sql) do
+    impl_for(resolve_repo!(repo_or_name)).wrap_count_sql(base_sql)
   end
 
   @doc """
