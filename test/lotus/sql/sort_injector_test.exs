@@ -55,17 +55,6 @@ defmodule Lotus.SQL.SortInjectorTest do
                "WITH _sorted AS (SELECT * FROM users) SELECT * FROM _sorted ORDER BY `name` ASC"
     end
 
-    test "escapes double quotes in column names" do
-      quote_fn = fn id ->
-        escaped = String.replace(id, "\"", "\"\"")
-        ~s("#{escaped}")
-      end
-
-      sorts = [Sort.new(~s(col"name), :desc)]
-      result = SortInjector.apply("SELECT * FROM t", sorts, quote_fn)
-      assert result =~ ~s("col""name" DESC)
-    end
-
     test "strips trailing semicolon before wrapping in CTE" do
       sql = "SELECT * FROM users;"
       sorts = [Sort.new("name", :asc)]
@@ -98,13 +87,41 @@ defmodule Lotus.SQL.SortInjectorTest do
 
     test "works after CTE-wrapped filtered query" do
       sql =
-        ~s[WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = 'US']
+        ~s[WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = $1]
 
       sorts = [Sort.new("name", :asc)]
       result = SortInjector.apply(sql, sorts, &double_quote/1)
 
       assert result ==
-               ~s[WITH _sorted AS (WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = 'US') SELECT * FROM _sorted ORDER BY "name" ASC]
+               ~s[WITH _sorted AS (WITH _base AS (SELECT * FROM users) SELECT * FROM _base WHERE "region" = $1) SELECT * FROM _sorted ORDER BY "name" ASC]
+    end
+  end
+
+  describe "column validation" do
+    test "rejects column names with SQL injection attempts" do
+      sorts = [Sort.new("name; DROP TABLE users", :asc)]
+
+      assert_raise ArgumentError, ~r/Invalid sort column/, fn ->
+        SortInjector.apply("SELECT 1", sorts, &double_quote/1)
+      end
+    end
+
+    test "rejects column names with special characters" do
+      for bad_col <- ["col name", "col'name", "col\"name", "col;name", "col--name"] do
+        sorts = [Sort.new(bad_col, :asc)]
+
+        assert_raise ArgumentError, ~r/Invalid sort column/, fn ->
+          SortInjector.apply("SELECT 1", sorts, &double_quote/1)
+        end
+      end
+    end
+
+    test "accepts valid column names" do
+      for good_col <- ["name", "user_name", "_id", "Column1", "a"] do
+        sorts = [Sort.new(good_col, :asc)]
+        result = SortInjector.apply("SELECT 1", sorts, &double_quote/1)
+        assert result =~ "ORDER BY"
+      end
     end
   end
 end

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Security
+
+- **FIX:** Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)
+- **FIX:** Validate column names in `FilterInjector` and `SortInjector` against `[a-zA-Z_][a-zA-Z0-9_]*` using `Lotus.SQL.Identifier`, rejecting column names containing spaces, quotes, semicolons, or other special characters (#152)
+
+### Changed
+
+- **BREAKING:** `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string
+- **BREAKING:** `Lotus.Source.apply_filters/2` callback is now `apply_filters/3` — accepts `params` list and returns `{sql, params}` tuple. All source adapters (Postgres, MySQL, SQLite3, Default) updated accordingly
+- Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
+
 ## [0.16.4] - 2026-03-10
 
 ### Fixed

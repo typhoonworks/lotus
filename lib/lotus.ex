@@ -446,7 +446,7 @@ defmodule Lotus do
     final_opts = prepare_final_opts(opts, search_path)
 
     filters = Keyword.get(opts, :filters, [])
-    sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
+    {sql, params} = Lotus.Source.apply_filters(repo_mod, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
     sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)
@@ -598,7 +598,7 @@ defmodule Lotus do
     search_path = Keyword.get(runner_opts, :search_path)
 
     filters = Keyword.get(opts, :filters, [])
-    sql = Lotus.Source.apply_filters(repo_mod, sql, filters)
+    {sql, params} = Lotus.Source.apply_filters(repo_mod, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
     sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)

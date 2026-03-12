@@ -23,14 +23,20 @@ defmodule Lotus.Source do
   @callback quote_identifier(String.t()) :: String.t()
 
   @doc """
-  Applies a list of filters to an existing query, returning a new query string.
+  Applies a list of filters to an existing query using parameterized queries.
 
   For SQL sources, this typically wraps the original query in a CTE and appends
-  WHERE clauses. Non-SQL sources may implement entirely different strategies.
+  WHERE clauses with parameter placeholders. Non-SQL sources may implement
+  entirely different strategies.
 
-  Returns the original query unchanged when filters is empty.
+  Returns `{sql, params}` unchanged when filters is empty.
   """
-  @callback apply_filters(sql :: String.t(), filters :: [Lotus.Query.Filter.t()]) :: String.t()
+  @callback apply_filters(
+              sql :: String.t(),
+              params :: list(),
+              filters :: [Lotus.Query.Filter.t()]
+            ) ::
+              {String.t(), list()}
 
   @doc """
   Applies a list of sorts to an existing query, returning a new query string.
@@ -431,14 +437,14 @@ defmodule Lotus.Source do
   @doc """
   Applies filters to a query using the source-specific implementation.
 
-  Returns the original query unchanged when filters is empty.
+  Returns `{sql, params}` unchanged when filters is empty.
   """
-  @spec apply_filters(repo | String.t() | nil, String.t(), [Lotus.Query.Filter.t()]) ::
-          String.t()
-  def apply_filters(_repo_or_name, sql, []), do: sql
+  @spec apply_filters(repo | String.t() | nil, String.t(), list(), [Lotus.Query.Filter.t()]) ::
+          {String.t(), list()}
+  def apply_filters(_repo_or_name, sql, params, []), do: {sql, params}
 
-  def apply_filters(repo_or_name, sql, filters) do
-    impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, filters)
+  def apply_filters(repo_or_name, sql, params, filters) do
+    impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, params, filters)
   end
 
   @doc """
