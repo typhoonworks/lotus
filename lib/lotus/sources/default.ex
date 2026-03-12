@@ -157,8 +157,8 @@ defmodule Lotus.Sources.Default do
 
   @impl true
   @doc "Applies filters using standard SQL CTE wrapping with double-quoted identifiers."
-  def apply_filters(sql, filters) do
-    FilterInjector.apply(sql, filters, &quote_identifier/1)
+  def apply_filters(sql, params, filters) do
+    FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
   end
 
   @impl true

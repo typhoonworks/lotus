@@ -324,8 +324,8 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
-  def apply_filters(sql, filters) do
-    FilterInjector.apply(sql, filters, &quote_identifier/1)
+  def apply_filters(sql, params, filters) do
+    FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
   end
 
   @impl true

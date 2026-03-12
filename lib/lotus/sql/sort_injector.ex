@@ -18,6 +18,7 @@ defmodule Lotus.SQL.SortInjector do
   """
 
   alias Lotus.Query.Sort
+  alias Lotus.SQL.Identifier
 
   import Lotus.SQL.Sanitizer, only: [strip_trailing_semicolon: 1]
 
@@ -27,6 +28,8 @@ defmodule Lotus.SQL.SortInjector do
   `quote_fn` is a 1-arity function that quotes an identifier for the target database.
 
   Returns the original SQL unchanged if sorts is empty.
+
+  Raises `ArgumentError` if any sort column name contains invalid characters.
   """
   @spec apply(String.t(), [Sort.t()], (String.t() -> String.t())) :: String.t()
   def apply(sql, [], _quote_fn), do: sql
@@ -38,6 +41,7 @@ defmodule Lotus.SQL.SortInjector do
   end
 
   defp build_sort_clause(%Sort{column: column, direction: direction}, quote_fn) do
+    Identifier.validate_identifier!(column, "sort column")
     "#{quote_fn.(column)} #{direction_to_sql(direction)}"
   end
 

@@ -248,9 +248,11 @@ defmodule Lotus.Sources.Postgres do
   end
 
   @impl true
-  def apply_filters(sql, filters) do
-    FilterInjector.apply(sql, filters, &quote_identifier/1)
+  def apply_filters(sql, params, filters) do
+    FilterInjector.apply(sql, params, filters, &quote_identifier/1, &placeholder/1)
   end
+
+  defp placeholder(idx), do: "$#{idx}"
 
   @impl true
   def apply_sorts(sql, sorts) do
