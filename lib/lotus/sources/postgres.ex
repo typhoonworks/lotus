@@ -259,6 +259,12 @@ defmodule Lotus.Sources.Postgres do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
+  @impl true
+  defdelegate wrap_paginated_sql(base_sql, limit_ph, offset_ph), to: Default
+
+  @impl true
+  defdelegate wrap_count_sql(base_sql), to: Default
+
   defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),
     do: "varchar(#{char_len})"
 

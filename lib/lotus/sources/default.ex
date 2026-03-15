@@ -166,4 +166,17 @@ defmodule Lotus.Sources.Default do
   def apply_sorts(sql, sorts) do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
+
+  @impl true
+  @doc "Wraps a query with standard LIMIT/OFFSET pagination."
+  def wrap_paginated_sql(base_sql, limit_ph, offset_ph) do
+    "SELECT * FROM (" <>
+      base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+  end
+
+  @impl true
+  @doc "Wraps a query with SELECT COUNT(*) for total count."
+  def wrap_count_sql(base_sql) do
+    "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub"
+  end
 end
