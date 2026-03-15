@@ -62,12 +62,10 @@ defmodule Lotus.Sources.Oracle do
   def format_error(%{__struct__: mod} = e) when mod == @jamdb_error do
     message = Map.get(e, :message)
 
-    cond do
-      is_binary(message) and message != "" ->
-        "Oracle Error: #{message}"
-
-      true ->
-        Exception.message(e)
+    if is_binary(message) and message != "" do
+      "Oracle Error: #{message}"
+    else
+      Exception.message(e)
     end
   end
 
@@ -293,8 +291,7 @@ defmodule Lotus.Sources.Oracle do
     exact_denies =
       system_schemas
       |> Enum.filter(&is_binary/1)
-      |> Enum.map(&"'#{&1}'")
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", &"'#{&1}'")
 
     # Safety: exact_denies are compile-time string constants from builtin_schema_denies/1,
     # not user input, so direct interpolation is safe here.
