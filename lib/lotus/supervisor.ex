@@ -19,11 +19,14 @@ defmodule Lotus.Supervisor do
 
     compile_middleware(opts)
 
-    children =
+    cache_children =
       case cache_conf do
         %{adapter: adapter} -> adapter.spec_config()
         nil -> []
       end
+
+    children =
+      [{Task.Supervisor, name: Lotus.TaskSupervisor} | cache_children]
 
     Supervisor.init(children, strategy: :one_for_one)
   end

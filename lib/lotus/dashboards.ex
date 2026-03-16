@@ -650,7 +650,7 @@ defmodule Lotus.Dashboards do
       card_id = card.id
 
       task =
-        Task.async(fn ->
+        Task.Supervisor.async(Lotus.TaskSupervisor, fn ->
           execute_card(card, filter_values, filter_lookup, all_mappings, opts)
         end)
 
