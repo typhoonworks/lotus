@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Pluggable source adapter abstraction (`Lotus.Source.Adapter`) for wrapping data sources behind a uniform callback interface
+- `Lotus.Source.Resolver` behaviour for configurable source resolution
+- `Lotus.Visibility.Resolver` behaviour for configurable visibility rule resolution
+- Default implementations: `Lotus.Source.Resolvers.Static`, `Lotus.Visibility.Resolvers.Static`, `Lotus.Source.Adapters.Ecto`
+- Config keys: `:source_resolver` (default `Lotus.Source.Resolvers.Static`), `:visibility_resolver` (default `Lotus.Visibility.Resolvers.Static`)
+
+### Changed (BREAKING — internal API only, public API unchanged)
+
+- `Sources.resolve!/2` returns `%Adapter{}` instead of `{module, name}` tuple
+- `Runner.run_sql/4` accepts `%Adapter{}` instead of repo module
+- `Preflight.authorize` accepts `%Adapter{}` instead of `(repo, repo_name)`
+- Source behaviour SQL generation callbacks now take `state` as first argument
+
 ### Security
 
 - **FIX:** Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)

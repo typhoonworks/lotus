@@ -124,6 +124,7 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **AI query explanation** — get plain-language explanations of what a query does, including selected fragments; understands Lotus `{{variable}}` and `[[optional]]` syntax
 - **AI query optimization** — get actionable optimization suggestions (indexes, rewrites, schema changes) powered by EXPLAIN plan analysis
 - **Read-only by default** — all queries run in read-only transactions with automatic timeout controls and session state management (opt out per-query with `read_only: false`)
+- **Pluggable adapters** — data sources are wrapped in a uniform `Lotus.Source.Adapter` behaviour, decoupling the execution pipeline from Ecto. The default `Ecto` adapter works out of the box with your existing `data_repos` config. Custom adapters can target non-Ecto sources, and custom resolvers can load sources dynamically from a database or external service. See the [source adapters guide](guides/source-adapters.md).
 
 ## Production Ready
 
