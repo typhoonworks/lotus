@@ -287,49 +287,56 @@ defmodule Lotus.Schema do
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
       if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}) do
-        try do
-          case Adapter.get_table_schema(adapter, resolved_schema, table_name) do
-            {:ok, cols} ->
-              rels = [{resolved_schema, table_name}]
-
-              annotated =
-                Enum.reduce(cols, [], fn col, acc ->
-                  policy = Visibility.column_policy_for(adapter.name, rels, col.name)
-
-                  cond do
-                    Policy.hidden_from_schema?(policy) ->
-                      acc
-
-                    is_map(policy) ->
-                      [Map.put(col, :visibility, Map.take(policy, [:action, :mask])) | acc]
-
-                    true ->
-                      [col | acc]
-                  end
-                end)
-                |> Enum.reverse()
-
-              run_after_discover(:after_get_table_schema, :columns, %{
-                repo: adapter.name,
-                repo_name: adapter.name,
-                table_name: table_name,
-                schema: resolved_schema,
-                columns: annotated,
-                context: context
-              })
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-        rescue
-          e -> {:error, Exception.message(e)}
-        end
+        fetch_and_annotate_columns(adapter, resolved_schema, table_name, context)
       else
-        {:error,
-         "Table '#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}' is not visible by Lotus policy"}
+        {:error, table_not_visible_message(resolved_schema, table_name)}
       end
     end)
   end
+
+  defp fetch_and_annotate_columns(adapter, resolved_schema, table_name, context) do
+    case Adapter.get_table_schema(adapter, resolved_schema, table_name) do
+      {:ok, cols} ->
+        annotated =
+          annotate_columns_with_visibility(cols, adapter.name, resolved_schema, table_name)
+
+        run_after_discover(:after_get_table_schema, :columns, %{
+          repo: adapter.name,
+          repo_name: adapter.name,
+          table_name: table_name,
+          schema: resolved_schema,
+          columns: annotated,
+          context: context
+        })
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  defp annotate_columns_with_visibility(cols, source_name, schema, table_name) do
+    rels = [{schema, table_name}]
+
+    cols
+    |> Enum.reduce([], fn col, acc ->
+      policy = Visibility.column_policy_for(source_name, rels, col.name)
+
+      cond do
+        Policy.hidden_from_schema?(policy) -> acc
+        is_map(policy) -> [Map.put(col, :visibility, Map.take(policy, [:action, :mask])) | acc]
+        true -> [col | acc]
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  defp table_not_visible_message(nil, table_name),
+    do: "Table '#{table_name}' is not visible by Lotus policy"
+
+  defp table_not_visible_message(schema, table_name),
+    do: "Table '#{schema}.#{table_name}' is not visible by Lotus policy"
 
   @doc """
   Gets basic statistics about a table.

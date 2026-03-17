@@ -5,6 +5,8 @@ defmodule Lotus.Source do
   Defines the interface that each database source adapter's operations module must implement.
   """
 
+  alias Lotus.Source.Adapter
+
   @type repo :: Ecto.Repo.t()
 
   @callback execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
@@ -442,8 +444,8 @@ defmodule Lotus.Source do
   """
   def apply_filters(_repo_or_adapter, sql, params, []), do: {sql, params}
 
-  def apply_filters(%Lotus.Source.Adapter{} = adapter, sql, params, filters) do
-    Lotus.Source.Adapter.apply_filters(adapter, sql, params, filters)
+  def apply_filters(%Adapter{} = adapter, sql, params, filters) do
+    Adapter.apply_filters(adapter, sql, params, filters)
   end
 
   def apply_filters(repo_or_name, sql, params, filters) do
@@ -458,8 +460,8 @@ defmodule Lotus.Source do
   """
   def apply_sorts(_repo_or_adapter, sql, []), do: sql
 
-  def apply_sorts(%Lotus.Source.Adapter{} = adapter, sql, sorts) do
-    Lotus.Source.Adapter.apply_sorts(adapter, sql, sorts)
+  def apply_sorts(%Adapter{} = adapter, sql, sorts) do
+    Adapter.apply_sorts(adapter, sql, sorts)
   end
 
   def apply_sorts(repo_or_name, sql, sorts) do

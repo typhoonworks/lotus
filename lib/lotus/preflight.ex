@@ -40,42 +40,31 @@ defmodule Lotus.Preflight do
 
   defp authorize_pg(%Adapter{} = adapter, sql, params, search_path) do
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
+    opts = if search_path, do: [search_path: search_path], else: []
 
-    opts =
-      if search_path do
-        [search_path: search_path]
-      else
-        []
-      end
-
-    result = Adapter.execute_query(adapter, explain, params, opts)
-
-    case result do
+    case Adapter.execute_query(adapter, explain, params, opts) do
       {:ok, %{rows: [[json]]}} ->
-        plan_data =
-          case json do
-            binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
-            data when is_list(data) or is_map(data) -> data
-          end
-
-        plan =
-          case plan_data do
-            [first | _] -> Map.fetch!(first, "Plan")
-            %{"Plan" => plan} -> plan
-          end
-
-        rels = collect_pg_relations(plan, MapSet.new()) |> MapSet.to_list()
-
-        if Enum.all?(rels, &Visibility.allowed_relation?(adapter.name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked_tables = Enum.reject(rels, &Visibility.allowed_relation?(adapter.name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked_tables)}"}
-        end
+        json
+        |> parse_pg_explain_plan()
+        |> collect_pg_relations(MapSet.new())
+        |> MapSet.to_list()
+        |> check_relations_visibility(adapter.name)
 
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp parse_pg_explain_plan(json) do
+    plan_data =
+      case json do
+        binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
+        data when is_list(data) or is_map(data) -> data
+      end
+
+    case plan_data do
+      [first | _] -> Map.fetch!(first, "Plan")
+      %{"Plan" => plan} -> plan
     end
   end
 
@@ -98,13 +87,7 @@ defmodule Lotus.Preflight do
           |> MapSet.to_list()
           |> Enum.map(&{nil, &1})
 
-        if Enum.all?(rels, &Visibility.allowed_relation?(adapter.name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked = Enum.reject(rels, &Visibility.allowed_relation?(adapter.name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
-        end
+        check_relations_visibility(rels, adapter.name)
 
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
@@ -118,32 +101,33 @@ defmodule Lotus.Preflight do
 
     case Adapter.execute_query(adapter, explain, params, []) do
       {:ok, %{rows: [[json]]}} ->
-        plan_data = Lotus.JSON.decode!(json)
-
         explain_rels =
-          plan_data
+          json
+          |> Lotus.JSON.decode!()
           |> collect_mysql_relations(MapSet.new())
           |> MapSet.to_list()
           |> Enum.map(fn {schema, table_name} ->
-            actual_name = resolve_alias(table_name, alias_map)
-            {schema, actual_name}
+            {schema, resolve_alias(table_name, alias_map)}
           end)
           |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
 
         sql_rels = extract_mysql_tables_from_sql(sql)
-
         rels = choose_mysql_relations(explain_rels, sql_rels, sql)
 
-        if Enum.all?(rels, &Visibility.allowed_relation?(adapter.name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked = Enum.reject(rels, &Visibility.allowed_relation?(adapter.name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
-        end
+        check_relations_visibility(rels, adapter.name)
 
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp check_relations_visibility(rels, source_name) do
+    if Enum.all?(rels, &Visibility.allowed_relation?(source_name, &1)) do
+      Relations.put(rels)
+      :ok
+    else
+      blocked = Enum.reject(rels, &Visibility.allowed_relation?(source_name, &1))
+      {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
     end
   end
 
