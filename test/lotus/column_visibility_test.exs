@@ -7,7 +7,8 @@ defmodule Lotus.ColumnVisibilityTest do
 
   setup do
     Mimic.copy(Lotus.Config)
-    Mimic.copy(Lotus.Source)
+    Mimic.copy(Lotus.Source.Adapter)
+    Mimic.copy(Lotus.Sources)
     :ok
   end
 
@@ -103,17 +104,31 @@ defmodule Lotus.ColumnVisibilityTest do
     end
 
     test "get_table_schema annotates visibility and preserves visible columns" do
-      Lotus.Source
-      |> stub(:resolve_table_schema, fn _repo, _table, _schemas -> "public" end)
+      mock_adapter = %Lotus.Source.Adapter{
+        name: "postgres",
+        module: Lotus.Source.Adapters.Ecto,
+        state: Lotus.Test.Repo,
+        source_type: :postgres
+      }
 
-      Lotus.Source
-      |> stub(:get_table_schema, fn _repo, _schema, _table ->
-        [
-          %{name: "id", type: "integer", nullable: false, default: nil, primary_key: true},
-          %{name: "password", type: "text", nullable: true, default: nil, primary_key: false},
-          %{name: "secret", type: "text", nullable: true, default: nil, primary_key: false}
-        ]
+      Lotus.Sources
+      |> stub(:resolve!, fn _repo_opt, _fallback -> mock_adapter end)
+
+      Lotus.Source.Adapter
+      |> stub(:resolve_table_schema, fn _adapter, _table, _schemas -> {:ok, "public"} end)
+
+      Lotus.Source.Adapter
+      |> stub(:get_table_schema, fn _adapter, _schema, _table ->
+        {:ok,
+         [
+           %{name: "id", type: "integer", nullable: false, default: nil, primary_key: true},
+           %{name: "password", type: "text", nullable: true, default: nil, primary_key: false},
+           %{name: "secret", type: "text", nullable: true, default: nil, primary_key: false}
+         ]}
       end)
+
+      Lotus.Source.Adapter
+      |> stub(:default_schemas, fn _adapter -> ["public"] end)
 
       {:ok, cols} = Schema.get_table_schema("postgres", "users", schema: "public")
 

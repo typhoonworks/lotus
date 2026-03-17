@@ -2,17 +2,18 @@ defmodule Lotus.PreflightMysqlTest do
   use Lotus.Case
   use Mimic
   alias Lotus.Preflight
+  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
   @moduletag :mysql
 
-  @mysql_repo Lotus.Test.MysqlRepo
+  @mysql_adapter EctoAdapter.wrap("mysql", Lotus.Test.MysqlRepo)
 
   describe "MySQL preflight authorization" do
     test "allows queries against regular tables" do
-      assert :ok = Preflight.authorize(@mysql_repo, "mysql", "SELECT 1", [])
+      assert :ok = Preflight.authorize(@mysql_adapter, "SELECT 1", [])
 
       assert :ok =
-               Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM test_users LIMIT 1", [])
+               Preflight.authorize(@mysql_adapter, "SELECT * FROM test_users LIMIT 1", [])
     end
 
     test "allows complex queries with JOINs" do
@@ -25,20 +26,19 @@ defmodule Lotus.PreflightMysqlTest do
         LIMIT 10
       """
 
-      assert :ok = Preflight.authorize(@mysql_repo, "mysql", sql, [])
+      assert :ok = Preflight.authorize(@mysql_adapter, sql, [])
     end
 
     test "allows simple queries" do
       assert :ok =
                Preflight.authorize(
-                 @mysql_repo,
-                 "mysql",
+                 @mysql_adapter,
                  "SELECT * FROM test_posts WHERE user_id IS NOT NULL",
                  []
                )
 
       assert :ok =
-               Preflight.authorize(@mysql_repo, "mysql", "SELECT COUNT(*) FROM test_users", [])
+               Preflight.authorize(@mysql_adapter, "SELECT COUNT(*) FROM test_users", [])
     end
 
     test "allows subqueries and CTEs" do
@@ -48,7 +48,7 @@ defmodule Lotus.PreflightMysqlTest do
         WHERE user_id IN (SELECT id FROM test_users WHERE active = 1)
       """
 
-      assert :ok = Preflight.authorize(@mysql_repo, "mysql", sql, [])
+      assert :ok = Preflight.authorize(@mysql_adapter, sql, [])
 
       # CTE
       sql = """
@@ -61,36 +61,34 @@ defmodule Lotus.PreflightMysqlTest do
         SELECT * FROM user_stats WHERE post_count > 0
       """
 
-      assert :ok = Preflight.authorize(@mysql_repo, "mysql", sql, [])
+      assert :ok = Preflight.authorize(@mysql_adapter, sql, [])
     end
 
     test "handles parameterized queries" do
       assert :ok =
                Preflight.authorize(
-                 @mysql_repo,
-                 "mysql",
+                 @mysql_adapter,
                  "SELECT * FROM test_users WHERE id = ?",
                  [1]
                )
 
       assert :ok =
                Preflight.authorize(
-                 @mysql_repo,
-                 "mysql",
+                 @mysql_adapter,
                  "SELECT * FROM test_posts WHERE user_id = ?",
                  [1]
                )
     end
 
     test "handles syntax errors gracefully" do
-      {:error, _msg} = Preflight.authorize(@mysql_repo, "mysql", "INVALID SQL SYNTAX", [])
+      {:error, _msg} = Preflight.authorize(@mysql_adapter, "INVALID SQL SYNTAX", [])
     end
   end
 
   describe "MySQL builtin deny tests" do
     test "blocks queries against information_schema" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM information_schema.tables", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM information_schema.tables", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "information_schema"
@@ -98,7 +96,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against information_schema columns" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM information_schema.columns", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM information_schema.columns", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "information_schema"
@@ -106,7 +104,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against mysql schema" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM mysql.user", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM mysql.user", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "mysql"
@@ -114,7 +112,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against mysql db table" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM mysql.db", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM mysql.db", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "mysql"
@@ -123,8 +121,7 @@ defmodule Lotus.PreflightMysqlTest do
     test "blocks queries against performance_schema" do
       {:error, msg} =
         Preflight.authorize(
-          @mysql_repo,
-          "mysql",
+          @mysql_adapter,
           "SELECT * FROM performance_schema.events_waits_current",
           []
         )
@@ -135,7 +132,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against performance_schema tables" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM performance_schema.threads", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM performance_schema.threads", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "performance_schema"
@@ -143,7 +140,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against sys schema" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM sys.version", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM sys.version", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "sys"
@@ -151,7 +148,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against sys schema tables" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM sys.host_summary", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM sys.host_summary", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "sys"
@@ -160,8 +157,7 @@ defmodule Lotus.PreflightMysqlTest do
     test "blocks queries against schema_migrations" do
       {:error, msg} =
         Preflight.authorize(
-          @mysql_repo,
-          "mysql",
+          @mysql_adapter,
           "SELECT * FROM lotus_mysql_schema_migrations",
           []
         )
@@ -172,7 +168,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "blocks queries against lotus_queries" do
       {:error, msg} =
-        Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM lotus_queries", [])
+        Preflight.authorize(@mysql_adapter, "SELECT * FROM lotus_queries", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "lotus_queries"
@@ -185,7 +181,7 @@ defmodule Lotus.PreflightMysqlTest do
         JOIN lotus_mysql_schema_migrations sm ON 1=1
       """
 
-      {:error, msg} = Preflight.authorize(@mysql_repo, "mysql", sql, [])
+      {:error, msg} = Preflight.authorize(@mysql_adapter, sql, [])
       assert msg =~ "blocked table"
       assert msg =~ "schema_migrations"
     end
@@ -200,11 +196,11 @@ defmodule Lotus.PreflightMysqlTest do
     end
 
     test "blocks queries against tables matching bare string deny rules" do
-      {:error, msg} = Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM test_users", [])
+      {:error, msg} = Preflight.authorize(@mysql_adapter, "SELECT * FROM test_users", [])
       assert msg =~ "blocked table"
       assert msg =~ "test_users"
 
-      {:error, msg} = Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM test_posts", [])
+      {:error, msg} = Preflight.authorize(@mysql_adapter, "SELECT * FROM test_posts", [])
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
     end
@@ -216,7 +212,7 @@ defmodule Lotus.PreflightMysqlTest do
         JOIN test_posts tp ON tu.id = tp.user_id
       """
 
-      {:error, msg} = Preflight.authorize(@mysql_repo, "mysql", sql, [])
+      {:error, msg} = Preflight.authorize(@mysql_adapter, sql, [])
       assert msg =~ "blocked table"
       assert msg =~ "test_users"
       assert msg =~ "test_posts"
@@ -224,7 +220,7 @@ defmodule Lotus.PreflightMysqlTest do
 
     test "allows queries against tables not in deny list" do
       # products table is not in the deny list
-      assert :ok = Preflight.authorize(@mysql_repo, "mysql", "SELECT * FROM products LIMIT 1", [])
+      assert :ok = Preflight.authorize(@mysql_adapter, "SELECT * FROM products LIMIT 1", [])
     end
   end
 end

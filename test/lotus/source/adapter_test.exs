@@ -45,19 +45,20 @@ defmodule Lotus.Source.AdapterTest do
 
     # --- SQL Generation ---
     @impl true
-    def quote_identifier(identifier), do: ~s("#{identifier}")
+    def quote_identifier(_state, identifier), do: ~s("#{identifier}")
 
     @impl true
-    def param_placeholder(index, _var, _type), do: "$#{index}"
+    def param_placeholder(_state, index, _var, _type), do: "$#{index}"
 
     @impl true
-    def limit_offset_placeholders(limit_idx, offset_idx), do: {"$#{limit_idx}", "$#{offset_idx}"}
+    def limit_offset_placeholders(_state, limit_idx, offset_idx),
+      do: {"$#{limit_idx}", "$#{offset_idx}"}
 
     @impl true
-    def apply_filters(sql, params, _filters), do: {sql <> " WHERE 1=1", params}
+    def apply_filters(_state, sql, params, _filters), do: {sql <> " WHERE 1=1", params}
 
     @impl true
-    def apply_sorts(sql, _sorts), do: sql <> " ORDER BY id"
+    def apply_sorts(_state, sql, _sorts), do: sql <> " ORDER BY id"
 
     @impl true
     def explain_plan(_state, sql, _params, _opts), do: {:ok, "Seq Scan on #{sql}"}
@@ -81,18 +82,18 @@ defmodule Lotus.Source.AdapterTest do
 
     # --- Error Handling ---
     @impl true
-    def format_error(error), do: "Mock error: #{inspect(error)}"
+    def format_error(_state, error), do: "Mock error: #{inspect(error)}"
 
     @impl true
-    def handled_errors, do: [RuntimeError]
+    def handled_errors(_state), do: [RuntimeError]
 
     # --- Source Identity ---
     @impl true
-    def source_type, do: :postgres
+    def source_type(_state), do: :postgres
 
     @impl true
-    def supports_feature?(:json), do: true
-    def supports_feature?(_), do: false
+    def supports_feature?(_state, :json), do: true
+    def supports_feature?(_state, _), do: false
   end
 
   describe "struct creation" do
@@ -148,15 +149,15 @@ defmodule Lotus.Source.AdapterTest do
       assert {"public", "users"} in tables
     end
 
-    test "quote_identifier/2 dispatches without state (stateless)", %{adapter: adapter} do
+    test "quote_identifier/2 dispatches with state", %{adapter: adapter} do
       assert ~s("users") == Adapter.quote_identifier(adapter, "users")
     end
 
-    test "source_type/1 dispatches without state (stateless)", %{adapter: adapter} do
+    test "source_type/1 dispatches with state", %{adapter: adapter} do
       assert :postgres == Adapter.source_type(adapter)
     end
 
-    test "supports_feature?/2 dispatches without state (stateless)", %{adapter: adapter} do
+    test "supports_feature?/2 dispatches with state", %{adapter: adapter} do
       assert Adapter.supports_feature?(adapter, :json) == true
       assert Adapter.supports_feature?(adapter, :arrays) == false
     end
@@ -185,21 +186,21 @@ defmodule Lotus.Source.AdapterTest do
       assert result == :done
     end
 
-    test "param_placeholder/4 dispatches without state", %{adapter: adapter} do
+    test "param_placeholder/4 dispatches with state", %{adapter: adapter} do
       assert "$1" == Adapter.param_placeholder(adapter, 1, "id", nil)
     end
 
-    test "limit_offset_placeholders/3 dispatches without state", %{adapter: adapter} do
+    test "limit_offset_placeholders/3 dispatches with state", %{adapter: adapter} do
       assert {"$1", "$2"} == Adapter.limit_offset_placeholders(adapter, 1, 2)
     end
 
-    test "apply_filters/4 dispatches without state", %{adapter: adapter} do
+    test "apply_filters/4 dispatches with state", %{adapter: adapter} do
       {sql, params} = Adapter.apply_filters(adapter, "SELECT 1", [], [%{}])
       assert sql =~ "WHERE 1=1"
       assert params == []
     end
 
-    test "apply_sorts/3 dispatches without state", %{adapter: adapter} do
+    test "apply_sorts/3 dispatches with state", %{adapter: adapter} do
       sql = Adapter.apply_sorts(adapter, "SELECT 1", [:id])
       assert sql =~ "ORDER BY id"
     end
@@ -221,11 +222,11 @@ defmodule Lotus.Source.AdapterTest do
       assert :ok = Adapter.disconnect(adapter)
     end
 
-    test "format_error/2 dispatches without state (stateless)", %{adapter: adapter} do
+    test "format_error/2 dispatches with state", %{adapter: adapter} do
       assert "Mock error: :boom" == Adapter.format_error(adapter, :boom)
     end
 
-    test "handled_errors/1 dispatches without state (stateless)", %{adapter: adapter} do
+    test "handled_errors/1 dispatches with state", %{adapter: adapter} do
       assert [RuntimeError] = Adapter.handled_errors(adapter)
     end
   end

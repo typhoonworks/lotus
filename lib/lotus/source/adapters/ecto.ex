@@ -97,7 +97,14 @@ defmodule Lotus.Source.Adapters.Ecto do
         case repo.query(sql, params, timeout: timeout) do
           {:ok, %{columns: cols, rows: rows} = raw} ->
             num_rows = Map.get(raw, :num_rows, length(rows || []))
-            %{columns: cols, rows: rows, num_rows: num_rows}
+
+            result =
+              %{columns: cols, rows: rows, num_rows: num_rows}
+              |> maybe_put(:command, Map.get(raw, :command))
+              |> maybe_put(:connection_id, Map.get(raw, :connection_id))
+              |> maybe_put(:messages, Map.get(raw, :messages))
+
+            result
 
           {:error, err} ->
             repo.rollback(impl.format_error(err))
@@ -152,33 +159,32 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   # ---------------------------------------------------------------------------
-  # Callbacks — SQL Generation (delegate to source impl)
+  # Callbacks — SQL Generation (delegate to source impl via state)
   # ---------------------------------------------------------------------------
 
   @impl true
-  defdelegate quote_identifier(identifier), to: Lotus.Sources.Postgres
-
-  @impl true
-  def param_placeholder(index, var, type) do
-    # Delegate based on current module's source type; since this is stateless
-    # and we don't have the repo here, we delegate to Postgres as the default.
-    # The wrap/2 function ensures the correct source_type is set on the struct.
-    Lotus.Sources.Postgres.param_placeholder(index, var, type)
+  def quote_identifier(repo, identifier) do
+    impl_for(repo).quote_identifier(identifier)
   end
 
   @impl true
-  def limit_offset_placeholders(limit_index, offset_index) do
-    Lotus.Sources.Postgres.limit_offset_placeholders(limit_index, offset_index)
+  def param_placeholder(repo, index, var, type) do
+    impl_for(repo).param_placeholder(index, var, type)
   end
 
   @impl true
-  def apply_filters(sql, params, filters) do
-    Lotus.Sources.Postgres.apply_filters(sql, params, filters)
+  def limit_offset_placeholders(repo, limit_index, offset_index) do
+    impl_for(repo).limit_offset_placeholders(limit_index, offset_index)
   end
 
   @impl true
-  def apply_sorts(sql, sorts) do
-    Lotus.Sources.Postgres.apply_sorts(sql, sorts)
+  def apply_filters(repo, sql, params, filters) do
+    impl_for(repo).apply_filters(sql, params, filters)
+  end
+
+  @impl true
+  def apply_sorts(repo, sql, sorts) do
+    impl_for(repo).apply_sorts(sql, sorts)
   end
 
   @impl true
@@ -230,16 +236,13 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def format_error(error) do
+  def format_error(_repo, error) do
     impl_for_error(error).format_error(error)
   end
 
   @impl true
-  def handled_errors do
-    @impls
-    |> Map.values()
-    |> Enum.flat_map(& &1.handled_errors())
-    |> Enum.uniq()
+  def handled_errors(repo) do
+    impl_for(repo).handled_errors()
   end
 
   # ---------------------------------------------------------------------------
@@ -247,11 +250,12 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def source_type, do: :postgres
+  def source_type(repo), do: detect_source_type(repo)
 
   @impl true
-  def supports_feature?(feature) do
-    Lotus.Sources.supports_feature?(:postgres, feature)
+  def supports_feature?(repo, feature) do
+    source = detect_source_type(repo)
+    Lotus.Sources.supports_feature?(source, feature)
   end
 
   # ---------------------------------------------------------------------------
@@ -274,4 +278,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   defp impl_for_error(_), do: Lotus.Sources.Default
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

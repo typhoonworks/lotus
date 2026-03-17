@@ -99,21 +99,27 @@ defmodule Lotus.Source.Adapter do
   # ---------------------------------------------------------------------------
 
   @doc "Quote a SQL identifier (column, table, schema name) using source-specific syntax."
-  @callback quote_identifier(String.t()) :: String.t()
+  @callback quote_identifier(state :: term(), String.t()) :: String.t()
 
   @doc "Return the parameter placeholder for a variable at the given 1-based index."
-  @callback param_placeholder(index :: pos_integer(), var :: String.t(), type :: atom() | nil) ::
+  @callback param_placeholder(
+              state :: term(),
+              index :: pos_integer(),
+              var :: String.t(),
+              type :: atom() | nil
+            ) ::
               String.t()
 
   @doc "Return `{limit_placeholder, offset_placeholder}` for LIMIT/OFFSET clauses."
-  @callback limit_offset_placeholders(pos_integer(), pos_integer()) :: {String.t(), String.t()}
+  @callback limit_offset_placeholders(state :: term(), pos_integer(), pos_integer()) ::
+              {String.t(), String.t()}
 
   @doc "Append WHERE clauses for the given filters, returning `{sql, params}`."
-  @callback apply_filters(sql :: String.t(), params :: list(), filters :: list()) ::
+  @callback apply_filters(state :: term(), sql :: String.t(), params :: list(), filters :: list()) ::
               {String.t(), list()}
 
   @doc "Append ORDER BY clauses for the given sorts."
-  @callback apply_sorts(sql :: String.t(), sorts :: list()) :: String.t()
+  @callback apply_sorts(state :: term(), sql :: String.t(), sorts :: list()) :: String.t()
 
   @doc "Return the execution plan for a SQL query."
   @callback explain_plan(state :: term(), sql :: String.t(), params :: list(), opts :: keyword()) ::
@@ -148,20 +154,20 @@ defmodule Lotus.Source.Adapter do
   # ---------------------------------------------------------------------------
 
   @doc "Format a database error into a human-readable string."
-  @callback format_error(any()) :: String.t()
+  @callback format_error(state :: term(), any()) :: String.t()
 
   @doc "Return the exception modules this adapter knows how to format."
-  @callback handled_errors() :: [module()]
+  @callback handled_errors(state :: term()) :: [module()]
 
   # ---------------------------------------------------------------------------
   # Callbacks — Source Identity
   # ---------------------------------------------------------------------------
 
   @doc "Return the source type atom (e.g. `:postgres`, `:mysql`)."
-  @callback source_type() :: source_type()
+  @callback source_type(state :: term()) :: source_type()
 
   @doc "Whether this adapter supports a given feature."
-  @callback supports_feature?(atom()) :: boolean()
+  @callback supports_feature?(state :: term(), atom()) :: boolean()
 
   # ---------------------------------------------------------------------------
   # Dispatch helpers — stateful (pass adapter.state as first arg)
@@ -245,60 +251,60 @@ defmodule Lotus.Source.Adapter do
   end
 
   # ---------------------------------------------------------------------------
-  # Dispatch helpers — stateless (no state argument needed)
+  # Dispatch helpers — SQL generation (pass adapter.state for correct dispatch)
   # ---------------------------------------------------------------------------
 
   @doc "Quote a SQL identifier via the adapter."
   @spec quote_identifier(t(), String.t()) :: String.t()
-  def quote_identifier(%__MODULE__{module: mod}, identifier) do
-    mod.quote_identifier(identifier)
+  def quote_identifier(%__MODULE__{module: mod, state: state}, identifier) do
+    mod.quote_identifier(state, identifier)
   end
 
   @doc "Return the parameter placeholder via the adapter."
   @spec param_placeholder(t(), pos_integer(), String.t(), atom() | nil) :: String.t()
-  def param_placeholder(%__MODULE__{module: mod}, index, var, type) do
-    mod.param_placeholder(index, var, type)
+  def param_placeholder(%__MODULE__{module: mod, state: state}, index, var, type) do
+    mod.param_placeholder(state, index, var, type)
   end
 
   @doc "Return LIMIT/OFFSET placeholders via the adapter."
   @spec limit_offset_placeholders(t(), pos_integer(), pos_integer()) :: {String.t(), String.t()}
-  def limit_offset_placeholders(%__MODULE__{module: mod}, limit_index, offset_index) do
-    mod.limit_offset_placeholders(limit_index, offset_index)
+  def limit_offset_placeholders(%__MODULE__{module: mod, state: state}, limit_index, offset_index) do
+    mod.limit_offset_placeholders(state, limit_index, offset_index)
   end
 
   @doc "Apply filters to a query via the adapter."
   @spec apply_filters(t(), String.t(), list(), list()) :: {String.t(), list()}
-  def apply_filters(%__MODULE__{module: mod}, sql, params, filters) do
-    mod.apply_filters(sql, params, filters)
+  def apply_filters(%__MODULE__{module: mod, state: state}, sql, params, filters) do
+    mod.apply_filters(state, sql, params, filters)
   end
 
   @doc "Apply sorts to a query via the adapter."
   @spec apply_sorts(t(), String.t(), list()) :: String.t()
-  def apply_sorts(%__MODULE__{module: mod}, sql, sorts) do
-    mod.apply_sorts(sql, sorts)
+  def apply_sorts(%__MODULE__{module: mod, state: state}, sql, sorts) do
+    mod.apply_sorts(state, sql, sorts)
   end
 
   @doc "Format an error via the adapter."
   @spec format_error(t(), any()) :: String.t()
-  def format_error(%__MODULE__{module: mod}, error) do
-    mod.format_error(error)
+  def format_error(%__MODULE__{module: mod, state: state}, error) do
+    mod.format_error(state, error)
   end
 
   @doc "Return handled error modules via the adapter."
   @spec handled_errors(t()) :: [module()]
-  def handled_errors(%__MODULE__{module: mod}) do
-    mod.handled_errors()
+  def handled_errors(%__MODULE__{module: mod, state: state}) do
+    mod.handled_errors(state)
   end
 
   @doc "Return the source type via the adapter."
   @spec source_type(t()) :: source_type()
-  def source_type(%__MODULE__{module: mod}) do
-    mod.source_type()
+  def source_type(%__MODULE__{module: mod, state: state}) do
+    mod.source_type(state)
   end
 
   @doc "Check feature support via the adapter."
   @spec supports_feature?(t(), atom()) :: boolean()
-  def supports_feature?(%__MODULE__{module: mod}, feature) do
-    mod.supports_feature?(feature)
+  def supports_feature?(%__MODULE__{module: mod, state: state}, feature) do
+    mod.supports_feature?(state, feature)
   end
 end
