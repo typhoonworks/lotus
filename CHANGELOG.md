@@ -2,20 +2,23 @@
 
 ## [Unreleased]
 
+### Breaking
+
+- `Sources.resolve!/2` returns `%Lotus.Source.Adapter{}` struct instead of `{module, name}` tuple
+- `Runner.run_sql/4` first argument changed from repo module to `%Lotus.Source.Adapter{}`
+- `Preflight.authorize` accepts `%Lotus.Source.Adapter{}` instead of `(repo, repo_name)` tuple
+- Source behaviour SQL generation callbacks (`param_placeholder`, `apply_filters`, `apply_sorts`, `quote_identifier`, `limit_offset_placeholders`) now take `state` as first argument
+- Source behaviour error handling callbacks (`format_error`, `handled_errors`) now take `state` as first argument
+- **Note:** The public API (`Lotus.run_query/2`, `Lotus.run_sql/3`, `Lotus.list_schemas/2`, etc.) is unchanged. These are internal API changes affecting code that calls `Runner`, `Sources`, `Preflight`, or `Source` directly.
+
 ### Added
 
-- Pluggable source adapter abstraction (`Lotus.Source.Adapter`) for wrapping data sources behind a uniform callback interface
+- Pluggable source adapter abstraction (`Lotus.Source.Adapter`) — behaviour and struct wrapping data sources behind a uniform callback interface with consistent `{:ok, _} | {:error, _}` return types
 - `Lotus.Source.Resolver` behaviour for configurable source resolution
 - `Lotus.Visibility.Resolver` behaviour for configurable visibility rule resolution
 - Default implementations: `Lotus.Source.Resolvers.Static`, `Lotus.Visibility.Resolvers.Static`, `Lotus.Source.Adapters.Ecto`
 - Config keys: `:source_resolver` (default `Lotus.Source.Resolvers.Static`), `:visibility_resolver` (default `Lotus.Visibility.Resolvers.Static`)
-
-### Changed (BREAKING — internal API only, public API unchanged)
-
-- `Sources.resolve!/2` returns `%Adapter{}` instead of `{module, name}` tuple
-- `Runner.run_sql/4` accepts `%Adapter{}` instead of repo module
-- `Preflight.authorize` accepts `%Adapter{}` instead of `(repo, repo_name)`
-- Source behaviour SQL generation callbacks now take `state` as first argument
+- Guide: `source-adapters.md` documenting the adapter system, custom resolvers, and custom adapters
 
 ### Security
 
