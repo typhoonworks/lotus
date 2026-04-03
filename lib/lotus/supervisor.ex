@@ -25,8 +25,11 @@ defmodule Lotus.Supervisor do
         nil -> []
       end
 
+    instance_name = Keyword.get(opts, :name) || Keyword.get(opts, :supervisor_name, Lotus)
+    task_sup_name = task_supervisor_name(instance_name)
+
     children =
-      [{Task.Supervisor, name: Lotus.TaskSupervisor} | cache_children]
+      [{Task.Supervisor, name: task_sup_name} | cache_children]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
@@ -39,6 +42,12 @@ defmodule Lotus.Supervisor do
       type: :supervisor
     }
   end
+
+  @doc """
+  Returns the task supervisor name for the given Lotus instance name.
+  """
+  def task_supervisor_name(name) when is_atom(name), do: Module.concat(name, TaskSupervisor)
+  def task_supervisor_name(name), do: :"lotus_task_sup_#{:erlang.phash2(name)}"
 
   defp compile_middleware(opts) do
     middleware_conf = Keyword.get(opts, :middleware, Lotus.Config.middleware())
