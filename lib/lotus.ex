@@ -440,32 +440,32 @@ defmodule Lotus do
   end
 
   defp execute_query(q, sql, params, vars, opts) do
-    {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
+    adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
 
     search_path = Keyword.get(opts, :search_path) || q.search_path
     final_opts = prepare_final_opts(opts, search_path)
 
     filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Lotus.Source.apply_filters(repo_mod, sql, params, filters)
+    {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
-    sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)
+    sql = Lotus.Source.apply_sorts(adapter, sql, sorts)
 
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(
         sql,
         params,
-        repo_mod || repo_name,
+        adapter,
         search_path,
         Keyword.get(opts, :window)
       )
 
-    key = result_key(sql, cache_bound || vars, repo_name, search_path)
-    tags = build_cache_tags(q.id, repo_name, opts)
+    key = result_key(sql, cache_bound || vars, adapter.name, search_path)
+    tags = build_cache_tags(q.id, adapter.name, opts)
     profile = determine_cache_profile(opts)
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, final_opts) do
+      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, final_opts) do
         {:ok, merge_window_meta(res, window_meta)}
       end
     end)
@@ -588,7 +588,7 @@ defmodule Lotus do
         ]) ::
           {:ok, Result.t()} | {:error, term()}
   def run_sql(sql, params \\ [], opts \\ []) do
-    {repo_mod, repo_name} = Sources.resolve!(Keyword.get(opts, :repo), nil)
+    adapter = Sources.resolve!(Keyword.get(opts, :repo), nil)
 
     runner_opts =
       opts
@@ -598,24 +598,24 @@ defmodule Lotus do
     search_path = Keyword.get(runner_opts, :search_path)
 
     filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Lotus.Source.apply_filters(repo_mod, sql, params, filters)
+    {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
-    sql = Lotus.Source.apply_sorts(repo_mod, sql, sorts)
+    sql = Lotus.Source.apply_sorts(adapter, sql, sorts)
 
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(
         sql,
         params,
-        repo_mod || repo_name,
+        adapter,
         search_path,
         Keyword.get(opts, :window)
       )
 
-    key = result_key(sql, cache_bound || params, repo_name, search_path)
+    key = result_key(sql, cache_bound || params, adapter.name, search_path)
 
     tags =
-      ["repo:#{repo_name}"] ++
+      ["repo:#{adapter.name}"] ++
         if is_list(opts[:cache]), do: Keyword.get(opts[:cache], :tags, []), else: []
 
     profile =
@@ -626,7 +626,7 @@ defmodule Lotus do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_sql(repo_mod, sql, params, runner_opts) do
+      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, runner_opts) do
         {:ok, merge_window_meta(res, window_meta)}
       end
     end)
@@ -844,19 +844,21 @@ defmodule Lotus do
     end
   end
 
-  defp maybe_apply_window(sql, params, _repo_or_name, _search_path, nil),
+  defp maybe_apply_window(sql, params, _adapter, _search_path, nil),
     do: {sql, params, nil, nil}
 
-  defp maybe_apply_window(sql, params, repo_or_name, search_path, window_opts)
+  defp maybe_apply_window(sql, params, adapter, search_path, window_opts)
        when is_list(window_opts) do
+    alias Lotus.Source.Adapter
+
     base_sql = trim_trailing_semicolon(sql)
     limit = resolve_window_limit(window_opts)
     offset = Keyword.get(window_opts, :offset, 0)
     count_mode = Keyword.get(window_opts, :count, :none)
 
     {limit_ph, offset_ph} =
-      Lotus.Source.limit_offset_placeholders(
-        repo_or_name,
+      Adapter.limit_offset_placeholders(
+        adapter,
         length(params) + 1,
         length(params) + 2
       )
@@ -876,7 +878,7 @@ defmodule Lotus do
             total_mode: :exact,
             count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
             count_params: params,
-            repo_or_name: repo_or_name,
+            adapter: adapter,
             search_path: search_path
           }
 
@@ -920,13 +922,10 @@ defmodule Lotus do
     }
   end
 
-  defp do_count(
-         %{count_sql: count_sql, count_params: count_params, repo_or_name: repo_or_name} = meta
-       ) do
-    {repo_mod, _repo_name} = Sources.resolve!(repo_or_name, nil)
+  defp do_count(%{count_sql: count_sql, count_params: count_params, adapter: adapter} = meta) do
     runner_opts = build_runner_opts(meta)
 
-    repo_mod
+    adapter
     |> Runner.run_sql(count_sql, count_params, runner_opts)
     |> parse_count_result()
   end

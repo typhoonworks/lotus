@@ -24,7 +24,8 @@ defmodule Lotus.Schema do
   - **SQLite**: Returns table names as strings (schema-less)
   """
 
-  alias Lotus.{Config, Middleware, Source, Sources, Telemetry, Visibility}
+  alias Lotus.{Config, Middleware, Sources, Telemetry, Visibility}
+  alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
 
   @doc """
@@ -54,12 +55,12 @@ defmodule Lotus.Schema do
   @spec list_schemas(module() | String.t(), keyword()) ::
           {:ok, [String.t()]} | {:error, term()}
   def list_schemas(repo_or_name, opts \\ []) do
-    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
-    start_time = Telemetry.schema_introspection_start(:list_schemas, repo_name)
+    start_time = Telemetry.schema_introspection_start(:list_schemas, adapter.name)
 
-    key = schema_key(:list_schemas, repo_name)
-    tags = ["repo:#{repo_name}", "schema:list_schemas"]
+    key = schema_key(:list_schemas, adapter.name)
+    tags = ["repo:#{adapter.name}", "schema:list_schemas"]
 
     profile =
       if is_list(opts[:cache]) do
@@ -71,15 +72,20 @@ defmodule Lotus.Schema do
     result =
       exec_with_cache(opts[:cache], profile, key, tags, fn ->
         try do
-          raw_schemas = Source.list_schemas(repo)
-          filtered_schemas = Visibility.filter_schemas(raw_schemas, repo_name)
+          case Adapter.list_schemas(adapter) do
+            {:ok, raw_schemas} ->
+              filtered_schemas = Visibility.filter_schemas(raw_schemas, adapter.name)
 
-          run_after_discover(:after_list_schemas, :schemas, %{
-            repo: repo,
-            repo_name: repo_name,
-            schemas: filtered_schemas,
-            context: context
-          })
+              run_after_discover(:after_list_schemas, :schemas, %{
+                repo: adapter.name,
+                repo_name: adapter.name,
+                schemas: filtered_schemas,
+                context: context
+              })
+
+            {:error, reason} ->
+              {:error, reason}
+          end
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -88,7 +94,7 @@ defmodule Lotus.Schema do
     Telemetry.schema_introspection_stop(
       start_time,
       :list_schemas,
-      repo_name,
+      adapter.name,
       result_status(result)
     )
 
@@ -131,26 +137,26 @@ defmodule Lotus.Schema do
   @spec list_tables(module() | String.t(), keyword()) ::
           {:ok, [{String.t(), String.t()}] | [String.t()]} | {:error, term()}
   def list_tables(repo_or_name, opts \\ []) do
-    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
-    start_time = Telemetry.schema_introspection_start(:list_tables, repo_name)
-    schemas = effective_schemas(repo, opts)
+    start_time = Telemetry.schema_introspection_start(:list_tables, adapter.name)
+    schemas = effective_schemas(adapter, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
     result =
-      case Visibility.validate_schemas(schemas, repo_name) do
+      case Visibility.validate_schemas(schemas, adapter.name) do
         :ok ->
           search_path = Keyword.get(opts, :search_path)
 
           key =
             schema_key(
               :list_tables,
-              repo_name,
+              adapter.name,
               search_path || Enum.join(schemas, ","),
               include_views?
             )
 
-          tags = ["repo:#{repo_name}", "schema:list_tables"]
+          tags = ["repo:#{adapter.name}", "schema:list_tables"]
 
           profile =
             if is_list(opts[:cache]) do
@@ -161,25 +167,29 @@ defmodule Lotus.Schema do
 
           exec_with_cache(opts[:cache], profile, key, tags, fn ->
             try do
-              raw_relations = Source.list_tables(repo, schemas, include_views?)
+              case Adapter.list_tables(adapter, schemas, include_views: include_views?) do
+                {:ok, raw_relations} ->
+                  filtered =
+                    raw_relations
+                    |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1))
 
-              filtered =
-                raw_relations
-                |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+                  tables =
+                    if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
+                      Enum.map(filtered, fn {nil, table} -> table end)
+                    else
+                      filtered
+                    end
 
-              tables =
-                if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
-                  Enum.map(filtered, fn {nil, table} -> table end)
-                else
-                  filtered
-                end
+                  run_after_discover(:after_list_tables, :tables, %{
+                    repo: adapter.name,
+                    repo_name: adapter.name,
+                    tables: tables,
+                    context: context
+                  })
 
-              run_after_discover(:after_list_tables, :tables, %{
-                repo: repo,
-                repo_name: repo_name,
-                tables: tables,
-                context: context
-              })
+                {:error, reason} ->
+                  {:error, reason}
+              end
             rescue
               e -> {:error, Exception.message(e)}
             end
@@ -192,7 +202,7 @@ defmodule Lotus.Schema do
     Telemetry.schema_introspection_stop(
       start_time,
       :list_tables,
-      repo_name,
+      adapter.name,
       result_status(result)
     )
 
@@ -225,15 +235,14 @@ defmodule Lotus.Schema do
   @spec get_table_schema(module() | String.t(), String.t(), keyword()) ::
           {:ok, [map()]} | {:error, term()}
   def get_table_schema(repo_or_name, table_name, opts \\ []) do
-    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
-    start_time = Telemetry.schema_introspection_start(:get_table_schema, repo_name)
-    schemas = effective_schemas(repo, opts)
+    start_time = Telemetry.schema_introspection_start(:get_table_schema, adapter.name)
+    schemas = effective_schemas(adapter, opts)
 
     result =
       case resolve_table_schema_with_cache(
-             repo,
-             repo_name,
+             adapter,
              table_name,
              schemas,
              opts[:cache],
@@ -241,30 +250,30 @@ defmodule Lotus.Schema do
            ) do
         nil when schemas == [] ->
           # Schema-less database (SQLite) - nil is expected, proceed with nil schema
-          get_table_schema_cached(repo, repo_name, table_name, nil, context, opts)
+          get_table_schema_cached(adapter, table_name, nil, context, opts)
 
         nil ->
           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
         resolved_schema ->
-          get_table_schema_cached(repo, repo_name, table_name, resolved_schema, context, opts)
+          get_table_schema_cached(adapter, table_name, resolved_schema, context, opts)
       end
 
     Telemetry.schema_introspection_stop(
       start_time,
       :get_table_schema,
-      repo_name,
+      adapter.name,
       result_status(result)
     )
 
     result
   end
 
-  defp get_table_schema_cached(repo, repo_name, table_name, resolved_schema, context, opts) do
-    key = schema_key(:get_table_schema, repo_name, resolved_schema, table_name)
+  defp get_table_schema_cached(adapter, table_name, resolved_schema, context, opts) do
+    key = schema_key(:get_table_schema, adapter.name, resolved_schema, table_name)
 
     tags = [
-      "repo:#{repo_name}",
+      "repo:#{adapter.name}",
       "schema:get_table_schema",
       "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
     ]
@@ -277,45 +286,57 @@ defmodule Lotus.Schema do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      if Visibility.allowed_relation?(repo_name, {resolved_schema, table_name}) do
-        try do
-          cols = Source.get_table_schema(repo, resolved_schema, table_name)
-          rels = [{resolved_schema, table_name}]
-
-          annotated =
-            Enum.reduce(cols, [], fn col, acc ->
-              policy = Visibility.column_policy_for(repo_name, rels, col.name)
-
-              cond do
-                Policy.hidden_from_schema?(policy) ->
-                  acc
-
-                is_map(policy) ->
-                  [Map.put(col, :visibility, Map.take(policy, [:action, :mask])) | acc]
-
-                true ->
-                  [col | acc]
-              end
-            end)
-            |> Enum.reverse()
-
-          run_after_discover(:after_get_table_schema, :columns, %{
-            repo: repo,
-            repo_name: repo_name,
-            table_name: table_name,
-            schema: resolved_schema,
-            columns: annotated,
-            context: context
-          })
-        rescue
-          e -> {:error, Exception.message(e)}
-        end
+      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}) do
+        fetch_and_annotate_columns(adapter, resolved_schema, table_name, context)
       else
-        {:error,
-         "Table '#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}' is not visible by Lotus policy"}
+        {:error, table_not_visible_message(resolved_schema, table_name)}
       end
     end)
   end
+
+  defp fetch_and_annotate_columns(adapter, resolved_schema, table_name, context) do
+    case Adapter.get_table_schema(adapter, resolved_schema, table_name) do
+      {:ok, cols} ->
+        annotated =
+          annotate_columns_with_visibility(cols, adapter.name, resolved_schema, table_name)
+
+        run_after_discover(:after_get_table_schema, :columns, %{
+          repo: adapter.name,
+          repo_name: adapter.name,
+          table_name: table_name,
+          schema: resolved_schema,
+          columns: annotated,
+          context: context
+        })
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  defp annotate_columns_with_visibility(cols, source_name, schema, table_name) do
+    rels = [{schema, table_name}]
+
+    cols
+    |> Enum.reduce([], fn col, acc ->
+      policy = Visibility.column_policy_for(source_name, rels, col.name)
+
+      cond do
+        Policy.hidden_from_schema?(policy) -> acc
+        is_map(policy) -> [Map.put(col, :visibility, Map.take(policy, [:action, :mask])) | acc]
+        true -> [col | acc]
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  defp table_not_visible_message(nil, table_name),
+    do: "Table '#{table_name}' is not visible by Lotus policy"
+
+  defp table_not_visible_message(schema, table_name),
+    do: "Table '#{schema}.#{table_name}' is not visible by Lotus policy"
 
   @doc """
   Gets basic statistics about a table.
@@ -340,44 +361,43 @@ defmodule Lotus.Schema do
   @spec get_table_stats(module() | String.t(), String.t(), keyword()) ::
           {:ok, %{row_count: non_neg_integer()}} | {:error, binary()}
   def get_table_stats(repo_or_name, table_name, opts \\ []) do
-    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
-    start_time = Telemetry.schema_introspection_start(:get_table_stats, repo_name)
-    schemas = effective_schemas(repo, opts)
+    adapter = Sources.resolve!(repo_or_name, nil)
+    start_time = Telemetry.schema_introspection_start(:get_table_stats, adapter.name)
+    schemas = effective_schemas(adapter, opts)
 
     result =
       case resolve_table_schema_with_cache(
-             repo,
-             repo_name,
+             adapter,
              table_name,
              schemas,
              opts[:cache],
              :results
            ) do
         nil when schemas == [] ->
-          get_table_stats_cached(repo, repo_name, table_name, nil, opts)
+          get_table_stats_cached(adapter, table_name, nil, opts)
 
         nil ->
           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
         resolved_schema ->
-          get_table_stats_cached(repo, repo_name, table_name, resolved_schema, opts)
+          get_table_stats_cached(adapter, table_name, resolved_schema, opts)
       end
 
     Telemetry.schema_introspection_stop(
       start_time,
       :get_table_stats,
-      repo_name,
+      adapter.name,
       result_status(result)
     )
 
     result
   end
 
-  defp get_table_stats_cached(repo, repo_name, table_name, resolved_schema, opts) do
-    key = schema_key(:get_table_stats, repo_name, resolved_schema, table_name)
+  defp get_table_stats_cached(adapter, table_name, resolved_schema, opts) do
+    key = schema_key(:get_table_stats, adapter.name, resolved_schema, table_name)
 
     tags = [
-      "repo:#{repo_name}",
+      "repo:#{adapter.name}",
       "schema:get_table_stats",
       "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
     ]
@@ -390,27 +410,23 @@ defmodule Lotus.Schema do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      if Visibility.allowed_relation?(repo_name, {resolved_schema, table_name}) do
+      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}) do
         try do
-          count =
+          count_sql =
             if resolved_schema do
-              {open_quote, close_quote} = get_quote_chars(repo)
-
-              qt =
-                "#{open_quote}#{String.replace(table_name, close_quote, close_quote <> close_quote)}#{close_quote}"
-
-              qs =
-                "#{open_quote}#{String.replace(resolved_schema, close_quote, close_quote <> close_quote)}#{close_quote}"
-
-              %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{qs}.#{qt}")
-              count
+              qi = &Adapter.quote_identifier(adapter, &1)
+              "SELECT COUNT(*) FROM #{qi.(resolved_schema)}.#{qi.(table_name)}"
             else
-              # Schema-less database
-              %{rows: [[count]]} = repo.query!("SELECT COUNT(*) FROM #{table_name}")
-              count
+              "SELECT COUNT(*) FROM #{table_name}"
             end
 
-          {:ok, %{row_count: count}}
+          case Adapter.execute_query(adapter, count_sql, [], []) do
+            {:ok, %{rows: [[count]]}} ->
+              {:ok, %{row_count: count}}
+
+            {:error, reason} ->
+              {:error, to_string(reason)}
+          end
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -435,10 +451,10 @@ defmodule Lotus.Schema do
   @spec list_relations(module() | String.t(), keyword()) ::
           {:ok, [{String.t() | nil, String.t()}]} | {:error, term()}
   def list_relations(repo_or_name, opts \\ []) do
-    {repo, repo_name} = Sources.resolve!(repo_or_name, nil)
+    adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
-    start_time = Telemetry.schema_introspection_start(:list_relations, repo_name)
-    schemas = effective_schemas(repo, opts)
+    start_time = Telemetry.schema_introspection_start(:list_relations, adapter.name)
+    schemas = effective_schemas(adapter, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
     search_path = Keyword.get(opts, :search_path)
@@ -446,12 +462,12 @@ defmodule Lotus.Schema do
     key =
       schema_key(
         :list_relations,
-        repo_name,
+        adapter.name,
         search_path || Enum.join(schemas, ","),
         include_views?
       )
 
-    tags = ["repo:#{repo_name}", "schema:list_relations"]
+    tags = ["repo:#{adapter.name}", "schema:list_relations"]
 
     profile =
       if is_list(opts[:cache]) do
@@ -463,18 +479,22 @@ defmodule Lotus.Schema do
     result =
       exec_with_cache(opts[:cache], profile, key, tags, fn ->
         try do
-          raw_relations = Source.list_tables(repo, schemas, include_views?)
+          case Adapter.list_tables(adapter, schemas, include_views: include_views?) do
+            {:ok, raw_relations} ->
+              filtered =
+                raw_relations
+                |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1))
 
-          filtered =
-            raw_relations
-            |> Enum.filter(&Visibility.allowed_relation?(repo_name, &1))
+              run_after_discover(:after_list_relations, :relations, %{
+                repo: adapter.name,
+                repo_name: adapter.name,
+                relations: filtered,
+                context: context
+              })
 
-          run_after_discover(:after_list_relations, :relations, %{
-            repo: repo,
-            repo_name: repo_name,
-            relations: filtered,
-            context: context
-          })
+            {:error, reason} ->
+              {:error, reason}
+          end
         rescue
           e -> {:error, Exception.message(e)}
         end
@@ -483,7 +503,7 @@ defmodule Lotus.Schema do
     Telemetry.schema_introspection_stop(
       start_time,
       :list_relations,
-      repo_name,
+      adapter.name,
       result_status(result)
     )
 
@@ -497,7 +517,7 @@ defmodule Lotus.Schema do
     end
   end
 
-  defp effective_schemas(repo, opts) do
+  defp effective_schemas(adapter, opts) do
     schemas =
       cond do
         is_binary(Keyword.get(opts, :schema)) ->
@@ -509,32 +529,28 @@ defmodule Lotus.Schema do
         is_binary(Keyword.get(opts, :search_path)) ->
           parse_search_path(Keyword.fetch!(opts, :search_path))
 
-        sp = get_in(repo.config(), [:parameters, :search_path]) ->
-          parse_search_path(sp)
-
         true ->
-          Source.default_schemas(repo)
+          Adapter.default_schemas(adapter)
       end
       |> Enum.map(&String.trim/1)
       |> Enum.reject(&(&1 == "" or &1 == "$user"))
 
-    if schemas == [], do: Source.default_schemas(repo), else: schemas
+    if schemas == [], do: Adapter.default_schemas(adapter), else: schemas
   end
 
   defp parse_search_path(sp) when is_binary(sp),
     do: sp |> String.split(",") |> Enum.map(&String.trim/1)
 
   defp resolve_table_schema_with_cache(
-         repo,
-         repo_name,
+         adapter,
          table,
          schemas,
          cache_opts,
          default_profile
        ) do
     search_key = Enum.join(schemas, ",")
-    key = schema_key(:resolve_table_schema, repo_name, search_key, table)
-    tags = ["repo:#{repo_name}", "schema:resolve_table_schema", "table:#{table}"]
+    key = schema_key(:resolve_table_schema, adapter.name, search_key, table)
+    tags = ["repo:#{adapter.name}", "schema:resolve_table_schema", "table:#{table}"]
 
     profile =
       if is_list(cache_opts),
@@ -543,9 +559,10 @@ defmodule Lotus.Schema do
 
     cache_result =
       exec_with_cache(cache_opts, profile, key, tags, fn ->
-        case Source.resolve_table_schema(repo, table, schemas) do
-          nil -> {:ok, :not_found}
-          schema -> {:ok, {:found, schema}}
+        case Adapter.resolve_table_schema(adapter, table, schemas) do
+          {:ok, nil} -> {:ok, :not_found}
+          {:ok, schema} -> {:ok, {:found, schema}}
+          {:error, _} -> {:ok, :not_found}
         end
       end)
 
@@ -733,14 +750,6 @@ defmodule Lotus.Schema do
       |> Base.encode16(case: :lower)
 
     "schema:list_schemas:#{repo_name}:#{digest}"
-  end
-
-  defp get_quote_chars(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.MyXQL -> {"`", "`"}
-      Ecto.Adapters.Postgres -> {"\"", "\""}
-      _ -> {"\"", "\""}
-    end
   end
 
   defp result_status({:ok, _}), do: :ok

@@ -3,7 +3,10 @@ defmodule Lotus.TelemetryTest do
 
   alias Lotus.Fixtures
   alias Lotus.Runner
+  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
   alias Lotus.Test.Repo
+
+  @pg_adapter EctoAdapter.wrap("postgres", Repo)
 
   setup do
     fixtures = Fixtures.setup_test_data()
@@ -24,13 +27,13 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:ok, _result} = Runner.run_sql(Repo, "SELECT 1 AS num")
+      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num")
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
-                       %{repo: Repo, sql: "SELECT 1 AS num"}}
+                       %{repo: "postgres", sql: "SELECT 1 AS num"}}
 
       assert_received {:telemetry, [:lotus, :query, :stop], measurements,
-                       %{repo: Repo, sql: "SELECT 1 AS num", result: %Lotus.Result{}}}
+                       %{repo: "postgres", sql: "SELECT 1 AS num", result: %Lotus.Result{}}}
 
       assert is_integer(measurements.duration)
       assert measurements.duration >= 0
@@ -52,13 +55,13 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:error, _} = Runner.run_sql(Repo, "DROP TABLE test_users")
+      {:error, _} = Runner.run_sql(@pg_adapter, "DROP TABLE test_users")
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
-                       %{repo: Repo, sql: "DROP TABLE test_users"}}
+                       %{repo: "postgres", sql: "DROP TABLE test_users"}}
 
       assert_received {:telemetry, [:lotus, :query, :exception], measurements,
-                       %{kind: :error, repo: Repo, sql: "DROP TABLE test_users"}}
+                       %{kind: :error, repo: "postgres", sql: "DROP TABLE test_users"}}
 
       assert is_integer(measurements.duration)
 

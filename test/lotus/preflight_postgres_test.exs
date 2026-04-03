@@ -2,15 +2,16 @@ defmodule Lotus.PreflightPostgresTest do
   use Lotus.Case
   use Mimic
   alias Lotus.Preflight
+  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
-  @pg_repo Lotus.Test.Repo
+  @pg_adapter EctoAdapter.wrap("postgres", Lotus.Test.Repo)
 
   describe "PostgreSQL preflight authorization" do
     test "allows queries against regular tables" do
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT 1", [])
+      assert :ok = Preflight.authorize(@pg_adapter, "SELECT 1", [])
 
       assert :ok =
-               Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users LIMIT 1", [])
+               Preflight.authorize(@pg_adapter, "SELECT * FROM test_users LIMIT 1", [])
     end
 
     test "allows complex queries with JOINs" do
@@ -22,20 +23,19 @@ defmodule Lotus.PreflightPostgresTest do
         LIMIT 10
       """
 
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      assert :ok = Preflight.authorize(@pg_adapter, sql, [])
     end
 
     test "allows simple queries" do
       assert :ok =
                Preflight.authorize(
-                 @pg_repo,
-                 "postgres",
+                 @pg_adapter,
                  "SELECT * FROM test_posts WHERE published = true",
                  []
                )
 
       assert :ok =
-               Preflight.authorize(@pg_repo, "postgres", "SELECT COUNT(*) FROM test_users", [])
+               Preflight.authorize(@pg_adapter, "SELECT COUNT(*) FROM test_users", [])
     end
 
     test "allows subqueries and CTEs" do
@@ -45,7 +45,7 @@ defmodule Lotus.PreflightPostgresTest do
         WHERE id IN (SELECT user_id FROM test_posts WHERE published = true)
       """
 
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      assert :ok = Preflight.authorize(@pg_adapter, sql, [])
 
       # CTE
       sql = """
@@ -58,36 +58,34 @@ defmodule Lotus.PreflightPostgresTest do
         SELECT * FROM user_stats WHERE post_count > 0
       """
 
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      assert :ok = Preflight.authorize(@pg_adapter, sql, [])
     end
 
     test "handles parameterized queries" do
       assert :ok =
                Preflight.authorize(
-                 @pg_repo,
-                 "postgres",
+                 @pg_adapter,
                  "SELECT * FROM test_users WHERE id = $1",
                  [1]
                )
 
       assert :ok =
                Preflight.authorize(
-                 @pg_repo,
-                 "postgres",
+                 @pg_adapter,
                  "SELECT * FROM test_posts WHERE view_count > $1",
                  [10]
                )
     end
 
     test "handles syntax errors gracefully" do
-      {:error, _msg} = Preflight.authorize(@pg_repo, "postgres", "INVALID SQL SYNTAX", [])
+      {:error, _msg} = Preflight.authorize(@pg_adapter, "INVALID SQL SYNTAX", [])
     end
   end
 
   describe "PostgreSQL builtin deny tests" do
     test "blocks queries against pg_catalog schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM pg_catalog.pg_tables", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM pg_catalog.pg_tables", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "pg_catalog"
@@ -95,7 +93,7 @@ defmodule Lotus.PreflightPostgresTest do
 
     test "blocks queries against information_schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM information_schema.tables", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM information_schema.tables", [])
 
       assert msg =~ "blocked table"
       # information_schema queries actually touch pg_catalog tables internally
@@ -104,7 +102,7 @@ defmodule Lotus.PreflightPostgresTest do
 
     test "blocks queries against schema_migrations in public schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.schema_migrations", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM public.schema_migrations", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "schema_migrations"
@@ -112,7 +110,7 @@ defmodule Lotus.PreflightPostgresTest do
 
     test "blocks queries against schema_migrations without schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM schema_migrations", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM schema_migrations", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "schema_migrations"
@@ -120,14 +118,14 @@ defmodule Lotus.PreflightPostgresTest do
 
     test "blocks queries against lotus_queries in public schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.lotus_queries", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM public.lotus_queries", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "lotus_queries"
     end
 
     test "blocks queries against lotus_queries without schema" do
-      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM lotus_queries", [])
+      {:error, msg} = Preflight.authorize(@pg_adapter, "SELECT * FROM lotus_queries", [])
       assert msg =~ "blocked table"
       assert msg =~ "lotus_queries"
     end
@@ -139,7 +137,7 @@ defmodule Lotus.PreflightPostgresTest do
         JOIN lotus_queries lq ON true
       """
 
-      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      {:error, msg} = Preflight.authorize(@pg_adapter, sql, [])
       assert msg =~ "blocked table"
       assert msg =~ "lotus_queries"
     end
@@ -162,14 +160,14 @@ defmodule Lotus.PreflightPostgresTest do
     end
 
     test "blocks queries against tables matching bare string deny rules in public schema" do
-      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_posts", [])
+      {:error, msg} = Preflight.authorize(@pg_adapter, "SELECT * FROM test_posts", [])
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
     end
 
     test "blocks queries against tables matching bare string deny rules with explicit schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_posts", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM public.test_posts", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
@@ -182,14 +180,14 @@ defmodule Lotus.PreflightPostgresTest do
         JOIN test_posts p ON u.id = p.user_id
       """
 
-      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", sql, [])
+      {:error, msg} = Preflight.authorize(@pg_adapter, sql, [])
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
     end
 
     test "allows queries against tables not in deny list" do
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT 1", [])
+      assert :ok = Preflight.authorize(@pg_adapter, "SELECT * FROM test_users", [])
+      assert :ok = Preflight.authorize(@pg_adapter, "SELECT 1", [])
     end
   end
 
@@ -209,16 +207,16 @@ defmodule Lotus.PreflightPostgresTest do
     end
 
     test "allows queries against tables matching bare string allow rules" do
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
+      assert :ok = Preflight.authorize(@pg_adapter, "SELECT * FROM test_users", [])
     end
 
     test "allows queries with explicit schema for allowed tables" do
       assert :ok =
-               Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_users", [])
+               Preflight.authorize(@pg_adapter, "SELECT * FROM public.test_users", [])
     end
 
     test "blocks queries against tables not in allow list" do
-      {:error, msg} = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_posts", [])
+      {:error, msg} = Preflight.authorize(@pg_adapter, "SELECT * FROM test_posts", [])
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
     end
@@ -242,14 +240,14 @@ defmodule Lotus.PreflightPostgresTest do
 
     test "tuple with schema only blocks in that specific schema" do
       {:error, msg} =
-        Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM public.test_posts", [])
+        Preflight.authorize(@pg_adapter, "SELECT * FROM public.test_posts", [])
 
       assert msg =~ "blocked table"
       assert msg =~ "test_posts"
     end
 
     test "allows tables not matching any deny rules" do
-      assert :ok = Preflight.authorize(@pg_repo, "postgres", "SELECT * FROM test_users", [])
+      assert :ok = Preflight.authorize(@pg_adapter, "SELECT * FROM test_users", [])
     end
   end
 end

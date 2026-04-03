@@ -5,6 +5,8 @@ defmodule Lotus.Source do
   Defines the interface that each database source adapter's operations module must implement.
   """
 
+  alias Lotus.Source.Adapter
+
   @type repo :: Ecto.Repo.t()
 
   @callback execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
@@ -438,10 +440,13 @@ defmodule Lotus.Source do
   Applies filters to a query using the source-specific implementation.
 
   Returns `{sql, params}` unchanged when filters is empty.
+  Accepts an adapter struct, repo module, repo name string, or nil.
   """
-  @spec apply_filters(repo | String.t() | nil, String.t(), list(), [Lotus.Query.Filter.t()]) ::
-          {String.t(), list()}
-  def apply_filters(_repo_or_name, sql, params, []), do: {sql, params}
+  def apply_filters(_repo_or_adapter, sql, params, []), do: {sql, params}
+
+  def apply_filters(%Adapter{} = adapter, sql, params, filters) do
+    Adapter.apply_filters(adapter, sql, params, filters)
+  end
 
   def apply_filters(repo_or_name, sql, params, filters) do
     impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, params, filters)
@@ -451,10 +456,13 @@ defmodule Lotus.Source do
   Applies sorts to a query using the source-specific implementation.
 
   Returns the original query unchanged when sorts is empty.
+  Accepts an adapter struct, repo module, repo name string, or nil.
   """
-  @spec apply_sorts(repo | String.t() | nil, String.t(), [Lotus.Query.Sort.t()]) ::
-          String.t()
-  def apply_sorts(_repo_or_name, sql, []), do: sql
+  def apply_sorts(_repo_or_adapter, sql, []), do: sql
+
+  def apply_sorts(%Adapter{} = adapter, sql, sorts) do
+    Adapter.apply_sorts(adapter, sql, sorts)
+  end
 
   def apply_sorts(repo_or_name, sql, sorts) do
     impl_for(resolve_repo!(repo_or_name)).apply_sorts(sql, sorts)

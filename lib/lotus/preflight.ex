@@ -10,7 +10,7 @@ defmodule Lotus.Preflight do
   """
 
   alias Lotus.Preflight.Relations
-  alias Lotus.Sources
+  alias Lotus.Source.Adapter
   alias Lotus.Visibility
 
   @doc """
@@ -21,74 +21,113 @@ defmodule Lotus.Preflight do
 
   ## Examples
 
-      authorize(MyRepo, "postgres", "SELECT * FROM users", [], nil)
+      authorize(adapter, "SELECT * FROM users", [], nil)
       #=> :ok
 
-      authorize(MyRepo, "postgres", "SELECT * FROM schema_migrations", [], "reporting, public")
+      authorize(adapter, "SELECT * FROM schema_migrations", [], "reporting, public")
       #=> {:error, "Query touches a blocked table"}
   """
-  @spec authorize(module(), String.t(), String.t(), list(), String.t() | nil) ::
+  @spec authorize(Adapter.t(), String.t(), list(), String.t() | nil) ::
           :ok | {:error, String.t()}
-  def authorize(repo, repo_name, sql, params, search_path \\ nil) do
-    if Map.has_key?(Lotus.Config.data_repos(), repo_name) do
-      case Sources.source_type(repo) do
-        :postgres -> authorize_pg(repo, repo_name, sql, params, search_path)
-        :sqlite -> authorize_sqlite(repo, repo_name, sql, params, search_path)
-        :mysql -> authorize_mysql(repo, repo_name, sql, params, search_path)
-        _ -> :ok
-      end
-    else
-      {:error, "Unknown data repo '#{repo_name}'"}
+  def authorize(%Adapter{} = adapter, sql, params, search_path \\ nil) do
+    case adapter.source_type do
+      :postgres -> authorize_pg(adapter, sql, params, search_path)
+      :sqlite -> authorize_sqlite(adapter, sql, params, search_path)
+      :mysql -> authorize_mysql(adapter, sql, params, search_path)
+      _ -> :ok
     end
   end
 
-  defp authorize_pg(repo, repo_name, sql, params, search_path) do
+  defp authorize_pg(%Adapter{} = adapter, sql, params, search_path) do
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
-    result = execute_pg_explain(repo, explain, params, search_path)
+    opts = if search_path, do: [search_path: search_path], else: []
 
-    case result do
+    case Adapter.execute_query(adapter, explain, params, opts) do
       {:ok, %{rows: [[json]]}} ->
-        plan_data =
-          case json do
-            binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
-            data when is_list(data) or is_map(data) -> data
-          end
-
-        plan =
-          case plan_data do
-            [first | _] -> Map.fetch!(first, "Plan")
-            %{"Plan" => plan} -> plan
-          end
-
-        rels = collect_pg_relations(plan, MapSet.new()) |> MapSet.to_list()
-
-        if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked_tables = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked_tables)}"}
-        end
+        json
+        |> parse_pg_explain_plan()
+        |> collect_pg_relations(MapSet.new())
+        |> MapSet.to_list()
+        |> check_relations_visibility(adapter.name)
 
       {:error, e} ->
         {:error, normalize_preflight_error(e)}
     end
   end
 
-  defp execute_pg_explain(repo, explain, params, nil) do
-    repo.query(explain, params)
+  defp parse_pg_explain_plan(json) do
+    plan_data =
+      case json do
+        binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
+        data when is_list(data) or is_map(data) -> data
+      end
+
+    case plan_data do
+      [first | _] -> Map.fetch!(first, "Plan")
+      %{"Plan" => plan} -> plan
+    end
   end
 
-  defp execute_pg_explain(repo, explain, params, search_path) do
-    result =
-      repo.transaction(fn ->
-        repo.query!("SET LOCAL search_path = #{search_path}")
-        repo.query(explain, params)
-      end)
+  defp authorize_sqlite(%Adapter{} = adapter, sql, params, _search_path) do
+    alias_map = parse_alias_map(sql)
 
-    case result do
-      {:ok, query_result} -> query_result
-      {:error, err} -> {:error, err}
+    explain = "EXPLAIN QUERY PLAN " <> sql
+
+    case Adapter.execute_query(adapter, explain, params, []) do
+      {:ok, %{rows: rows}} ->
+        rels =
+          rows
+          |> Enum.map(fn row -> Enum.join(row, " ") end)
+          # names (base or alias)
+          |> Enum.flat_map(&extract_sqlite_relations/1)
+          # rewrite alias -> base
+          |> Enum.map(&resolve_alias(&1, alias_map))
+          |> Enum.reject(&is_nil/1)
+          |> MapSet.new()
+          |> MapSet.to_list()
+          |> Enum.map(&{nil, &1})
+
+        check_relations_visibility(rels, adapter.name)
+
+      {:error, e} ->
+        {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp authorize_mysql(%Adapter{} = adapter, sql, params, _search_path) do
+    alias_map = parse_alias_map(sql)
+
+    explain = "EXPLAIN FORMAT=JSON " <> sql
+
+    case Adapter.execute_query(adapter, explain, params, []) do
+      {:ok, %{rows: [[json]]}} ->
+        explain_rels =
+          json
+          |> Lotus.JSON.decode!()
+          |> collect_mysql_relations(MapSet.new())
+          |> MapSet.to_list()
+          |> Enum.map(fn {schema, table_name} ->
+            {schema, resolve_alias(table_name, alias_map)}
+          end)
+          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
+
+        sql_rels = extract_mysql_tables_from_sql(sql)
+        rels = choose_mysql_relations(explain_rels, sql_rels, sql)
+
+        check_relations_visibility(rels, adapter.name)
+
+      {:error, e} ->
+        {:error, normalize_preflight_error(e)}
+    end
+  end
+
+  defp check_relations_visibility(rels, source_name) do
+    if Enum.all?(rels, &Visibility.allowed_relation?(source_name, &1)) do
+      Relations.put(rels)
+      :ok
+    else
+      blocked = Enum.reject(rels, &Visibility.allowed_relation?(source_name, &1))
+      {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
     end
   end
 
@@ -105,74 +144,6 @@ defmodule Lotus.Preflight do
 
       _ ->
         acc
-    end
-  end
-
-  defp authorize_sqlite(repo, repo_name, sql, params, _search_path) do
-    alias_map = parse_alias_map(sql)
-
-    explain = "EXPLAIN QUERY PLAN " <> sql
-
-    case repo.query(explain, params) do
-      {:ok, %{rows: rows}} ->
-        rels =
-          rows
-          |> Enum.map(fn row -> Enum.join(row, " ") end)
-          # names (base or alias)
-          |> Enum.flat_map(&extract_sqlite_relations/1)
-          # <— rewrite alias -> base
-          |> Enum.map(&resolve_alias(&1, alias_map))
-          |> Enum.reject(&is_nil/1)
-          |> MapSet.new()
-          |> MapSet.to_list()
-          |> Enum.map(&{nil, &1})
-
-        if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
-        end
-
-      {:error, e} ->
-        {:error, normalize_preflight_error(e)}
-    end
-  end
-
-  defp authorize_mysql(repo, repo_name, sql, params, _search_path) do
-    alias_map = parse_alias_map(sql)
-
-    explain = "EXPLAIN FORMAT=JSON " <> sql
-
-    case repo.query(explain, params) do
-      {:ok, %{rows: [[json]]}} ->
-        plan_data = Lotus.JSON.decode!(json)
-
-        explain_rels =
-          plan_data
-          |> collect_mysql_relations(MapSet.new())
-          |> MapSet.to_list()
-          |> Enum.map(fn {schema, table_name} ->
-            actual_name = resolve_alias(table_name, alias_map)
-            {schema, actual_name}
-          end)
-          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
-
-        sql_rels = extract_mysql_tables_from_sql(sql)
-
-        rels = choose_mysql_relations(explain_rels, sql_rels, sql)
-
-        if Enum.all?(rels, &Visibility.allowed_relation?(repo_name, &1)) do
-          Relations.put(rels)
-          :ok
-        else
-          blocked = Enum.reject(rels, &Visibility.allowed_relation?(repo_name, &1))
-          {:error, "Query touches blocked table(s): #{format_relations(blocked)}"}
-        end
-
-      {:error, e} ->
-        {:error, normalize_preflight_error(e)}
     end
   end
 
@@ -327,6 +298,10 @@ defmodule Lotus.Preflight do
       {nil, table} -> table
       {schema, table} -> "#{schema}.#{table}"
     end)
+  end
+
+  defp normalize_preflight_error(e) when is_binary(e) do
+    strip_explain_query_tail(e)
   end
 
   defp normalize_preflight_error(e) do

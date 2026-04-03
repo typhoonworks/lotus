@@ -203,6 +203,18 @@ defmodule Lotus.Config do
             ]
       """
     ],
+    source_resolver: [
+      type: :atom,
+      default: Lotus.Source.Resolvers.Static,
+      doc:
+        "Module implementing `Lotus.Source.Resolver` behaviour. Resolves named data sources to adapter structs."
+    ],
+    visibility_resolver: [
+      type: :atom,
+      default: Lotus.Visibility.Resolvers.Static,
+      doc:
+        "Module implementing `Lotus.Visibility.Resolver` behaviour. Resolves visibility rules for data sources."
+    ],
     middleware: [
       type: {:or, [:map, nil]},
       default: nil,
@@ -253,6 +265,8 @@ defmodule Lotus.Config do
       :schema_visibility,
       :cache,
       :ai,
+      :source_resolver,
+      :visibility_resolver,
       :middleware
     ])
   end
@@ -518,6 +532,18 @@ defmodule Lotus.Config do
   """
   @spec ai_enabled?() :: boolean()
   def ai_enabled?, do: (get(:ai) || [])[:enabled] || false
+
+  @doc """
+  Returns the configured source resolver module.
+  """
+  @spec source_resolver() :: module()
+  def source_resolver, do: load!()[:source_resolver]
+
+  @doc """
+  Returns the configured visibility resolver module.
+  """
+  @spec visibility_resolver() :: module()
+  def visibility_resolver, do: load!()[:visibility_resolver]
 
   @doc """
   Returns the entire validated configuration as a map.

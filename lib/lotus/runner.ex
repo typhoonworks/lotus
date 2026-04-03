@@ -7,11 +7,11 @@ defmodule Lotus.Runner do
   `read_only: false` to allow write operations.
   """
 
-  alias Lotus.{Middleware, Preflight, Result, Source, Sources, Telemetry, Visibility}
+  alias Lotus.{Middleware, Preflight, Result, Source, Telemetry, Visibility}
   alias Lotus.Preflight.Relations
+  alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
 
-  @type repo :: module()
   @type sql :: String.t()
   @type params :: list()
   @type query_result :: Result.t()
@@ -27,10 +27,11 @@ defmodule Lotus.Runner do
   # The DB-level read-only transaction guard provides an additional safety layer.
   @deny ~r/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|VACUUM|ANALYZE|CALL|LOCK)\b/i
 
-  @spec run_sql(repo(), sql(), params(), opts()) ::
+  @spec run_sql(Adapter.t(), sql(), params(), opts()) ::
           {:ok, query_result()} | {:error, term()}
-  def run_sql(repo, sql, params \\ [], opts \\ []) when is_binary(sql) and is_list(params) do
-    telemetry_meta = %{repo: repo, sql: sql, params: params}
+  def run_sql(%Adapter{} = adapter, sql, params \\ [], opts \\ [])
+      when is_binary(sql) and is_list(params) do
+    telemetry_meta = %{repo: adapter.name, sql: sql, params: params}
     start_time = Telemetry.query_start(telemetry_meta)
     read_only = Keyword.get(opts, :read_only, true)
 
@@ -39,10 +40,10 @@ defmodule Lotus.Runner do
     result =
       with :ok <- assert_single_statement(sql),
            :ok <- assert_not_denied(sql, read_only),
-           :ok <- preflight_visibility(repo, sql, params, opts),
-           :ok <- run_before_query(repo, sql, params, context),
-           {:ok, %Result{} = res} <- exec_read_only(repo, sql, params, opts),
-           {:ok, %Result{} = res} <- run_after_query(repo, sql, params, res, context) do
+           :ok <- preflight_visibility(adapter, sql, params, opts),
+           :ok <- run_before_query(adapter, sql, params, context),
+           {:ok, %Result{} = res} <- exec_read_only(adapter, sql, params, opts),
+           {:ok, %Result{} = res} <- run_after_query(adapter, sql, params, res, context) do
         {:ok, res}
       end
 
@@ -61,18 +62,18 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp exec_read_only(repo, sql, params, opts) do
-    Source.execute_in_transaction(
-      repo,
-      fn ->
+  defp exec_read_only(%Adapter{} = adapter, sql, params, opts) do
+    Adapter.transaction(
+      adapter,
+      fn _state ->
         timeout = Keyword.get(opts, :timeout, 15_000)
 
         {elapsed_us, res} =
           :timer.tc(fn ->
-            repo.query(sql, params, timeout: timeout)
+            Adapter.execute_query(adapter, sql, params, opts ++ [timeout: timeout])
           end)
 
-        handle_query_result(res, elapsed_us, repo)
+        handle_query_result(res, elapsed_us, adapter)
       end,
       opts
     )
@@ -84,20 +85,23 @@ defmodule Lotus.Runner do
     e -> {:error, Source.format_error(e)}
   end
 
-  defp handle_query_result({:ok, %{columns: cols, rows: rows} = raw}, elapsed_us, repo) do
+  defp handle_query_result(
+         {:ok, %{columns: cols, rows: rows} = raw},
+         elapsed_us,
+         %Adapter{} = adapter
+       ) do
     num_rows = Map.get(raw, :num_rows, length(rows || []))
     command = normalize_command(Map.get(raw, :command))
     duration_ms = System.convert_time_unit(elapsed_us, :microsecond, :millisecond)
 
-    repo_name = Sources.name_from_module!(repo)
     rels = Relations.take()
 
     policies =
-      Enum.map(cols || [], fn c -> Visibility.column_policy_for(repo_name, rels, c) end)
+      Enum.map(cols || [], fn c -> Visibility.column_policy_for(adapter.name, rels, c) end)
 
     case enforce_column_policies(cols || [], rows || [], policies) do
       {:error, msg} ->
-        repo.rollback(msg)
+        {:error, msg}
 
       {final_cols, final_rows} ->
         {:ok,
@@ -110,11 +114,11 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp handle_query_result({:error, err}, _elapsed_us, repo) do
-    repo.rollback(Source.format_error(err))
+  defp handle_query_result({:error, err}, _elapsed_us, _adapter) do
+    {:error, err}
   end
 
-  defp handle_query_result(other, _elapsed_us, _repo) do
+  defp handle_query_result(other, _elapsed_us, _adapter) do
     other
   end
 
@@ -294,8 +298,8 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp run_before_query(repo, sql, params, context) do
-    payload = %{repo: repo, sql: sql, params: params, context: context}
+  defp run_before_query(%Adapter{} = adapter, sql, params, context) do
+    payload = %{repo: adapter.name, sql: sql, params: params, context: context}
 
     case Middleware.run(:before_query, payload) do
       {:cont, _} -> :ok
@@ -303,8 +307,8 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp run_after_query(repo, sql, params, %Result{} = result, context) do
-    payload = %{repo: repo, sql: sql, params: params, result: result, context: context}
+  defp run_after_query(%Adapter{} = adapter, sql, params, %Result{} = result, context) do
+    payload = %{repo: adapter.name, sql: sql, params: params, result: result, context: context}
 
     case Middleware.run(:after_query, payload) do
       {:cont, %{result: res}} -> {:ok, res}
@@ -318,13 +322,11 @@ defmodule Lotus.Runner do
     if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok
   end
 
-  defp preflight_visibility(repo, sql, params, opts) do
+  defp preflight_visibility(%Adapter{} = adapter, sql, params, opts) do
     if needs_preflight?(sql) do
-      repo_name = Sources.name_from_module!(repo)
-
       search_path = Keyword.get(opts, :search_path)
 
-      case Preflight.authorize(repo, repo_name, sql, params, search_path) do
+      case Preflight.authorize(adapter, sql, params, search_path) do
         :ok -> :ok
         {:error, msg} -> {:error, msg}
       end

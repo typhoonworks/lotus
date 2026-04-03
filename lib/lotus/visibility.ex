@@ -191,7 +191,7 @@ defmodule Lotus.Visibility do
   """
 
   alias Lotus.Config
-  alias Lotus.Source
+  alias Lotus.Source.Adapter
   alias Lotus.Sources.Default
   alias Lotus.Visibility.Policy
 
@@ -204,7 +204,7 @@ defmodule Lotus.Visibility do
   """
   @spec allowed_schema?(String.t(), String.t() | nil) :: boolean()
   def allowed_schema?(repo_name, schema) do
-    rules = Config.schema_rules_for_repo_name(repo_name)
+    rules = visibility_resolver().schema_rules_for(repo_name)
     builtin = builtin_schema_denies(repo_name)
 
     builtin_denied = schema_deny_hit?(builtin, schema)
@@ -226,7 +226,7 @@ defmodule Lotus.Visibility do
   @spec allowed_relation?(String.t(), {String.t() | nil, String.t()}) :: boolean()
   def allowed_relation?(repo_name, {schema, table}) do
     if allowed_schema?(repo_name, schema) do
-      table_rules = Config.rules_for_repo_name(repo_name)
+      table_rules = visibility_resolver().table_rules_for(repo_name)
       builtin = builtin_table_denies(repo_name)
 
       builtin_denied = deny_hit?(builtin, schema, table)
@@ -276,12 +276,9 @@ defmodule Lotus.Visibility do
   end
 
   defp builtin_schema_denies(repo_name) do
-    repo = Config.data_repos() |> Map.get(repo_name)
-
-    if is_nil(repo) do
-      Default.builtin_schema_denies(nil)
-    else
-      Source.builtin_schema_denies(repo)
+    case resolve_adapter(repo_name) do
+      nil -> Default.builtin_schema_denies(nil)
+      adapter -> Adapter.builtin_schema_denies(adapter)
     end
   end
 
@@ -315,12 +312,16 @@ defmodule Lotus.Visibility do
   # Table-level helpers (existing code)
 
   defp builtin_table_denies(repo_name) do
-    repo = Config.data_repos() |> Map.get(repo_name)
+    case resolve_adapter(repo_name) do
+      nil -> Default.builtin_denies(nil)
+      adapter -> Adapter.builtin_denies(adapter)
+    end
+  end
 
-    if is_nil(repo) do
-      Default.builtin_denies(nil)
-    else
-      Source.builtin_denies(repo)
+  defp resolve_adapter(repo_name) do
+    case Config.source_resolver().resolve(repo_name, nil) do
+      {:ok, %Adapter{} = adapter} -> adapter
+      _ -> nil
     end
   end
 
@@ -385,7 +386,7 @@ defmodule Lotus.Visibility do
   @spec column_policy_for(String.t(), [{String.t() | nil, String.t()}], String.t()) ::
           nil | %{action: atom(), mask: any(), show_in_schema?: boolean()}
   def column_policy_for(repo_name, relations, result_column_name) do
-    rules = Config.column_rules_for_repo_name(repo_name)
+    rules = visibility_resolver().column_rules_for(repo_name)
     rels = relations || []
 
     find_schema_table_column_match(rules, rels, result_column_name) ||
@@ -455,4 +456,6 @@ defmodule Lotus.Visibility do
   defp cv_match?(_, _), do: false
 
   defp normalize_policy(policy), do: Policy.normalize_column_policy(policy)
+
+  defp visibility_resolver, do: Config.visibility_resolver()
 end
