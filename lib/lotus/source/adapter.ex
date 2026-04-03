@@ -43,7 +43,7 @@ defmodule Lotus.Source.Adapter do
       Adapter.quote_identifier(adapter, "users")
   """
 
-  @type source_type :: :postgres | :mysql | :sqlite | :tds | :other | atom()
+  @type source_type :: :postgres | :mysql | :sqlite | :other | atom()
 
   @type column_def :: %{
           name: String.t(),

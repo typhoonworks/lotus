@@ -72,7 +72,6 @@ defmodule Lotus.Source.Adapters.Ecto do
       Ecto.Adapters.Postgres -> :postgres
       Ecto.Adapters.SQLite3 -> :sqlite
       Ecto.Adapters.MyXQL -> :mysql
-      Ecto.Adapters.Tds -> :tds
       _ -> :other
     end
   end

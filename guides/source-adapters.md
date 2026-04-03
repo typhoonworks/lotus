@@ -13,7 +13,7 @@ The adapter struct carries four fields:
 | `name` | `String.t()` | Human-readable identifier (e.g. `"main"`, `"warehouse"`) |
 | `module` | `module()` | The module implementing `Lotus.Source.Adapter` callbacks |
 | `state` | `term()` | Opaque connection state managed by the adapter (e.g. an Ecto.Repo module) |
-| `source_type` | `atom()` | Database kind — `:postgres`, `:mysql`, `:sqlite`, `:tds`, or `:other` |
+| `source_type` | `atom()` | Database kind — `:postgres`, `:mysql`, `:sqlite`, or `:other` |
 
 When a query is executed, Lotus asks the configured **source resolver** to turn a repo name (or module) into an `%Adapter{}` struct. The resolver returns the struct, and from that point every pipeline stage — SQL generation, preflight authorization, execution, introspection — dispatches through `Adapter` dispatch helpers which delegate to the underlying `module`, passing `state` as the first argument.
 

@@ -227,13 +227,6 @@ defmodule Lotus.SourcesTest do
       assert Sources.supports_feature?(:sqlite, :json) == true
     end
 
-    test "tds features" do
-      assert Sources.supports_feature?(:tds, :search_path) == false
-      assert Sources.supports_feature?(:tds, :make_interval) == false
-      assert Sources.supports_feature?(:tds, :arrays) == false
-      assert Sources.supports_feature?(:tds, :json) == false
-    end
-
     test "unknown source type returns false for all features" do
       assert Sources.supports_feature?(:unknown, :search_path) == false
       assert Sources.supports_feature?(:unknown, :make_interval) == false
@@ -245,7 +238,7 @@ defmodule Lotus.SourcesTest do
       assert Sources.supports_feature?(:postgres, :unknown_feature) == false
       assert Sources.supports_feature?(:mysql, :unknown_feature) == false
       assert Sources.supports_feature?(:sqlite, :unknown_feature) == false
-      assert Sources.supports_feature?(:tds, :unknown_feature) == false
+      assert Sources.supports_feature?(:other, :unknown_feature) == false
     end
   end
 end
