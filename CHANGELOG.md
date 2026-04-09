@@ -46,6 +46,7 @@
 - Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
 - **REFACTOR:** Remove duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
 - **REFACTOR:** Extract shared filter → sort → window → cache → execute pipeline from `Lotus.run_sql/3` and `Lotus.execute_query/5` into a single private `execute_with_options/7` helper. `run_sql/3` now reuses `build_cache_tags/3` and `determine_cache_profile/1` instead of inlining the same logic. No public API or behavior changes (#160)
+- **REFACTOR:** `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
 
 ## [0.16.4] - 2026-03-10
 
