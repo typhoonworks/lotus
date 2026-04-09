@@ -9,6 +9,7 @@
 - `Preflight.authorize` accepts `%Lotus.Source.Adapter{}` instead of `(repo, repo_name)` tuple
 - Source behaviour SQL generation callbacks (`param_placeholder`, `apply_filters`, `apply_sorts`, `quote_identifier`, `limit_offset_placeholders`) now take `state` as first argument
 - Source behaviour error handling callbacks (`format_error`, `handled_errors`) now take `state` as first argument
+- `Lotus.Storage.Query.to_sql_params/2` now returns `{:ok, sql, params} | {:error, reason}` instead of returning `{sql, params}` and raising `ArgumentError` for missing variables, empty list variables, or invalid type-cast values. A new `Lotus.Storage.Query.to_sql_params!/2` preserves the previous raising behaviour for callers that prefer exceptions (#163).
 - **Note:** The public API (`Lotus.run_query/2`, `Lotus.run_sql/3`, `Lotus.list_schemas/2`, etc.) is unchanged. These are internal API changes affecting code that calls `Runner`, `Sources`, `Preflight`, or `Source` directly.
 
 ### Added
@@ -29,6 +30,7 @@
 
 ### Fixed
 
+- **FIX:** `Lotus.Storage.Query.to_sql_params/2` now correctly uses falsy supplied values (`false`, `0`) instead of short-circuiting through `||` and falling back to the variable's default. `nil` supplied values still fall back to the default (#163).
 - **FIX:** `Lotus.Config.cache_namespace/0` now returns a consistent `"lotus:v1"` default regardless of whether a cache is configured, eliminating an inconsistency where the un-configured path returned `"lotus:v0"` (#165)
 - **FIX:** `Lotus.Normalizer` implementation for `URI` now uses `URI.to_string/1` instead of `inspect/1`, producing the actual URL string rather than the `%URI{}` struct representation (#159)
 - **FIX:** Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
