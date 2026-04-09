@@ -15,6 +15,8 @@ defmodule Lotus.Supervisor do
 
   @impl true
   def init(opts) do
+    Lotus.Config.reload!()
+
     cache_conf = Keyword.get(opts, :cache, Lotus.Config.cache_config())
 
     compile_middleware(opts)
