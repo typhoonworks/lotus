@@ -5,8 +5,15 @@ defmodule Lotus.Cache do
 
   alias Lotus.{Config, Telemetry}
 
+  @type key :: binary()
+  @type value :: any()
+  @type ttl_ms :: non_neg_integer()
+  @type opts :: Keyword.t()
+
+  @spec enabled?() :: boolean()
   def enabled?, do: match?({:ok, _}, adapter())
 
+  @spec get(key) :: {:ok, value} | :miss
   def get(key) do
     case adapter() do
       {:ok, adapter} ->
@@ -25,6 +32,8 @@ defmodule Lotus.Cache do
     end
   end
 
+  @spec get_or_store(key, ttl_ms, (-> value), opts) ::
+          {:ok, value, :hit | :miss | atom()} | {:error, term}
   def get_or_store(key, ttl_ms, fun, opts \\ []) do
     case adapter() do
       {:ok, adapter} ->
@@ -47,6 +56,7 @@ defmodule Lotus.Cache do
     end
   end
 
+  @spec put(key, value, ttl_ms, opts) :: :ok | {:error, term}
   def put(key, value, ttl_ms, opts \\ []) do
     case adapter() do
       {:ok, adapter} ->
@@ -59,6 +69,7 @@ defmodule Lotus.Cache do
     end
   end
 
+  @spec delete(key) :: :ok | {:error, term}
   def delete(key) do
     case adapter() do
       {:ok, adapter} -> adapter.delete(ns(key))
@@ -66,6 +77,7 @@ defmodule Lotus.Cache do
     end
   end
 
+  @spec invalidate_tags([binary()]) :: :ok | {:error, term}
   def invalidate_tags(tags) when is_list(tags) do
     with {:ok, adapter} <- adapter(),
          true <- function_exported?(adapter, :invalidate_tags, 1) do
