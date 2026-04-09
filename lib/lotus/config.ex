@@ -395,21 +395,7 @@ defmodule Lotus.Config do
   Falls back to default rules if repo-specific rules are not configured.
   """
   @spec rules_for_repo_name(String.t()) :: keyword()
-  def rules_for_repo_name(repo_name) do
-    config = load!()
-    visibility_config = config[:table_visibility] || %{}
-
-    repo_key = String.to_existing_atom(repo_name)
-
-    # Try repo-specific rules first, then default
-    visibility_config[repo_key] || visibility_config[:default] || []
-  rescue
-    ArgumentError ->
-      # If repo_name can't be converted to existing atom, use default
-      config = load!()
-      visibility_config = config[:table_visibility] || %{}
-      visibility_config[:default] || []
-  end
+  def rules_for_repo_name(repo_name), do: visibility_rules_for(:table_visibility, repo_name)
 
   @doc """
   Returns schema visibility rules for a specific repository.
@@ -417,19 +403,8 @@ defmodule Lotus.Config do
   Falls back to default rules if repo-specific rules are not configured.
   """
   @spec schema_rules_for_repo_name(String.t()) :: keyword()
-  def schema_rules_for_repo_name(repo_name) do
-    config = load!()
-    visibility_config = config[:schema_visibility] || %{}
-
-    repo_key = String.to_existing_atom(repo_name)
-
-    visibility_config[repo_key] || visibility_config[:default] || []
-  rescue
-    ArgumentError ->
-      config = load!()
-      visibility_config = config[:schema_visibility] || %{}
-      visibility_config[:default] || []
-  end
+  def schema_rules_for_repo_name(repo_name),
+    do: visibility_rules_for(:schema_visibility, repo_name)
 
   @doc """
   Returns column visibility rules for a specific repository.
@@ -437,18 +412,17 @@ defmodule Lotus.Config do
   Falls back to default rules if repo-specific rules are not configured.
   """
   @spec column_rules_for_repo_name(String.t()) :: list()
-  def column_rules_for_repo_name(repo_name) do
-    config = load!()
-    visibility_config = config[:column_visibility] || %{}
+  def column_rules_for_repo_name(repo_name),
+    do: visibility_rules_for(:column_visibility, repo_name)
 
-    repo_key = String.to_existing_atom(repo_name)
+  # Shared lookup for repo-keyed visibility maps. Matches the repo name
+  # string against map keys via `to_string/1`, then falls back to the
+  # `:default` entry, then to an empty list.
+  defp visibility_rules_for(key, repo_name) do
+    visibility_config = load!()[key] || %{}
+    repo_key = Enum.find(Map.keys(visibility_config), &(to_string(&1) == repo_name))
 
-    visibility_config[repo_key] || visibility_config[:default] || []
-  rescue
-    ArgumentError ->
-      config = load!()
-      visibility_config = config[:column_visibility] || %{}
-      visibility_config[:default] || []
+    (repo_key && visibility_config[repo_key]) || visibility_config[:default] || []
   end
 
   @doc """
