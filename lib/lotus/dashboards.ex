@@ -39,10 +39,25 @@ defmodule Lotus.Dashboards do
   Lists all dashboards.
 
   Returns dashboards ordered by name.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload (e.g., `[:cards]`)
+
+  ## Examples
+
+      iex> list_dashboards()
+      [%Dashboard{}, ...]
+
+      iex> list_dashboards(preload: [:cards])
+      [%Dashboard{cards: [%DashboardCard{}, ...]}, ...]
+
   """
-  @spec list_dashboards() :: [Dashboard.t()]
-  def list_dashboards do
-    from(d in Dashboard, order_by: [asc: d.name])
+  @spec list_dashboards(keyword()) :: [Dashboard.t()]
+  def list_dashboards(opts \\ []) do
+    preloads = Keyword.get(opts, :preload, [])
+
+    from(d in Dashboard, order_by: [asc: d.name], preload: ^preloads)
     |> Lotus.repo().all()
   end
 
@@ -52,16 +67,21 @@ defmodule Lotus.Dashboards do
   ## Options
 
     * `:search` - Search term to match against dashboard names (case insensitive)
+    * `:preload` - A list of associations to preload (e.g., `[:cards]`)
 
   ## Examples
 
       iex> list_dashboards_by(search: "sales")
       [%Dashboard{name: "Sales Overview"}, ...]
 
+      iex> list_dashboards_by(search: "sales", preload: [:cards])
+      [%Dashboard{name: "Sales Overview", cards: [...]}, ...]
+
   """
   @spec list_dashboards_by(keyword()) :: [Dashboard.t()]
   def list_dashboards_by(opts \\ []) do
-    q = from(d in Dashboard, order_by: [asc: d.name])
+    preloads = Keyword.get(opts, :preload, [])
+    q = from(d in Dashboard, order_by: [asc: d.name], preload: ^preloads)
 
     q =
       case Keyword.get(opts, :search) do
@@ -337,23 +357,24 @@ defmodule Lotus.Dashboards do
       :ok
 
   """
-  @spec reorder_dashboard_cards(Dashboard.t() | id(), [id()]) :: :ok
+  @spec reorder_dashboard_cards(Dashboard.t() | id(), [id()]) :: :ok | {:error, term()}
   def reorder_dashboard_cards(%Dashboard{id: id}, card_ids),
     do: reorder_dashboard_cards(id, card_ids)
 
   def reorder_dashboard_cards(dashboard_id, card_ids) when is_list(card_ids) do
-    Lotus.repo().transaction(fn ->
-      card_ids
-      |> Enum.with_index()
-      |> Enum.each(fn {card_id, position} ->
-        from(c in DashboardCard,
-          where: c.id == ^card_id and c.dashboard_id == ^dashboard_id
-        )
-        |> Lotus.repo().update_all(set: [position: position])
-      end)
-    end)
-
-    :ok
+    case Lotus.repo().transaction(fn ->
+           card_ids
+           |> Enum.with_index()
+           |> Enum.each(fn {card_id, position} ->
+             from(c in DashboardCard,
+               where: c.id == ^card_id and c.dashboard_id == ^dashboard_id
+             )
+             |> Lotus.repo().update_all(set: [position: position])
+           end)
+         end) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   # ── Filter CRUD ────────────────────────────────────────────────────────────

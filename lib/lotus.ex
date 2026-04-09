@@ -182,8 +182,12 @@ defmodule Lotus do
 
   @doc """
   Lists all dashboards.
+
+  ## Options
+
+    * `:preload` - A list of associations to preload (e.g., `[:cards]`)
   """
-  defdelegate list_dashboards(), to: Dashboards
+  defdelegate list_dashboards(opts \\ []), to: Dashboards
 
   @doc """
   Lists dashboards with optional filtering.

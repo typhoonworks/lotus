@@ -13,6 +13,7 @@
 
 ### Added
 
+- `:preload` option on `Lotus.Dashboards.list_dashboards/1` and `list_dashboards_by/1` for eager-loading associations (e.g. `:cards`) in a single query. Fixes N+1 patterns in callers that need card counts or card lists alongside the dashboard list (see typhoonworks/lotus_web#103).
 - Pluggable source adapter abstraction (`Lotus.Source.Adapter`) — behaviour and struct wrapping data sources behind a uniform callback interface with consistent `{:ok, _} | {:error, _}` return types
 - `Lotus.Source.Resolver` behaviour for configurable source resolution
 - `Lotus.Visibility.Resolver` behaviour for configurable visibility rule resolution
@@ -27,6 +28,7 @@
 
 ### Fixed
 
+- **FIX:** Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
 - **FIX:** Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
 - **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
 - **DOCS:** Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
