@@ -243,11 +243,10 @@ defmodule Lotus.Export.ValueTest do
   end
 
   describe "fallback handling" do
-    test "handles unknown structs" do
+    test "handles URI structs via the URI normalizer" do
       struct = %URI{scheme: "https", host: "example.com"}
       result = Value.to_csv_string(struct)
-      assert result =~ "URI"
-      assert result =~ "example.com"
+      assert result == "https://example.com"
     end
 
     test "handles tuples" do

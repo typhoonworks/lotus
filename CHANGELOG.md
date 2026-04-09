@@ -9,6 +9,7 @@
 - `Preflight.authorize` accepts `%Lotus.Source.Adapter{}` instead of `(repo, repo_name)` tuple
 - Source behaviour SQL generation callbacks (`param_placeholder`, `apply_filters`, `apply_sorts`, `quote_identifier`, `limit_offset_placeholders`) now take `state` as first argument
 - Source behaviour error handling callbacks (`format_error`, `handled_errors`) now take `state` as first argument
+- `Lotus.Storage.Query.to_sql_params/2` now returns `{:ok, sql, params} | {:error, reason}` instead of returning `{sql, params}` and raising `ArgumentError` for missing variables, empty list variables, or invalid type-cast values. A new `Lotus.Storage.Query.to_sql_params!/2` preserves the previous raising behaviour for callers that prefer exceptions (#163).
 - **Note:** The public API (`Lotus.run_query/2`, `Lotus.run_sql/3`, `Lotus.list_schemas/2`, etc.) is unchanged. These are internal API changes affecting code that calls `Runner`, `Sources`, `Preflight`, or `Source` directly.
 
 ### Added
@@ -25,13 +26,18 @@
 
 - **FIX:** Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)
 - **FIX:** Validate column names in `FilterInjector` and `SortInjector` against `[a-zA-Z_][a-zA-Z0-9_]*` using `Lotus.SQL.Identifier`, rejecting column names containing spaces, quotes, semicolons, or other special characters (#152)
+- **FIX:** Track nesting depth in `Runner`'s `skip_block_comment/1` so the single-statement parser matches PostgreSQL's nested block comment semantics. The previous implementation exited at the first `*/`, which could let a second statement slip past `assert_single_statement/1` when hidden inside a nested comment (#164)
 
 ### Fixed
 
+- **FIX:** `Lotus.Storage.Query.to_sql_params/2` now correctly uses falsy supplied values (`false`, `0`) instead of short-circuiting through `||` and falling back to the variable's default. `nil` supplied values still fall back to the default (#163).
+- **FIX:** `Lotus.Config.cache_namespace/0` now returns a consistent `"lotus:v1"` default regardless of whether a cache is configured, eliminating an inconsistency where the un-configured path returned `"lotus:v0"` (#165)
+- **FIX:** `Lotus.Normalizer` implementation for `URI` now uses `URI.to_string/1` instead of `inspect/1`, producing the actual URL string rather than the `%URI{}` struct representation (#159)
 - **FIX:** Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
 - **FIX:** Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
 - **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
 - **DOCS:** Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
+- **DOCS:** Add `@spec` annotations to all public functions in `Lotus.Cache` (`get/1`, `put/4`, `get_or_store/4`, `delete/1`, `invalidate_tags/1`, `enabled?/0`) to improve discoverability and Dialyzer coverage (#161)
 
 ### Changed
 

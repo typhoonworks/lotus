@@ -412,12 +412,12 @@ defmodule Lotus do
   def run_query(%Query{} = q, opts) do
     vars = prepare_variables(q, opts)
 
-    case build_sql_params(q, vars) do
-      {:error, msg} ->
-        {:error, msg}
-
-      {sql, params} ->
+    case Query.to_sql_params(q, vars) do
+      {:ok, sql, params} ->
         execute_query(q, sql, params, vars, opts)
+
+      {:error, _} = err ->
+        err
     end
   end
 
@@ -435,12 +435,6 @@ defmodule Lotus do
       |> Map.new(fn v -> {v.name, v.default} end)
 
     Map.merge(defaults, supplied_vars)
-  end
-
-  defp build_sql_params(q, vars) do
-    Query.to_sql_params(q, vars)
-  rescue
-    e in ArgumentError -> {:error, e.message}
   end
 
   defp execute_query(q, sql, params, vars, opts) do
@@ -538,13 +532,7 @@ defmodule Lotus do
 
     vars = Map.merge(defaults, supplied_vars)
 
-    try do
-      Query.to_sql_params(q, vars)
-      true
-    rescue
-      ArgumentError ->
-        false
-    end
+    match?({:ok, _, _}, Query.to_sql_params(q, vars))
   end
 
   @doc """

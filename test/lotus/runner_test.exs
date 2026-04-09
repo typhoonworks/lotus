@@ -301,6 +301,29 @@ defmodule Lotus.RunnerTest do
       assert {:ok, %{columns: ["num"], rows: [[1]]}} = result
     end
 
+    test "allows semicolon in nested block comments" do
+      result =
+        Runner.run_sql(
+          @pg_adapter,
+          "SELECT /* outer /* inner ; */ still outer ; */ 1 as num"
+        )
+
+      assert {:ok, %{columns: ["num"], rows: [[1]]}} = result
+    end
+
+    test "rejects statements hidden after an unclosed outer nested block comment" do
+      # The outer comment is only closed by the second `*/`; without nested
+      # comment tracking the parser would exit at the first `*/` and miss the
+      # trailing `; SELECT 2` that sits outside the comment.
+      result =
+        Runner.run_sql(
+          @pg_adapter,
+          "SELECT 1 /* /* nested */ */ ; SELECT 2"
+        )
+
+      assert {:error, "Only a single statement is allowed"} = result
+    end
+
     test "allows semicolon in PostgreSQL dollar-quoted strings" do
       result = Runner.run_sql(@pg_adapter, "SELECT $$test;value$$ as text")
       assert {:ok, %{columns: ["text"], rows: [["test;value"]]}} = result
@@ -609,7 +632,7 @@ defmodule Lotus.RunnerTest do
     end
   end
 
-  describe "to_sql_params/2 with smart vars" do
+  describe "to_sql_params!/2 with smart vars" do
     alias Lotus.Storage.Query
 
     test "expands vars into params" do
@@ -620,7 +643,7 @@ defmodule Lotus.RunnerTest do
         ]
       }
 
-      {sql, params} = Query.to_sql_params(q, %{"is_active" => true})
+      {sql, params} = Query.to_sql_params!(q, %{"is_active" => true})
 
       assert sql =~ "$1"
       assert sql =~ "$2"
@@ -631,7 +654,7 @@ defmodule Lotus.RunnerTest do
       q = %Query{statement: "SELECT * FROM test_users WHERE age > {{min_age}}", variables: []}
 
       assert_raise ArgumentError, ~r/Missing required variable/, fn ->
-        Query.to_sql_params(q)
+        Query.to_sql_params!(q)
       end
     end
   end

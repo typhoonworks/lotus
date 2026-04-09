@@ -78,7 +78,17 @@ defmodule Lotus.Storage.Query do
     |> maybe_add_unique_constraint()
   end
 
-  @spec to_sql_params(t(), map()) :: {String.t(), [term()]}
+  @doc """
+  Builds the final SQL statement and parameter list for a query.
+
+  Returns `{:ok, sql, params}` on success, or `{:error, reason}` when a
+  required variable is missing, a list variable is empty, or a supplied
+  value fails type casting.
+
+  Use `to_sql_params!/2` if you prefer a raising variant.
+  """
+  @spec to_sql_params(t(), map()) ::
+          {:ok, String.t(), [term()]} | {:error, String.t()}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
     repo = get_repo(q.data_repo)
     source_type = get_source_type(q.data_repo)
@@ -99,53 +109,118 @@ defmodule Lotus.Storage.Query do
       enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_module)
 
     # Build SQL with parameters, using automatic type casting
-    {final_sql, final_params, _idx} =
-      Enum.reduce(vars_in_order, {transformed_sql, [], 1}, fn var, {acc_sql, acc_params, idx} ->
-        meta = Enum.find(vars, %{}, &(&1.name == var))
+    init = {:ok, {transformed_sql, [], 1}}
 
-        value =
-          Map.get(supplied_vars, var) ||
-            Map.get(meta, :default) ||
-            raise ArgumentError, "Missing required variable: #{var}"
-
-        manual_type = Map.get(meta, :type)
-        binding = Enum.find(enriched_bindings, &(&1.variable == var))
-        is_list = Map.get(meta, :list, false)
-
-        if is_list do
-          values = normalize_list_value(value)
-
-          if values == [] do
-            raise ArgumentError, "List variable '#{var}' must have at least one value"
-          end
-
-          {placeholders, casted_values, next_idx} =
-            Enum.reduce(values, {[], [], idx}, fn v, {phs, cvs, i} ->
-              {final_type, casted} = determine_type_and_cast(v, manual_type, binding)
-              ph = Lotus.Source.param_placeholder(q.data_repo, i, var, final_type)
-              {phs ++ [ph], cvs ++ [casted], i + 1}
-            end)
-
-          placeholder_str = Enum.join(placeholders, ", ")
-
-          {
-            String.replace(acc_sql, "{{#{var}}}", placeholder_str, global: false),
-            acc_params ++ casted_values,
-            next_idx
-          }
-        else
-          {final_type, casted_value} = determine_type_and_cast(value, manual_type, binding)
-          placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
-
-          {
-            String.replace(acc_sql, "{{#{var}}}", placeholder, global: false),
-            acc_params ++ [casted_value],
-            idx + 1
-          }
+    result =
+      Enum.reduce_while(vars_in_order, init, fn var, {:ok, {acc_sql, acc_params, idx}} ->
+        case substitute_variable(
+               var,
+               vars,
+               supplied_vars,
+               enriched_bindings,
+               q,
+               acc_sql,
+               acc_params,
+               idx
+             ) do
+          {:ok, _} = ok -> {:cont, ok}
+          {:error, _} = err -> {:halt, err}
         end
       end)
 
-    {final_sql, final_params}
+    case result do
+      {:ok, {final_sql, final_params, _idx}} -> {:ok, final_sql, final_params}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Same as `to_sql_params/2` but raises `ArgumentError` on error.
+  """
+  @spec to_sql_params!(t(), map()) :: {String.t(), [term()]}
+  def to_sql_params!(%__MODULE__{} = q, supplied_vars \\ %{}) do
+    case to_sql_params(q, supplied_vars) do
+      {:ok, sql, params} -> {sql, params}
+      {:error, reason} -> raise ArgumentError, reason
+    end
+  end
+
+  defp substitute_variable(
+         var,
+         vars,
+         supplied_vars,
+         enriched_bindings,
+         q,
+         acc_sql,
+         acc_params,
+         idx
+       ) do
+    meta = Enum.find(vars, %{}, &(&1.name == var))
+
+    with {:ok, value} <- fetch_var_value(var, meta, supplied_vars) do
+      manual_type = Map.get(meta, :type)
+      binding = Enum.find(enriched_bindings, &(&1.variable == var))
+      is_list = Map.get(meta, :list, false)
+
+      if is_list do
+        substitute_list_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx)
+      else
+        substitute_scalar_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx)
+      end
+    end
+  end
+
+  defp fetch_var_value(var, meta, supplied_vars) do
+    case Map.fetch(supplied_vars, var) do
+      {:ok, nil} -> fetch_default(var, meta)
+      {:ok, value} -> {:ok, value}
+      :error -> fetch_default(var, meta)
+    end
+  end
+
+  defp fetch_default(var, meta) do
+    case Map.get(meta, :default) do
+      nil -> {:error, "Missing required variable: #{var}"}
+      default -> {:ok, default}
+    end
+  end
+
+  defp substitute_list_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx) do
+    case normalize_list_value(value) do
+      [] ->
+        {:error, "List variable '#{var}' must have at least one value"}
+
+      values ->
+        init = {:ok, {[], [], idx}}
+
+        reduced =
+          Enum.reduce_while(values, init, fn v, {:ok, {phs, cvs, i}} ->
+            case determine_type_and_cast(v, manual_type, binding) do
+              {:ok, {final_type, casted}} ->
+                ph = Lotus.Source.param_placeholder(q.data_repo, i, var, final_type)
+                {:cont, {:ok, {[ph | phs], [casted | cvs], i + 1}}}
+
+              {:error, _} = err ->
+                {:halt, err}
+            end
+          end)
+
+        with {:ok, {rev_placeholders, rev_casted_values, next_idx}} <- reduced do
+          placeholder_str = rev_placeholders |> Enum.reverse() |> Enum.join(", ")
+          casted_values = Enum.reverse(rev_casted_values)
+          new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder_str, global: false)
+
+          {:ok, {new_sql, acc_params ++ casted_values, next_idx}}
+        end
+    end
+  end
+
+  defp substitute_scalar_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx) do
+    with {:ok, {final_type, casted_value}} <- determine_type_and_cast(value, manual_type, binding) do
+      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
+      new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder, global: false)
+      {:ok, {new_sql, acc_params ++ [casted_value], idx + 1}}
+    end
   end
 
   @doc """
@@ -283,28 +358,27 @@ defmodule Lotus.Storage.Query do
 
         if requires_casting?(lotus_type, value) do
           case TypeCaster.cast_value(value, lotus_type, column_info) do
-            {:ok, casted_value} ->
-              {lotus_type, casted_value}
-
-            {:error, error_msg} ->
-              raise ArgumentError, error_msg
+            {:ok, casted_value} -> {:ok, {lotus_type, casted_value}}
+            {:error, error_msg} -> {:error, error_msg}
           end
         else
           # Pass through without casting for text/varchar
-          {lotus_type, value}
+          {:ok, {lotus_type, value}}
         end
 
       # If automatic detection returned :text but we have a manual type, prefer manual
       manual_type != nil ->
-        {manual_type, cast_value(value, manual_type)}
+        with {:ok, casted} <- cast_value(value, manual_type) do
+          {:ok, {manual_type, casted}}
+        end
 
       # If automatic detection found text type and no manual type, use text
       binding && Map.has_key?(binding, :lotus_type) ->
-        {binding.lotus_type, value}
+        {:ok, {binding.lotus_type, value}}
 
       # No type information - use as-is
       true ->
-        {nil, value}
+        {:ok, {nil, value}}
     end
   end
 
@@ -338,37 +412,36 @@ defmodule Lotus.Storage.Query do
   defp cast_value(value, :number) when is_binary(value) do
     case Integer.parse(value) do
       {int_value, ""} ->
-        int_value
+        {:ok, int_value}
 
       {_int_value, _remainder} ->
         case Float.parse(value) do
           {float_value, ""} ->
-            float_value
+            {:ok, float_value}
 
           {_float_value, _remainder} ->
-            raise ArgumentError,
-                  "Invalid number format: '#{value}' contains non-numeric characters"
+            {:error, "Invalid number format: '#{value}' contains non-numeric characters"}
 
           :error ->
-            raise ArgumentError, "Invalid number format: '#{value}' is not a valid number"
+            {:error, "Invalid number format: '#{value}' is not a valid number"}
         end
 
       :error ->
-        raise ArgumentError, "Invalid number format: '#{value}' is not a valid number"
+        {:error, "Invalid number format: '#{value}' is not a valid number"}
     end
   end
 
   defp cast_value(value, :date) when is_binary(value) do
     case Date.from_iso8601(value) do
       {:ok, date} ->
-        date
+        {:ok, date}
 
       {:error, _reason} ->
-        raise ArgumentError, "Invalid date format: '#{value}' is not a valid ISO8601 date"
+        {:error, "Invalid date format: '#{value}' is not a valid ISO8601 date"}
     end
   end
 
-  defp cast_value(value, _), do: value
+  defp cast_value(value, _), do: {:ok, value}
 
   defp validate_statement(changeset) do
     case get_field(changeset, :statement) do
