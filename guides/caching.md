@@ -2,7 +2,7 @@
 
 This guide covers Lotus's comprehensive caching system, which improves query performance by storing and reusing results from expensive database operations.
 
-Lotus by default does not start the cache system. To enable caching, you must configure a cache adapter and add Lotus to your application's supervision tree.
+Lotus does not enable caching by default. To turn it on, configure a cache adapter under `config :lotus` — Lotus's supervisor starts automatically with your app and will boot the configured cache backend for you.
 
 ## Overview
 
@@ -42,26 +42,7 @@ config :lotus,
 
 ### OTP Application Setup
 
-**Important**: For caching to work in production, Lotus must be started as part of your application's supervision tree. Cache backends are supervised processes that need to be running.
-
-Add Lotus to your application supervisor:
-
-```elixir
-# lib/my_app/application.ex
-def start(_type, _args) do
-  children = [
-    MyApp.Repo,
-    # Add Lotus to your supervision tree
-    Lotus,
-    # Or with custom options:
-    # {Lotus, cache: [adapter: Lotus.Cache.ETS, namespace: "prod_cache"]},
-    MyAppWeb.Endpoint
-  ]
-
-  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-  Supervisor.start_link(children, opts)
-end
-```
+Lotus is an OTP application: as long as `:lotus` is in your `mix.exs` dependencies, its supervisor starts automatically with your app and boots the cache backend declared under `config :lotus, :cache`. No supervision-tree wiring is required on your end.
 
 ### Using Cache in Queries
 
@@ -497,12 +478,12 @@ Lotus.Cache.invalidate_tags(["table:public.users"])
 
 ### Cache Not Working
 
-1. **Check OTP setup**: Ensure Lotus is started in your supervision tree - cache backends need to be running
-2. **Check configuration**: Ensure cache adapter is properly configured
+1. **Check configuration**: Ensure a cache adapter is configured under `config :lotus, :cache`
+2. **Check the `:lotus` app is running**: Lotus's supervisor starts automatically with the `:lotus` OTP app, so make sure it isn't excluded from `included_applications` or otherwise prevented from starting
 3. **Verify identical queries**: Cache keys are generated from exact SQL + params
 4. **Check TTL**: Ensure cache hasn't expired between calls
 
-**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually indicate the cache backend process isn't running. Add Lotus to your application's supervision tree.
+**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually mean the `:cache` adapter isn't configured (so no backend was started) or the `:lotus` application failed to boot.
 
 ### Memory Issues
 
