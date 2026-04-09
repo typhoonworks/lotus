@@ -61,114 +61,16 @@ config :lotus,
 
 Both keys are optional. When omitted, the defaults read from static application config — the same behaviour Lotus has always had.
 
-## Custom Source Resolvers
+## Custom Resolvers
 
-Implement the `Lotus.Source.Resolver` behaviour to load data sources dynamically — for example from a database registry or an external service.
+Both extension points that feed the adapter pipeline — how repo names are turned into `%Adapter{}` structs, and how visibility rules are loaded — are pluggable behaviours:
 
-```elixir
-defmodule MyApp.SourceResolver do
-  @behaviour Lotus.Source.Resolver
+- `Lotus.Source.Resolver` — resolves repo opts into `%Adapter{}` structs
+- `Lotus.Visibility.Resolver` — loads schema, table, and column visibility rules
 
-  @impl true
-  def resolve(repo_opt, _fallback) do
-    case MyApp.DataSources.find(repo_opt) do
-      nil -> {:error, :not_found}
-      source -> {:ok, build_adapter(source)}
-    end
-  end
+Both ship with static defaults (`Lotus.Source.Resolvers.Static`, `Lotus.Visibility.Resolvers.Static`) that read from application config. Custom implementations let you load sources and rules from a database, registry, or external service at runtime — without forking Lotus.
 
-  @impl true
-  def list_sources do
-    MyApp.DataSources.all()
-    |> Enum.map(&build_adapter/1)
-  end
-
-  @impl true
-  def get_source!(name) do
-    source = MyApp.DataSources.find!(name)
-    build_adapter(source)
-  end
-
-  @impl true
-  def list_source_names do
-    MyApp.DataSources.all()
-    |> Enum.map(& &1.name)
-  end
-
-  @impl true
-  def default_source do
-    source = MyApp.DataSources.default!()
-    {source.name, build_adapter(source)}
-  end
-
-  defp build_adapter(source) do
-    Lotus.Source.Adapters.Ecto.wrap(source.name, source.repo_module)
-  end
-end
-```
-
-Then configure it:
-
-```elixir
-config :lotus,
-  source_resolver: MyApp.SourceResolver
-```
-
-The five required callbacks are:
-
-| Callback | Returns |
-|---|---|
-| `resolve/2` | `{:ok, %Adapter{}}` or `{:error, term()}` |
-| `list_sources/0` | `[%Adapter{}]` |
-| `get_source!/1` | `%Adapter{}` (raises on missing) |
-| `list_source_names/0` | `[String.t()]` |
-| `default_source/0` | `{name, %Adapter{}}` |
-
-## Custom Visibility Resolvers
-
-Implement `Lotus.Visibility.Resolver` to load visibility rules from a database or per-tenant configuration instead of static config.
-
-```elixir
-defmodule MyApp.VisibilityResolver do
-  @behaviour Lotus.Visibility.Resolver
-
-  @impl true
-  def schema_rules_for(source_name) do
-    case MyApp.VisibilityStore.get_schema_rules(source_name) do
-      nil -> [allow: :all, deny: []]
-      rules -> rules
-    end
-  end
-
-  @impl true
-  def table_rules_for(source_name) do
-    case MyApp.VisibilityStore.get_table_rules(source_name) do
-      nil -> [allow: [], deny: []]
-      rules -> rules
-    end
-  end
-
-  @impl true
-  def column_rules_for(source_name) do
-    MyApp.VisibilityStore.get_column_rules(source_name) || []
-  end
-end
-```
-
-Then configure it:
-
-```elixir
-config :lotus,
-  visibility_resolver: MyApp.VisibilityResolver
-```
-
-The three required callbacks are:
-
-| Callback | Returns |
-|---|---|
-| `schema_rules_for/1` | `keyword()` — e.g. `[allow: [...], deny: [...]]` |
-| `table_rules_for/1` | `keyword()` — e.g. `[allow: [...], deny: [...]]` |
-| `column_rules_for/1` | `list()` — column rule tuples |
+See the dedicated [Custom Resolvers guide](custom-resolvers.md) for contracts, full `Agent`- and ETS-backed examples, and testing guidance.
 
 ## Custom Adapters
 

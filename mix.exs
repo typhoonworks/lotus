@@ -135,6 +135,8 @@ defmodule Lotus.MixProject do
       "guides/configuration.md",
       "guides/middleware.md",
       "guides/visibility.md",
+      "guides/source-adapters.md",
+      "guides/custom-resolvers.md",
       "guides/caching.md",
       "guides/telemetry.md",
       "guides/contributing.md"

@@ -352,6 +352,36 @@ config :lotus,
   }
 ```
 
+### Extension Points
+
+#### `source_resolver`
+
+Configures the module responsible for turning repo names or modules into `%Lotus.Source.Adapter{}` structs at query time. The default static resolver reads from `data_repos` and is suitable for most applications.
+
+```elixir
+config :lotus,
+  source_resolver: MyApp.SourceResolver
+```
+
+**Type**: `module()` implementing `Lotus.Source.Resolver`
+**Default**: `Lotus.Source.Resolvers.Static`
+
+Use a custom resolver when you need runtime source registration, database-backed source lookup, or per-tenant sources. See the [Custom Resolvers guide](custom-resolvers.md) for contracts, minimal examples, and testing tips.
+
+#### `visibility_resolver`
+
+Configures the module responsible for loading schema, table, and column visibility rules. The default static resolver reads from `schema_visibility`, `table_visibility`, and `column_visibility` application config.
+
+```elixir
+config :lotus,
+  visibility_resolver: MyApp.VisibilityResolver
+```
+
+**Type**: `module()` implementing `Lotus.Visibility.Resolver`
+**Default**: `Lotus.Visibility.Resolvers.Static`
+
+Use a custom resolver when visibility rules must change without application restarts, are stored in a database, or vary per tenant or role. See the [Custom Resolvers guide](custom-resolvers.md) for contracts, minimal examples, and testing tips.
+
 ## Enabling Write Queries
 
 By default, Lotus blocks all write operations (INSERT, UPDATE, DELETE, DDL) at both the

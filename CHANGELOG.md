@@ -21,6 +21,7 @@
 - Default implementations: `Lotus.Source.Resolvers.Static`, `Lotus.Visibility.Resolvers.Static`, `Lotus.Source.Adapters.Ecto`
 - Config keys: `:source_resolver` (default `Lotus.Source.Resolvers.Static`), `:visibility_resolver` (default `Lotus.Visibility.Resolvers.Static`)
 - Guide: `source-adapters.md` documenting the adapter system, custom resolvers, and custom adapters
+- Guide: `custom-resolvers.md` documenting the `Lotus.Source.Resolver` and `Lotus.Visibility.Resolver` extension points, including use cases, contract details, `Agent`- and ETS-backed examples, and testing guidance (#176)
 
 ### Security
 
