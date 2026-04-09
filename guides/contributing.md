@@ -70,6 +70,201 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
    Lotus.run_query(query)
    ```
 
+## Architecture Overview
+
+Before making non-trivial changes it helps to understand how Lotus is organized and how a request flows through the system. This section is a map — not an exhaustive reference — and links to the modules you'll most often touch.
+
+### Module Responsibilities
+
+Everything lives under `lib/lotus/`. The library is roughly split into a public API surface, a query pipeline, storage, introspection, and a set of pluggable adapters.
+
+**Public API and lifecycle**
+
+- [`Lotus`](../lib/lotus.ex) — Top-level facade. `run_query/2`, `run_sql/3`, `create_query/1`, schema helpers, and dashboard helpers all entry through here.
+- [`Lotus.Supervisor`](../lib/lotus/supervisor.ex) — Boots the configured cache adapter, starts a `Task.Supervisor` (used by dashboard card execution), and compiles the middleware pipeline.
+- [`Lotus.Config`](../lib/lotus/config.ex) — Validates and caches application configuration (data repos, cache profiles, visibility rules, AI settings, middleware, etc.).
+- [`Lotus.Telemetry`](../lib/lotus/telemetry.ex) — Emits `:telemetry` events for query execution, schema introspection, and cache hits/misses.
+
+**Query pipeline**
+
+- [`Lotus.Runner`](../lib/lotus/runner.ex) — SQL execution engine. Enforces single-statement, applies the read-only deny list, invokes preflight, runs middleware, executes inside a read-only transaction, and applies column-level visibility policies to the result.
+- [`Lotus.Preflight`](../lib/lotus/preflight.ex) — Uses `EXPLAIN` (per source) to discover which relations a statement will touch before executing it.
+- [`Lotus.Preflight.Relations`](../lib/lotus/preflight/relations.ex) — Process-local staging for relations discovered during preflight so the runner can reuse them when applying column policies.
+- [`Lotus.Middleware`](../lib/lotus/middleware.ex) — Plug-style pipeline compiled into `:persistent_term`. Supports `:before_query`, `:after_query`, and `:after_list_*` schema events.
+- [`Lotus.Result`](../lib/lotus/result.ex) / [`Lotus.Result.Statistics`](../lib/lotus/result/statistics.ex) — The struct returned from query execution.
+
+**Saved queries, dashboards, and visualizations**
+
+- [`Lotus.Storage`](../lib/lotus/storage.ex) — CRUD for saved queries persisted through the application's `Ecto.Repo`.
+- [`Lotus.Storage.Query`](../lib/lotus/storage/query.ex) — Schema for saved queries; builds SQL + params from statement text plus user-supplied variables.
+- [`Lotus.Storage.SchemaCache`](../lib/lotus/storage/schema_cache.ex) — ETS-backed cache of column metadata used for type-aware value casting.
+- [`Lotus.Storage.TypeCaster`](../lib/lotus/storage/type_caster.ex) / `TypeHandler` / `TypeMapper` — Cast user values into parameters appropriate for the target database.
+- [`Lotus.Dashboards`](../lib/lotus/dashboards.ex) — CRUD and orchestration for dashboards (cards, filters, filter mappings). Uses the task supervisor to fan out card execution.
+- [`Lotus.Viz`](../lib/lotus/viz.ex) — CRUD and validation for per-query visualization configs.
+- [`Lotus.Query.Filter`](../lib/lotus/query/filter.ex) / [`Lotus.Query.Sort`](../lib/lotus/query/sort.ex) — Runtime filter/sort structs that the source adapters inject into already-prepared SQL.
+- [`Lotus.SQL.*`](../lib/lotus/sql/) — Low-level SQL helpers (sanitizer, identifier quoting, filter/sort injectors, validator, transformer).
+
+**Introspection and visibility**
+
+- [`Lotus.Schema`](../lib/lotus/schema.ex) — Lists schemas, lists tables, and inspects table schemas across sources. Automatically applies visibility rules and runs `:after_list_*` middleware.
+- [`Lotus.Visibility`](../lib/lotus/visibility.ex) — Two-level visibility (schema → table) plus column policies. Schema visibility takes precedence over table visibility.
+- [`Lotus.Visibility.Policy`](../lib/lotus/visibility/policy.ex) — Per-column policy (`:omit`, `{:mask, ...}`, `:error`) that the runner applies to result rows.
+- [`Lotus.Visibility.Resolver`](../lib/lotus/visibility/resolver.ex) — Behaviour for plugging in custom visibility resolution; the default lives in [`Lotus.Visibility.Resolvers.Static`](../lib/lotus/visibility/resolvers/static.ex).
+
+**Source adapter abstraction**
+
+- [`Lotus.Source`](../lib/lotus/source.ex) — High-level behaviour and dispatch helpers for database-specific operations (filter/sort application, identifier quoting, built-in deny rules, default schemas, etc.).
+- [`Lotus.Source.Adapter`](../lib/lotus/source/adapter.ex) — Behaviour + struct (`%Adapter{name, module, state, source_type}`) that represents a resolved data source. This is what flows through the query pipeline instead of raw repo modules.
+- [`Lotus.Source.Adapters.Ecto`](../lib/lotus/source/adapters/ecto.ex) — Default adapter that wraps an `Ecto.Repo`.
+- [`Lotus.Source.Resolver`](../lib/lotus/source/resolver.ex) / [`Lotus.Source.Resolvers.Static`](../lib/lotus/source/resolvers/static.ex) — Behaviour and default implementation for resolving a name/module into an `%Adapter{}`. Alternative resolvers can come from registries or external services.
+- [`Lotus.Sources`](../lib/lotus/sources.ex) — Thin public helper that delegates to the configured resolver (`resolve!/2`, `list_sources/0`, `source_type/1`, `supports_feature?/2`).
+- [`Lotus.Sources.Postgres`](../lib/lotus/sources/postgres.ex), [`Lotus.Sources.MySQL`](../lib/lotus/sources/mysql.ex), [`Lotus.Sources.SQLite`](../lib/lotus/sources/sqlite.ex) — Per-database implementations of the `Lotus.Source` callbacks (transactions, timeouts, identifier quoting, filter/sort injection, built-in deny rules).
+- [`Lotus.Normalizer.Postgres`](../lib/lotus/normalizer/postgres.ex) / [`Lotus.Normalizer.MySQL`](../lib/lotus/normalizer/mysql.ex) — Normalize driver-specific result shapes into the `Lotus.Result` format.
+
+**Caching**
+
+- [`Lotus.Cache`](../lib/lotus/cache.ex) — Facade that dispatches to the configured cache adapter and emits telemetry. Supports namespaced keys, TTL, and tag-based invalidation.
+- [`Lotus.Cache.Adapter`](../lib/lotus/cache/adapter.ex) — Behaviour for cache backends.
+- [`Lotus.Cache.ETS`](../lib/lotus/cache/ets.ex) / [`Lotus.Cache.Cachex`](../lib/lotus/cache/cachex.ex) — Built-in backends. ETS is the zero-dependency default; Cachex is the advanced option.
+- [`Lotus.Cache.Key`](../lib/lotus/cache/key.ex) — Stable key derivation from SQL, parameters, adapter name, and search path.
+
+**Export and AI**
+
+- [`Lotus.Export`](../lib/lotus/export.ex) — Converts `Lotus.Result` to CSV/JSON/JSONL, streams large CSV exports, and ZIPs a full dashboard export.
+- [`Lotus.AI`](../lib/lotus/ai.ex) — Public AI surface (`generate_query/1`, `explain_query/2`, `optimize_query/2`).
+- [`Lotus.AI.SQLGenerator`](../lib/lotus/ai/sql_generator.ex), [`QueryExplainer`](../lib/lotus/ai/query_explainer.ex), [`QueryOptimizer`](../lib/lotus/ai/query_optimizer.ex) — Request orchestration for each AI capability.
+- [`Lotus.AI.Conversation`](../lib/lotus/ai/conversation.ex) — Multi-turn conversation state used for iterative refinement.
+- [`Lotus.AI.Actions`](../lib/lotus/ai/actions.ex) and `lib/lotus/ai/actions/` — Tool definitions the LLM can call (schema listing, column value sampling, SQL validation/execution).
+- [`Lotus.AI.Prompts`](../lib/lotus/ai/prompts/) — Prompt templates for SQL generation, explanation, optimization, and variable inference.
+- [`Lotus.AI.SchemaOptimizer`](../lib/lotus/ai/schema_optimizer.ex) — Trims schema context before it is sent to the LLM.
+
+### Query Execution Pipeline
+
+When you call `Lotus.run_query(query, opts)` the request flows through roughly the following stages. `Lotus.run_sql/3` skips the variable and storage stages but shares the rest.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Lotus.run_query / Lotus.run_sql                                      │
+│  • Merge variable defaults + opts[:vars]                             │
+│  • Storage.Query.to_sql_params/2 → {sql, params}                     │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Lotus.Sources.resolve!/2                                             │
+│  • Configured resolver → %Lotus.Source.Adapter{}                     │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Dynamic SQL shaping (per-source via Lotus.Source)                    │
+│  • apply_filters/3 (Lotus.Query.Filter)                              │
+│  • apply_sorts/2   (Lotus.Query.Sort)                                │
+│  • windowed pagination (limit/offset/count)                          │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Lotus.Cache.get_or_store/4                                           │
+│  • Key: sql + params + adapter name + search_path                    │
+│  • Tags: ["query:<id>", "repo:<name>", ...user tags]                 │
+│  • Hit  → return cached Result                                       │
+│  • Miss → run the fetcher below                                      │
+└─────────────────────────────────────────────────────────────────────┘
+                               │ miss / :bypass / :refresh
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Lotus.Runner.run_sql                                                 │
+│  1. assert_single_statement/1                                        │
+│  2. assert_not_denied/2 (skipped when read_only: false)              │
+│  3. Lotus.Preflight.authorize (EXPLAIN + visibility check)           │
+│  4. Middleware.run(:before_query, _)                                 │
+│  5. Adapter.transaction (read-only) → Adapter.execute_query          │
+│  6. Column policy enforcement (omit / mask / error)                  │
+│  7. Middleware.run(:after_query, _)                                  │
+│  8. Telemetry start/stop/exception                                   │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                          Lotus.Result
+```
+
+A few notes on the pipeline:
+
+- **Variable binding** happens inside `Lotus.Storage.Query.to_sql_params/2`, which also consults `Lotus.Storage.SchemaCache` for type-aware casting of user-supplied values.
+- **Filters and sorts** are injected through the source adapter, not concatenated naively — see `Lotus.SQL.FilterInjector` and `Lotus.SQL.SortInjector`.
+- **Windowed pagination** rewrites the SQL to fetch a page and (optionally) issue a separate `COUNT(*)` for the exact total.
+- **Caching** is optional. When no cache adapter is configured, `Lotus.Cache` is a pass-through and the fetcher always runs.
+- **Preflight** issues `EXPLAIN` against the target source. The relations it discovers are stashed in `Lotus.Preflight.Relations` so the runner can look up column visibility policies without re-parsing the SQL.
+- **Middleware** runs after preflight and before the actual execution — halting the pipeline from a `:before_query` plug yields `{:error, reason}` to the caller.
+
+### Schema Introspection Flow
+
+Schema calls follow a simpler path but share the same adapter and middleware infrastructure:
+
+```
+Lotus.Schema.list_schemas / list_tables / get_table_schema
+  │
+  ▼
+Lotus.Sources.resolve!/2        (→ %Adapter{})
+  │
+  ▼
+Lotus.Cache.get_or_store         (optional, keyed by repo + args)
+  │
+  ▼
+Adapter dispatch → source-specific introspection query
+  │
+  ▼
+Lotus.Visibility filtering       (schema > table > column)
+  │
+  ▼
+Middleware.run(:after_list_schemas | :after_list_tables | ...)
+  │
+  ▼
+Telemetry.schema_introspection_stop
+```
+
+Column metadata discovered during `get_table_schema/2` is additionally cached in `Lotus.Storage.SchemaCache`, which is what powers type-aware variable casting when queries run.
+
+### Adapter Patterns
+
+Lotus has four pluggable extension points. Each is a behaviour plus a default implementation, so you can swap any of them without forking the library.
+
+| Extension point            | Behaviour                                     | Default                                  |
+|----------------------------|-----------------------------------------------|------------------------------------------|
+| Data source adapter        | `Lotus.Source.Adapter`                        | `Lotus.Source.Adapters.Ecto`             |
+| Source resolver            | `Lotus.Source.Resolver`                       | `Lotus.Source.Resolvers.Static`          |
+| Per-source SQL operations  | `Lotus.Source`                                | `Lotus.Sources.{Postgres,MySQL,SQLite}`  |
+| Visibility resolver        | `Lotus.Visibility.Resolver`                   | `Lotus.Visibility.Resolvers.Static`      |
+| Cache adapter              | `Lotus.Cache.Adapter`                         | `Lotus.Cache.ETS` (or `Lotus.Cache.Cachex`) |
+
+Design notes for adapter authors:
+
+- **Source adapters** carry state in the `%Adapter{}` struct itself (e.g. an Ecto repo module) so the runner never closes over the raw connection. Every introspection callback returns `{:ok, _} | {:error, _}`.
+- **Source resolvers** let you replace the static `data_repos` list with a dynamic registry (database-backed tenants, feature-flagged sources, etc.).
+- **Visibility resolvers** let you compute schema/table/column policies from external sources instead of config — useful when rules live in a multi-tenant database.
+- **Cache adapters** must implement `get_or_store/4`, `put/4`, and `invalidate_tags/1`. ETS is the zero-dependency option; Cachex is recommended when you need distributed caching or richer stats.
+
+### Design Principles
+
+A few opinions run through the codebase; preserving them when you contribute will make review much easier.
+
+1. **Read-only by default, with defense in depth.** Destructive statements are blocked by (a) a regex deny list, (b) preflight authorization using `EXPLAIN`, and (c) a database-level read-only transaction. Each layer exists because the previous one can be bypassed in some edge case. Opting out (`read_only: false`) is a deliberate, explicit flag.
+2. **Pluggable, not hardcoded.** Sources, resolvers, caches, and visibility all go through behaviours. Avoid pattern-matching on concrete modules inside the query pipeline — dispatch through the adapter.
+3. **Visibility is two-level plus column-aware.** Schema visibility is checked before table visibility, and column policies (omit/mask/error) run inside the runner after the result comes back. Any new introspection path must respect all three.
+4. **Session state is scoped and explicit.** Per-request state like statement timeouts and search paths is set by the source adapter at the start of a transaction; there is no hidden global state. `Lotus.Preflight.Relations` is the one place we use the process dictionary, and it's scrubbed per call.
+5. **Type-aware caching.** Query results and schema metadata are cached separately. Result caches are keyed on `sql + params + adapter + search_path` and tagged for targeted invalidation. Column metadata lives in `Lotus.Storage.SchemaCache` so value casting doesn't require re-introspection.
+6. **Observability is first-class.** Every meaningful operation emits `[:lotus, ...]` telemetry events. New features should do the same (look at `Lotus.Telemetry` for helpers).
+7. **Middleware is the extension seam for cross-cutting concerns.** Auditing, access control, and per-tenant overrides belong in middleware plugs — not in the runner itself.
+
+### Where to Look Next
+
+- New to the pipeline? Start in [`Lotus`](../lib/lotus.ex) (`run_query/2`) and follow the calls into [`Lotus.Runner`](../lib/lotus/runner.ex).
+- Working on a new database? Read [`Lotus.Source`](../lib/lotus/source.ex) and [`Lotus.Source.Adapter`](../lib/lotus/source/adapter.ex), then mimic [`Lotus.Sources.Postgres`](../lib/lotus/sources/postgres.ex).
+- Working on caching? [`Lotus.Cache`](../lib/lotus/cache.ex) and [`Lotus.Cache.ETS`](../lib/lotus/cache/ets.ex) are the smallest self-contained example.
+- Working on visibility or auditing? Start in [`Lotus.Visibility`](../lib/lotus/visibility.ex) and [`Lotus.Middleware`](../lib/lotus/middleware.ex).
+- Working on AI features? Begin with [`Lotus.AI`](../lib/lotus/ai.ex) and follow the calls into `lib/lotus/ai/`.
+
 ## Development Workflow
 
 ### Making Changes
