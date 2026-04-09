@@ -850,8 +850,9 @@ defmodule Lotus do
   defp maybe_apply_window(sql, params, adapter, search_path, window_opts)
        when is_list(window_opts) do
     alias Lotus.Source.Adapter
+    alias Lotus.SQL.Sanitizer
 
-    base_sql = trim_trailing_semicolon(sql)
+    base_sql = Sanitizer.strip_trailing_semicolon(sql)
     limit = resolve_window_limit(window_opts)
     offset = Keyword.get(window_opts, :offset, 0)
     count_mode = Keyword.get(window_opts, :count, :none)
@@ -950,17 +951,4 @@ defmodule Lotus do
 
   defp parse_count_result({:ok, %Result{rows: _}}), do: {:error, :invalid_count}
   defp parse_count_result(other), do: other
-
-  defp trim_trailing_semicolon(sql) do
-    s = String.trim(sql)
-
-    if String.ends_with?(s, ";") do
-      s
-      |> String.trim_trailing()
-      |> String.trim_trailing(";")
-      |> String.trim_trailing()
-    else
-      s
-    end
-  end
 end

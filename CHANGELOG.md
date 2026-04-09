@@ -36,6 +36,7 @@
 - **BREAKING:** `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string
 - **BREAKING:** `Lotus.Source.apply_filters/2` callback is now `apply_filters/3` — accepts `params` list and returns `{sql, params}` tuple. All source adapters (Postgres, MySQL, SQLite3, Default) updated accordingly
 - Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
+- **REFACTOR:** Remove duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
 
 ## [0.16.4] - 2026-03-10
 
