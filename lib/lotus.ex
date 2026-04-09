@@ -439,9 +439,14 @@ defmodule Lotus do
 
   defp execute_query(q, sql, params, vars, opts) do
     adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
-
     search_path = Keyword.get(opts, :search_path) || q.search_path
-    final_opts = prepare_final_opts(opts, search_path)
+    runner_opts = prepare_final_opts(opts, search_path)
+
+    execute_with_options(adapter, sql, params, opts, runner_opts, vars, q.id)
+  end
+
+  defp execute_with_options(adapter, sql, params, opts, runner_opts, cache_identity, query_id) do
+    search_path = Keyword.get(runner_opts, :search_path)
 
     filters = Keyword.get(opts, :filters, [])
     {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
@@ -458,12 +463,12 @@ defmodule Lotus do
         Keyword.get(opts, :window)
       )
 
-    key = result_key(sql, cache_bound || vars, adapter.name, search_path)
-    tags = build_cache_tags(q.id, adapter.name, opts)
+    key = result_key(sql, cache_bound || cache_identity, adapter.name, search_path)
+    tags = build_cache_tags(query_id, adapter.name, opts)
     profile = determine_cache_profile(opts)
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, final_opts) do
+      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, runner_opts) do
         {:ok, merge_window_meta(res, window_meta)}
       end
     end)
@@ -479,7 +484,11 @@ defmodule Lotus do
   end
 
   defp build_cache_tags(query_id, repo_name, opts) do
-    base_tags = ["query:#{query_id}", "repo:#{repo_name}"]
+    base_tags =
+      case query_id do
+        nil -> ["repo:#{repo_name}"]
+        id -> ["query:#{id}", "repo:#{repo_name}"]
+      end
 
     case opts[:cache] do
       cache_opts when is_list(cache_opts) -> base_tags ++ Keyword.get(cache_opts, :tags, [])
@@ -587,41 +596,7 @@ defmodule Lotus do
       |> Keyword.delete(:repo)
       |> Keyword.put_new_lazy(:read_only, &Config.read_only?/0)
 
-    search_path = Keyword.get(runner_opts, :search_path)
-
-    filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
-
-    sorts = Keyword.get(opts, :sorts, [])
-    sql = Lotus.Source.apply_sorts(adapter, sql, sorts)
-
-    {sql, params, window_meta, cache_bound} =
-      maybe_apply_window(
-        sql,
-        params,
-        adapter,
-        search_path,
-        Keyword.get(opts, :window)
-      )
-
-    key = result_key(sql, cache_bound || params, adapter.name, search_path)
-
-    tags =
-      ["repo:#{adapter.name}"] ++
-        if is_list(opts[:cache]), do: Keyword.get(opts[:cache], :tags, []), else: []
-
-    profile =
-      if is_list(opts[:cache]) do
-        Keyword.get(opts[:cache], :profile, Config.default_cache_profile())
-      else
-        Config.default_cache_profile()
-      end
-
-    exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, runner_opts) do
-        {:ok, merge_window_meta(res, window_meta)}
-      end
-    end)
+    execute_with_options(adapter, sql, params, opts, runner_opts, params, nil)
   end
 
   @doc """
