@@ -25,6 +25,10 @@ jobs:
               elixir: "1.18"
               erlang: "27.3.2"
               postgres: "15.8-alpine"
+          - tuple:
+              elixir: "1.19"
+              erlang: "27.3.2"
+              postgres: "15.8-alpine"
 
     env:
       MIX_ENV: test
