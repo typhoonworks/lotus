@@ -75,5 +75,6 @@ Thumbs.db
 # Tools
 .accomplish.toml
 plans/
-.claude
+.claude/*
+!.claude/settings.json
 CLAUDE.local.md
