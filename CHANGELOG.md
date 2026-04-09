@@ -28,6 +28,8 @@
 ### Fixed
 
 - **FIX:** Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
+- **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
+- **DOCS:** Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
 
 ### Changed
 

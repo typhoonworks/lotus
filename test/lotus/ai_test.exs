@@ -116,6 +116,8 @@ defmodule Lotus.AITest do
 
     test "returns structured error when AI not configured" do
       Application.delete_env(:lotus, :ai)
+      Lotus.Config.reload!()
+      on_exit(fn -> Lotus.Config.reload!() end)
 
       assert {:error, :not_configured} =
                AI.generate_query(
@@ -225,9 +227,11 @@ defmodule Lotus.AITest do
 
   defp set_ai_config(opts) do
     Application.put_env(:lotus, :ai, opts)
+    Lotus.Config.reload!()
 
     on_exit(fn ->
       Application.delete_env(:lotus, :ai)
+      Lotus.Config.reload!()
     end)
   end
 end

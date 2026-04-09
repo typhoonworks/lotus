@@ -238,13 +238,49 @@ defmodule Lotus.Config do
     ]
   ]
 
+  @persistent_term_key {__MODULE__, :validated}
+
   @doc """
   Loads and validates the Lotus configuration.
 
+  When called with no arguments, returns a cached, pre-validated configuration
+  from `:persistent_term`, validating and caching it on first access. When
+  called with an explicit keyword list, always validates the supplied options
+  without touching the cache.
+
   Raises `ArgumentError` if the configuration is invalid.
   """
+  @spec load!() :: t() | keyword()
+  def load! do
+    case :persistent_term.get(@persistent_term_key, :__lotus_unset__) do
+      :__lotus_unset__ ->
+        conf = validate!(get_lotus_config())
+        :persistent_term.put(@persistent_term_key, conf)
+        conf
+
+      conf ->
+        conf
+    end
+  end
+
   @spec load!(keyword()) :: t() | keyword()
-  def load!(opts \\ get_lotus_config()) do
+  def load!(opts), do: validate!(opts)
+
+  @doc """
+  Re-reads configuration from the application environment, validates it, and
+  refreshes the cached value in `:persistent_term`.
+
+  Call this whenever `:lotus` application environment changes after boot
+  (e.g. in tests that use `Application.put_env/3`).
+  """
+  @spec reload!() :: t() | keyword()
+  def reload! do
+    conf = validate!(get_lotus_config())
+    :persistent_term.put(@persistent_term_key, conf)
+    conf
+  end
+
+  defp validate!(opts) do
     case NimbleOptions.validate(opts, @schema) do
       {:ok, conf} -> conf
       {:error, e} -> raise ArgumentError, "Invalid :lotus config: #{Exception.message(e)}"
