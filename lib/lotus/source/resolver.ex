@@ -2,9 +2,21 @@ defmodule Lotus.Source.Resolver do
   @moduledoc """
   Behaviour for resolving named data sources to adapters.
 
-  The default implementation reads from static `data_repos` configuration.
-  Alternative implementations can resolve sources from registries,
-  databases, or external services.
+  This is a **supported extension point**. The default implementation
+  (`Lotus.Source.Resolvers.Static`) reads from static `data_repos`
+  configuration, which is all most applications need. Alternative
+  implementations can resolve sources from registries, databases, or
+  external services — for example to register sources at runtime, to
+  manage per-tenant sources, or to change the set of available sources
+  without restarting the application.
+
+  Configure a custom resolver via the `:source_resolver` config key:
+
+      config :lotus,
+        source_resolver: MyApp.SourceResolver
+
+  See the [Custom Resolvers guide](custom-resolvers.html) for contracts,
+  minimal examples, and testing guidance.
   """
 
   @callback resolve(
