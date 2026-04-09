@@ -105,7 +105,7 @@ defimpl Lotus.Normalizer, for: Decimal do
 end
 
 defimpl Lotus.Normalizer, for: URI do
-  def normalize(value), do: inspect(value)
+  def normalize(value), do: URI.to_string(value)
 end
 
 # Fallback for any other type

@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- **FIX:** `Lotus.Normalizer` implementation for `URI` now uses `URI.to_string/1` instead of `inspect/1`, producing the actual URL string rather than the `%URI{}` struct representation (#159)
 - **FIX:** Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
 - **FIX:** Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
 - **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
