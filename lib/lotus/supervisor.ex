@@ -1,6 +1,27 @@
 defmodule Lotus.Supervisor do
   @moduledoc """
   Top-level supervisor for Lotus.
+
+  ## Configuration paths
+
+  Lotus can be started in two ways, and each resolves configuration differently:
+
+    * **As an OTP application** (via `Lotus.Application`) — the supervisor is
+      started with no opts, so `middleware` and `cache` are read from the
+      application environment (`Lotus.Config.middleware/0` and
+      `Lotus.Config.cache_config/0`). This is the default when `:lotus` is
+      started automatically as a dependency via its OTP application callback.
+
+    * **Embedded in a host supervision tree** (via `child_spec/1`) — opts
+      passed to `child_spec/1` (e.g. `middleware:`, `cache:`, `name:`) are
+      forwarded to `start_link/1` and override the application environment
+      values for that instance. This is the path to use when running multiple
+      Lotus instances or when you want per-instance configuration without
+      touching the application environment.
+
+  In both cases, opts passed directly to `start_link/1` take precedence over
+  application environment config; the `Application.start/2` path simply does
+  not pass any opts through.
   """
 
   use Supervisor
