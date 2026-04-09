@@ -12,7 +12,7 @@ defmodule Lotus.DashboardsTest do
     DashboardFilter
   }
 
-  describe "list_dashboards/0" do
+  describe "list_dashboards/1" do
     test "returns empty list when no dashboards exist" do
       assert [] == Dashboards.list_dashboards()
     end
@@ -28,6 +28,25 @@ defmodule Lotus.DashboardsTest do
 
       assert [%{name: "Alpha Dashboard"}, %{name: "Middle Dashboard"}, %{name: "Zebra Dashboard"}] =
                dashboards
+    end
+
+    test "does not preload :cards by default" do
+      dashboard = dashboard_fixture()
+      dashboard_card_fixture(dashboard)
+
+      [result] = Dashboards.list_dashboards()
+
+      assert %Ecto.Association.NotLoaded{} = result.cards
+    end
+
+    test "preloads :cards when requested" do
+      dashboard = dashboard_fixture()
+      dashboard_card_fixture(dashboard, %{position: 0})
+      dashboard_card_fixture(dashboard, %{position: 1})
+
+      [result] = Dashboards.list_dashboards(preload: [:cards])
+
+      assert [%DashboardCard{}, %DashboardCard{}] = result.cards
     end
   end
 
@@ -51,6 +70,25 @@ defmodule Lotus.DashboardsTest do
 
       results = Dashboards.list_dashboards_by([])
       assert length(results) == 2
+    end
+
+    test "does not preload :cards by default" do
+      dashboard = dashboard_fixture()
+      dashboard_card_fixture(dashboard)
+
+      [result] = Dashboards.list_dashboards_by([])
+
+      assert %Ecto.Association.NotLoaded{} = result.cards
+    end
+
+    test "preloads :cards when requested" do
+      dashboard = dashboard_fixture(%{name: "Preload Me"})
+      dashboard_card_fixture(dashboard, %{position: 0})
+      dashboard_card_fixture(dashboard, %{position: 1})
+
+      [result] = Dashboards.list_dashboards_by(search: "Preload", preload: [:cards])
+
+      assert [%DashboardCard{}, %DashboardCard{}] = result.cards
     end
   end
 
@@ -567,6 +605,14 @@ defmodule Lotus.DashboardsTest do
     test "delegates list_dashboards/0" do
       dashboard_fixture(%{name: "Delegated"})
       assert [%{name: "Delegated"}] = Lotus.list_dashboards()
+    end
+
+    test "delegates list_dashboards/1 with :preload option" do
+      dashboard = dashboard_fixture(%{name: "Delegated Preload"})
+      dashboard_card_fixture(dashboard)
+
+      assert [%Dashboard{cards: [%DashboardCard{} | _]}] =
+               Lotus.list_dashboards(preload: [:cards])
     end
 
     test "delegates create_dashboard/1" do
