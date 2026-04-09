@@ -521,13 +521,7 @@ defmodule Lotus.Config do
   """
   @spec cache_namespace() :: String.t()
   def cache_namespace do
-    case cache_config() do
-      nil ->
-        "lotus:v0"
-
-      config ->
-        config[:namespace] || "lotus:v1"
-    end
+    (cache_config() || [])[:namespace] || "lotus:v1"
   end
 
   @doc """
