@@ -25,6 +25,7 @@
 
 - **FIX:** Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)
 - **FIX:** Validate column names in `FilterInjector` and `SortInjector` against `[a-zA-Z_][a-zA-Z0-9_]*` using `Lotus.SQL.Identifier`, rejecting column names containing spaces, quotes, semicolons, or other special characters (#152)
+- **FIX:** Track nesting depth in `Runner`'s `skip_block_comment/1` so the single-statement parser matches PostgreSQL's nested block comment semantics. The previous implementation exited at the first `*/`, which could let a second statement slip past `assert_single_statement/1` when hidden inside a nested comment (#164)
 
 ### Fixed
 

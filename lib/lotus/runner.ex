@@ -267,9 +267,16 @@ defmodule Lotus.Runner do
   defp skip_to_eol(<<"\n", rest::binary>>), do: rest
   defp skip_to_eol(<<_::utf8, rest::binary>>), do: skip_to_eol(rest)
 
-  defp skip_block_comment(<<>>), do: <<>>
-  defp skip_block_comment(<<"*/", rest::binary>>), do: rest
-  defp skip_block_comment(<<_::utf8, rest::binary>>), do: skip_block_comment(rest)
+  # PostgreSQL supports nested block comments. Track depth so a nested `/*`
+  # does not let the parser exit early on the first `*/`, which would let a
+  # subsequent statement slip past `assert_single_statement/1`.
+  defp skip_block_comment(rest), do: skip_block_comment(rest, 1)
+
+  defp skip_block_comment(<<>>, _depth), do: <<>>
+  defp skip_block_comment(<<"*/", rest::binary>>, 1), do: rest
+  defp skip_block_comment(<<"*/", rest::binary>>, depth), do: skip_block_comment(rest, depth - 1)
+  defp skip_block_comment(<<"/*", rest::binary>>, depth), do: skip_block_comment(rest, depth + 1)
+  defp skip_block_comment(<<_::utf8, rest::binary>>, depth), do: skip_block_comment(rest, depth)
 
   defp skip_single_quoted(<<>>), do: <<>>
   defp skip_single_quoted(<<"''", rest::binary>>), do: skip_single_quoted(rest)
