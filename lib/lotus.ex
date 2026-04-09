@@ -532,15 +532,7 @@ defmodule Lotus do
   def can_run?(query, opts \\ [])
 
   def can_run?(%Query{} = q, opts) do
-    supplied_vars = Keyword.get(opts, :vars, %{}) || %{}
-
-    defaults =
-      q.variables
-      |> Enum.filter(& &1.default)
-      |> Map.new(fn v -> {v.name, v.default} end)
-
-    vars = Map.merge(defaults, supplied_vars)
-
+    vars = prepare_variables(q, opts)
     match?({:ok, _, _}, Query.to_sql_params(q, vars))
   end
 
