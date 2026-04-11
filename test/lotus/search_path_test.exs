@@ -13,7 +13,7 @@ defmodule Lotus.SearchPathTest do
           name: "Unqualified Customers Query",
           statement: "SELECT COUNT(*) FROM customers",
           search_path: "reporting, public",
-          data_repo: "postgres"
+          data_source: "postgres"
         })
 
       # The query should execute successfully using the search_path to find reporting.customers
@@ -36,7 +36,7 @@ defmodule Lotus.SearchPathTest do
         Storage.create_query(%{
           name: "Override Test",
           statement: "SELECT COUNT(*) FROM customers",
-          data_repo: "postgres"
+          data_source: "postgres"
         })
 
       assert {:ok, result} = Lotus.run_query(query, search_path: "reporting, public")

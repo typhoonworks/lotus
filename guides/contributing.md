@@ -82,7 +82,7 @@ Everything lives under `lib/lotus/`. The library is roughly split into a public 
 
 - [`Lotus`](../lib/lotus.ex) — Top-level facade. `run_query/2`, `run_sql/3`, `create_query/1`, schema helpers, and dashboard helpers all entry through here.
 - [`Lotus.Supervisor`](../lib/lotus/supervisor.ex) — Boots the configured cache adapter, starts a `Task.Supervisor` (used by dashboard card execution), and compiles the middleware pipeline.
-- [`Lotus.Config`](../lib/lotus/config.ex) — Validates and caches application configuration (data repos, cache profiles, visibility rules, AI settings, middleware, etc.).
+- [`Lotus.Config`](../lib/lotus/config.ex) — Validates and caches application configuration (data sources, cache profiles, visibility rules, AI settings, middleware, etc.).
 - [`Lotus.Telemetry`](../lib/lotus/telemetry.ex) — Emits `:telemetry` events for query execution, schema introspection, and cache hits/misses.
 
 **Query pipeline**
@@ -241,7 +241,7 @@ Lotus has four pluggable extension points. Each is a behaviour plus a default im
 Design notes for adapter authors:
 
 - **Source adapters** carry state in the `%Adapter{}` struct itself (e.g. an Ecto repo module) so the runner never closes over the raw connection. Every introspection callback returns `{:ok, _} | {:error, _}`.
-- **Source resolvers** let you replace the static `data_repos` list with a dynamic registry (database-backed tenants, feature-flagged sources, etc.).
+- **Source resolvers** let you replace the static `data_sources` list with a dynamic registry (database-backed tenants, feature-flagged sources, etc.).
 - **Visibility resolvers** let you compute schema/table/column policies from external sources instead of config — useful when rules live in a multi-tenant database.
 - **Cache adapters** must implement `get_or_store/4`, `put/4`, and `invalidate_tags/1`. ETS is the zero-dependency option; Cachex is recommended when you need distributed caching or richer stats.
 
@@ -495,8 +495,8 @@ mix test --only sqlite
 # Test table visibility across adapters
 mix test test/lotus/visibility_test.exs
 
-# Test data repo functionality
-mix test test/lotus/data_repo_test.exs
+# Test data source functionality
+mix test test/lotus/data_source_test.exs
 ```
 
 ### Caching Features

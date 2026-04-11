@@ -48,7 +48,7 @@ defmodule Lotus.Integration.Mysql.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -70,7 +70,7 @@ defmodule Lotus.Integration.Mysql.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -89,7 +89,7 @@ defmodule Lotus.Integration.Mysql.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})

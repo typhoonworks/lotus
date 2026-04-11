@@ -17,7 +17,7 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn repo_name ->
+      |> stub(:schema_rules_for_source_name, fn repo_name ->
         if repo_name == "postgres", do: schema_rules, else: []
       end)
 
@@ -28,13 +28,13 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       default_rules = [allow: ["public"], deny: []]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn _repo_name -> default_rules end)
+      |> stub(:schema_rules_for_source_name, fn _repo_name -> default_rules end)
 
       assert Static.schema_rules_for("unknown_repo", nil) == default_rules
     end
 
     test "returns empty list when no rules configured" do
-      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> [] end)
+      Lotus.Config |> stub(:schema_rules_for_source_name, fn _repo_name -> [] end)
 
       assert Static.schema_rules_for("postgres", nil) == []
       assert Static.schema_rules_for("mysql", nil) == []
@@ -47,14 +47,14 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_rules end)
+      |> stub(:schema_rules_for_source_name, fn _repo_name -> schema_rules end)
 
       assert Static.schema_rules_for("postgres", nil) == schema_rules
     end
 
     test "ignores scope argument" do
       rules = [allow: ["public"]]
-      Lotus.Config |> stub(:schema_rules_for_repo_name, fn _repo_name -> rules end)
+      Lotus.Config |> stub(:schema_rules_for_source_name, fn _repo_name -> rules end)
 
       assert Static.schema_rules_for("postgres", nil) == rules
       assert Static.schema_rules_for("postgres", %{role: :admin}) == rules
@@ -73,7 +73,7 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:rules_for_repo_name, fn repo_name ->
+      |> stub(:rules_for_source_name, fn repo_name ->
         if repo_name == "postgres", do: table_rules, else: []
       end)
 
@@ -84,13 +84,13 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       default_rules = [allow: [], deny: ["sensitive_data"]]
 
       Lotus.Config
-      |> stub(:rules_for_repo_name, fn _repo_name -> default_rules end)
+      |> stub(:rules_for_source_name, fn _repo_name -> default_rules end)
 
       assert Static.table_rules_for("unknown_repo", nil) == default_rules
     end
 
     test "returns empty list when no rules configured" do
-      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> [] end)
+      Lotus.Config |> stub(:rules_for_source_name, fn _repo_name -> [] end)
 
       assert Static.table_rules_for("postgres", nil) == []
       assert Static.table_rules_for("mysql", nil) == []
@@ -108,7 +108,7 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:rules_for_repo_name, fn _repo_name -> table_rules end)
+      |> stub(:rules_for_source_name, fn _repo_name -> table_rules end)
 
       assert Static.table_rules_for("postgres", nil) == table_rules
     end
@@ -123,7 +123,7 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:column_rules_for_repo_name, fn repo_name ->
+      |> stub(:column_rules_for_source_name, fn repo_name ->
         if repo_name == "postgres", do: column_rules, else: []
       end)
 
@@ -136,13 +136,13 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:column_rules_for_repo_name, fn _repo_name -> default_rules end)
+      |> stub(:column_rules_for_source_name, fn _repo_name -> default_rules end)
 
       assert Static.column_rules_for("unknown_repo", nil) == default_rules
     end
 
     test "returns empty list when no rules configured" do
-      Lotus.Config |> stub(:column_rules_for_repo_name, fn _repo_name -> [] end)
+      Lotus.Config |> stub(:column_rules_for_source_name, fn _repo_name -> [] end)
 
       assert Static.column_rules_for("postgres", nil) == []
       assert Static.column_rules_for("mysql", nil) == []
@@ -161,7 +161,7 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:column_rules_for_repo_name, fn _repo_name -> column_rules end)
+      |> stub(:column_rules_for_source_name, fn _repo_name -> column_rules end)
 
       assert Static.column_rules_for("postgres", nil) == column_rules
     end
@@ -217,9 +217,9 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_rules end)
-      |> stub(:rules_for_repo_name, fn _repo_name -> table_rules end)
-      |> stub(:column_rules_for_repo_name, fn _repo_name -> column_rules end)
+      |> stub(:schema_rules_for_source_name, fn _repo_name -> schema_rules end)
+      |> stub(:rules_for_source_name, fn _repo_name -> table_rules end)
+      |> stub(:column_rules_for_source_name, fn _repo_name -> column_rules end)
 
       assert Static.schema_rules_for("postgres", nil) == schema_rules
       assert Static.table_rules_for("postgres", nil) == table_rules
@@ -244,9 +244,9 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       ]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_rules end)
-      |> stub(:rules_for_repo_name, fn _repo_name -> table_rules end)
-      |> stub(:column_rules_for_repo_name, fn _repo_name -> column_rules end)
+      |> stub(:schema_rules_for_source_name, fn _repo_name -> schema_rules end)
+      |> stub(:rules_for_source_name, fn _repo_name -> table_rules end)
+      |> stub(:column_rules_for_source_name, fn _repo_name -> column_rules end)
 
       assert Static.schema_rules_for("postgres", nil) == schema_rules
       assert Static.table_rules_for("postgres", nil) == table_rules
@@ -270,9 +270,9 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       column_rules = []
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn _repo_name -> schema_rules end)
-      |> stub(:rules_for_repo_name, fn _repo_name -> table_rules end)
-      |> stub(:column_rules_for_repo_name, fn _repo_name -> column_rules end)
+      |> stub(:schema_rules_for_source_name, fn _repo_name -> schema_rules end)
+      |> stub(:rules_for_source_name, fn _repo_name -> table_rules end)
+      |> stub(:column_rules_for_source_name, fn _repo_name -> column_rules end)
 
       assert Static.schema_rules_for("mysql", nil) == schema_rules
       assert Static.table_rules_for("mysql", nil) == table_rules
@@ -281,11 +281,11 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
   end
 
   describe "consistency with Config functions" do
-    test "schema_rules_for delegates directly to Config.schema_rules_for_repo_name" do
+    test "schema_rules_for delegates directly to Config.schema_rules_for_source_name" do
       test_rules = [allow: ["public"], deny: []]
 
       Lotus.Config
-      |> stub(:schema_rules_for_repo_name, fn repo_name ->
+      |> stub(:schema_rules_for_source_name, fn repo_name ->
         if repo_name == "test_repo", do: test_rules, else: []
       end)
 
@@ -293,11 +293,11 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       assert result == test_rules
     end
 
-    test "table_rules_for delegates directly to Config.rules_for_repo_name" do
+    test "table_rules_for delegates directly to Config.rules_for_source_name" do
       test_rules = [allow: [{"public", "users"}], deny: []]
 
       Lotus.Config
-      |> stub(:rules_for_repo_name, fn repo_name ->
+      |> stub(:rules_for_source_name, fn repo_name ->
         if repo_name == "test_repo", do: test_rules, else: []
       end)
 
@@ -305,11 +305,11 @@ defmodule Lotus.Visibility.Resolvers.StaticTest do
       assert result == test_rules
     end
 
-    test "column_rules_for delegates directly to Config.column_rules_for_repo_name" do
+    test "column_rules_for delegates directly to Config.column_rules_for_source_name" do
       test_rules = [{nil, "passwords", :omit}]
 
       Lotus.Config
-      |> stub(:column_rules_for_repo_name, fn repo_name ->
+      |> stub(:column_rules_for_source_name, fn repo_name ->
         if repo_name == "test_repo", do: test_rules, else: []
       end)
 

@@ -35,7 +35,7 @@ defmodule Lotus.Cache.KeyBuilder.Default do
 
   @impl true
   def result_key(sql, bound, opts, scope) do
-    repo = Keyword.fetch!(opts, :data_repo)
+    repo = Keyword.fetch!(opts, :data_source)
     path = Keyword.get(opts, :search_path, "") || ""
     version = Keyword.get(opts, :lotus_version, Lotus.version())
 

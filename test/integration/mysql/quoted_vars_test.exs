@@ -24,7 +24,7 @@ defmodule Lotus.Integration.Mysql.QuotedVarsTest do
         WHERE name = '{{name}}'
         """,
         variables: [%{name: "name", type: :text, default: nil}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       result = Lotus.run_query(query, vars: %{"name" => "John Doe"})
@@ -43,7 +43,7 @@ defmodule Lotus.Integration.Mysql.QuotedVarsTest do
         ORDER BY name
         """,
         variables: [%{name: "q", type: :text, default: nil}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       result = Lotus.run_query(query, vars: %{"q" => "John"})

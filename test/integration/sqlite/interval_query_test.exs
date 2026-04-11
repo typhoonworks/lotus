@@ -48,7 +48,7 @@ defmodule Lotus.Integration.Sqlite.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -67,7 +67,7 @@ defmodule Lotus.Integration.Sqlite.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -89,7 +89,7 @@ defmodule Lotus.Integration.Sqlite.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "unit", type: :text, default: nil}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"unit" => "days"})
@@ -114,7 +114,7 @@ defmodule Lotus.Integration.Sqlite.IntervalQueryTest do
           %{name: "days", type: :number, default: nil},
           %{name: "unit", type: :text, default: nil}
         ],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7, "unit" => "days"})

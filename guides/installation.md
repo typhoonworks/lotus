@@ -30,8 +30,8 @@ Add Lotus configuration to your `config/config.exs`:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,        # Where Lotus stores queries
-  default_repo: "main",         # Default repo for queries (required with multiple repos)
-  data_repos: %{                # Where queries execute
+  default_source: "main",       # Default data source for queries (required with multiple sources)
+  data_sources: %{              # Where queries execute
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
@@ -40,8 +40,8 @@ config :lotus,
 ### Configuration Options
 
 - `ecto_repo` (required): Repository where Lotus stores saved queries
-- `data_repos` (required): Map of repositories where queries can be executed
-- `default_repo`: Default repository name to use when none specified (required with multiple repos)
+- `data_sources` (required): Map of data sources where queries can be executed
+- `default_source`: Default data source name to use when none specified (required with multiple sources)
 - `unique_names`: Whether to enforce unique query names (default: `true`)
 - `table_visibility`: Rules controlling which tables can be accessed (optional)
 
@@ -85,7 +85,7 @@ To enable caching, just add a `:cache` entry to your Lotus configuration:
 # config/config.exs
 config :lotus,
   ecto_repo: MyApp.Repo,
-  data_repos: %{"main" => MyApp.Repo},
+  data_sources: %{"main" => MyApp.Repo},
   cache: %{
     adapter: Lotus.Cache.ETS,
     namespace: "myapp_lotus"
@@ -151,8 +151,8 @@ You can use different database types for storage and data:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,          # PostgreSQL for Lotus storage
-  default_repo: "postgres",       # Default repository for queries
-  data_repos: %{
+  default_source: "postgres",     # Default data source for queries
+  data_sources: %{
     "postgres" => MyApp.Repo,     # PostgreSQL data
     "mysql" => MyApp.MySQLRepo,   # MySQL data
     "sqlite" => MyApp.SqliteRepo  # SQLite data

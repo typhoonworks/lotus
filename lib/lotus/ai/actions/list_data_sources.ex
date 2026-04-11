@@ -22,7 +22,7 @@ defmodule Lotus.AI.Actions.ListDataSources do
 
   @impl true
   def run(_params, _context) do
-    names = Lotus.list_data_repo_names()
+    names = Lotus.list_data_source_names()
 
     sources =
       Enum.map(names, fn name ->

@@ -48,7 +48,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -69,7 +69,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
           AND published_at IS NOT NULL
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 1})
@@ -86,7 +86,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
           AND published_at IS NOT NULL
         """,
         variables: [%{name: "unit", type: :text, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"unit" => "days"})
@@ -106,7 +106,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
           %{name: "days", type: :number, default: nil},
           %{name: "unit", type: :text, default: nil}
         ],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7, "unit" => "days"})
@@ -125,7 +125,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
         variables: [
           %{name: "interval", type: :text, default: nil}
         ],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"interval" => "7 days"})
@@ -143,7 +143,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})
@@ -162,7 +162,7 @@ defmodule Lotus.Integration.Postgres.IntervalQueryTest do
         ORDER BY published_at DESC
         """,
         variables: [%{name: "days", type: :number, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"days" => 7})

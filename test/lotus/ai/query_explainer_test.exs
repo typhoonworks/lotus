@@ -10,7 +10,7 @@ defmodule Lotus.AI.QueryExplainerTest do
       Mimic.copy(Lotus.Config)
 
       stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
-      stub(Lotus.Config, :get_data_repo!, fn "postgres" -> Lotus.Test.Repo end)
+      stub(Lotus.Config, :get_data_source!, fn "postgres" -> Lotus.Test.Repo end)
 
       :ok
     end

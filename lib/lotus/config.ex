@@ -12,16 +12,19 @@ defmodule Lotus.Config do
       config :lotus,
         ecto_repo: MyApp.Repo  # Where Lotus stores its query definitions
 
-  ## Data Repositories Configuration
+  ## Data Sources Configuration
 
-  Configure named data repositories that Lotus can execute queries against:
+  Configure named data sources that Lotus can execute queries against:
 
       config :lotus,
-        data_repos: %{
+        data_sources: %{
           "primary" => MyApp.Repo,
           "analytics" => MyApp.AnalyticsRepo,
           "warehouse" => MyApp.WarehouseRepo
         }
+
+  > **Deprecation**: The `:data_repos` config key still works but emits a warning.
+  > Use `:data_sources` in new code.
 
   ## Visibility Configuration
 
@@ -68,17 +71,19 @@ defmodule Lotus.Config do
   ## Optional Configuration
 
       config :lotus,
-        default_repo: "primary",       # Default data repo for queries
+        default_source: "primary",     # Default data source for queries
         unique_names: false,           # Defaults to true
         read_only: false               # Defaults to true; set to false to allow writes
   """
+
+  require Logger
 
   @type t :: %{
           ecto_repo: module(),
           read_only: boolean(),
           unique_names: boolean(),
-          data_repos: %{String.t() => module()},
-          default_repo: String.t() | nil,
+          data_sources: %{String.t() => module()},
+          default_source: String.t() | nil,
           default_page_size: pos_integer() | nil,
           table_visibility: map(),
           column_visibility: map(),
@@ -111,17 +116,17 @@ defmodule Lotus.Config do
       doc:
         "When true (default), blocks write operations (INSERT, UPDATE, DELETE, DDL) at the application level. Set to false to allow write queries."
     ],
-    data_repos: [
+    data_sources: [
       type: {:map, :string, :atom},
       default: %{},
       doc:
-        "Named data repositories that can be used for query execution. Keys are strings, values are repo modules."
+        "Named data sources that can be used for query execution. Keys are strings, values are repo modules."
     ],
-    default_repo: [
+    default_source: [
       type: :string,
       required: false,
       doc:
-        "The default data repository name to use when no repo is specified. Required when multiple data_repos are configured."
+        "The default data source name to use when no source is specified. Required when multiple data_sources are configured."
     ],
     default_page_size: [
       type: {:or, [:pos_integer, nil]},
@@ -295,7 +300,9 @@ defmodule Lotus.Config do
       :read_only,
       :unique_names,
       :data_repos,
+      :data_sources,
       :default_repo,
+      :default_source,
       :default_page_size,
       :table_visibility,
       :column_visibility,
@@ -306,6 +313,34 @@ defmodule Lotus.Config do
       :visibility_resolver,
       :middleware
     ])
+    |> normalize_deprecated_keys()
+  end
+
+  defp normalize_deprecated_keys(opts) do
+    opts
+    |> normalize_key(:data_repos, :data_sources)
+    |> normalize_key(:default_repo, :default_source)
+  end
+
+  defp normalize_key(opts, old_key, new_key) do
+    has_old = Keyword.has_key?(opts, old_key)
+    has_new = Keyword.has_key?(opts, new_key)
+
+    cond do
+      has_old and has_new ->
+        raise ArgumentError,
+              "Cannot configure both :#{old_key} and :#{new_key}. " <>
+                "Use :#{new_key} only — :#{old_key} is deprecated."
+
+      has_old ->
+        Logger.warning("Lotus config :#{old_key} is deprecated. Use :#{new_key} instead.")
+
+        value = Keyword.fetch!(opts, old_key)
+        opts |> Keyword.delete(old_key) |> Keyword.put(new_key, value)
+
+      true ->
+        opts
+    end
   end
 
   @doc """
@@ -327,103 +362,142 @@ defmodule Lotus.Config do
   def read_only?, do: load!()[:read_only]
 
   @doc """
-  Returns the configured data repositories.
+  Returns the configured data sources.
   """
-  @spec data_repos() :: %{String.t() => module()}
-  def data_repos, do: load!()[:data_repos]
+  @spec data_sources() :: %{String.t() => module()}
+  def data_sources, do: load!()[:data_sources]
 
   @doc """
-  Gets a data repository by name.
+  Gets a data source by name.
 
-  Returns the repo module or raises if not found.
+  Returns the source module or raises if not found.
   """
-  @spec get_data_repo!(String.t()) :: module()
-  def get_data_repo!(name) do
-    case Map.get(data_repos(), name) do
+  @spec get_data_source!(String.t()) :: module()
+  def get_data_source!(name) do
+    case Map.get(data_sources(), name) do
       nil ->
         raise ArgumentError,
-              "Data repo '#{name}' not configured. Available repos: #{inspect(Map.keys(data_repos()))}"
+              "Data source '#{name}' not configured. " <>
+                "Available sources: #{inspect(Map.keys(data_sources()))}"
 
-      repo ->
-        repo
+      source ->
+        source
     end
   end
 
   @doc """
-  Lists the names of all configured data repositories.
+  Lists the names of all configured data sources.
   """
-  @spec list_data_repo_names() :: [String.t()]
-  def list_data_repo_names, do: Map.keys(data_repos())
+  @spec list_data_source_names() :: [String.t()]
+  def list_data_source_names, do: Map.keys(data_sources())
 
   @doc """
-  Returns the default data repository as a {name, module} tuple.
+  Returns the default data source as a {name, module} tuple.
 
-  - If default_repo is configured, returns that repo
-  - If default_repo is not configured, returns the first available repo
-  - If no data repos are configured, raises an error
+  - If default_source is configured, returns that source
+  - If default_source is not configured, returns the first available source
+  - If no data sources are configured, raises an error
   """
-  @spec default_data_repo() :: {String.t(), module()}
-  def default_data_repo do
-    repos = data_repos()
+  @spec default_data_source() :: {String.t(), module()}
+  def default_data_source do
+    sources = data_sources()
 
-    case :maps.size(repos) do
+    case :maps.size(sources) do
       0 ->
         raise ArgumentError, """
-        No data repository available for query execution.
+        No data source available for query execution.
 
-        Please configure at least one data repository:
+        Please configure at least one data source:
 
             config :lotus,
-              data_repos: %{
+              data_sources: %{
                 "primary" => MyApp.Repo
               }
         """
 
       _ ->
-        case load!()[:default_repo] do
+        case load!()[:default_source] do
           nil ->
-            Enum.at(repos, 0)
+            Enum.at(sources, 0)
 
           default_name ->
-            {default_name, get_data_repo!(default_name)}
+            {default_name, get_data_source!(default_name)}
         end
     end
   end
 
   @doc """
-  Returns table visibility rules for a specific repository.
+  Returns table visibility rules for a specific source.
 
-  Falls back to default rules if repo-specific rules are not configured.
+  Falls back to default rules if source-specific rules are not configured.
   """
+  @spec rules_for_source_name(String.t()) :: keyword()
+  def rules_for_source_name(source_name),
+    do: visibility_rules_for(:table_visibility, source_name)
+
+  @doc """
+  Returns schema visibility rules for a specific source.
+
+  Falls back to default rules if source-specific rules are not configured.
+  """
+  @spec schema_rules_for_source_name(String.t()) :: keyword()
+  def schema_rules_for_source_name(source_name),
+    do: visibility_rules_for(:schema_visibility, source_name)
+
+  @doc """
+  Returns column visibility rules for a specific source.
+
+  Falls back to default rules if source-specific rules are not configured.
+  """
+  @spec column_rules_for_source_name(String.t()) :: list()
+  def column_rules_for_source_name(source_name),
+    do: visibility_rules_for(:column_visibility, source_name)
+
+  # ── Deprecated aliases ──────────────────────────────────────────────────────
+
+  @doc false
+  @deprecated "Use data_sources/0 instead. Will be removed in v1.0"
+  @spec data_repos() :: %{String.t() => module()}
+  def data_repos, do: data_sources()
+
+  @doc false
+  @deprecated "Use get_data_source!/1 instead. Will be removed in v1.0"
+  @spec get_data_repo!(String.t()) :: module()
+  def get_data_repo!(name), do: get_data_source!(name)
+
+  @doc false
+  @deprecated "Use list_data_source_names/0 instead. Will be removed in v1.0"
+  @spec list_data_repo_names() :: [String.t()]
+  def list_data_repo_names, do: list_data_source_names()
+
+  @doc false
+  @deprecated "Use default_data_source/0 instead. Will be removed in v1.0"
+  @spec default_data_repo() :: {String.t(), module()}
+  def default_data_repo, do: default_data_source()
+
+  @doc false
+  @deprecated "Use rules_for_source_name/1 instead. Will be removed in v1.0"
   @spec rules_for_repo_name(String.t()) :: keyword()
-  def rules_for_repo_name(repo_name), do: visibility_rules_for(:table_visibility, repo_name)
+  def rules_for_repo_name(name), do: rules_for_source_name(name)
 
-  @doc """
-  Returns schema visibility rules for a specific repository.
-
-  Falls back to default rules if repo-specific rules are not configured.
-  """
+  @doc false
+  @deprecated "Use schema_rules_for_source_name/1 instead. Will be removed in v1.0"
   @spec schema_rules_for_repo_name(String.t()) :: keyword()
-  def schema_rules_for_repo_name(repo_name),
-    do: visibility_rules_for(:schema_visibility, repo_name)
+  def schema_rules_for_repo_name(name), do: schema_rules_for_source_name(name)
 
-  @doc """
-  Returns column visibility rules for a specific repository.
-
-  Falls back to default rules if repo-specific rules are not configured.
-  """
+  @doc false
+  @deprecated "Use column_rules_for_source_name/1 instead. Will be removed in v1.0"
   @spec column_rules_for_repo_name(String.t()) :: list()
-  def column_rules_for_repo_name(repo_name),
-    do: visibility_rules_for(:column_visibility, repo_name)
+  def column_rules_for_repo_name(name), do: column_rules_for_source_name(name)
 
-  # Shared lookup for repo-keyed visibility maps. Matches the repo name
+  # Shared lookup for source-keyed visibility maps. Matches the source name
   # string against map keys via `to_string/1`, then falls back to the
   # `:default` entry, then to an empty list.
-  defp visibility_rules_for(key, repo_name) do
+  defp visibility_rules_for(key, source_name) do
     visibility_config = load!()[key] || %{}
-    repo_key = Enum.find(Map.keys(visibility_config), &(to_string(&1) == repo_name))
+    source_key = Enum.find(Map.keys(visibility_config), &(to_string(&1) == source_name))
 
-    (repo_key && visibility_config[repo_key]) || visibility_config[:default] || []
+    (source_key && visibility_config[source_key]) || visibility_config[:default] || []
   end
 
   @doc """

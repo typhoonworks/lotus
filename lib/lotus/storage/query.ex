@@ -24,7 +24,7 @@ defmodule Lotus.Storage.Query do
           description: String.t() | nil,
           statement: String.t(),
           variables: [QueryVariable.t()],
-          data_repo: String.t() | nil,
+          data_source: String.t() | nil,
           search_path: String.t() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
@@ -42,7 +42,7 @@ defmodule Lotus.Storage.Query do
              :description,
              :statement,
              :variables,
-             :data_repo,
+             :data_source,
              :search_path,
              :inserted_at,
              :updated_at
@@ -52,7 +52,7 @@ defmodule Lotus.Storage.Query do
     field(:name, :string)
     field(:description, :string)
     field(:statement, :string)
-    field(:data_repo, :string)
+    field(:data_source, :string, source: :data_repo)
     field(:search_path, :string)
 
     embeds_many(:variables, QueryVariable, on_replace: :delete)
@@ -61,7 +61,7 @@ defmodule Lotus.Storage.Query do
   end
 
   @required ~w(name statement)a
-  @permitted ~w(name description statement data_repo search_path)a
+  @permitted ~w(name description statement data_source search_path)a
 
   def new(attrs), do: changeset(%__MODULE__{}, attrs)
   def update(query, attrs), do: changeset(query, attrs)
@@ -73,7 +73,7 @@ defmodule Lotus.Storage.Query do
     |> validate_required(@required)
     |> validate_length(:name, min: 1, max: 255)
     |> validate_statement()
-    |> validate_data_repo()
+    |> validate_data_source()
     |> validate_search_path()
     |> maybe_add_unique_constraint()
   end
@@ -90,8 +90,8 @@ defmodule Lotus.Storage.Query do
   @spec to_sql_params(t(), map()) ::
           {:ok, String.t(), [term()]} | {:error, String.t()}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
-    repo = get_repo(q.data_repo)
-    source_type = get_source_type(q.data_repo)
+    repo = get_repo(q.data_source)
+    source_type = get_source_type(q.data_source)
     source_module = get_source_module(repo)
 
     # Process optional clauses before transformation
@@ -197,7 +197,7 @@ defmodule Lotus.Storage.Query do
           Enum.reduce_while(values, init, fn v, {:ok, {phs, cvs, i}} ->
             case determine_type_and_cast(v, manual_type, binding) do
               {:ok, {final_type, casted}} ->
-                ph = Lotus.Source.param_placeholder(q.data_repo, i, var, final_type)
+                ph = Lotus.Source.param_placeholder(q.data_source, i, var, final_type)
                 {:cont, {:ok, {[ph | phs], [casted | cvs], i + 1}}}
 
               {:error, _} = err ->
@@ -217,7 +217,7 @@ defmodule Lotus.Storage.Query do
 
   defp substitute_scalar_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx) do
     with {:ok, {final_type, casted_value}} <- determine_type_and_cast(value, manual_type, binding) do
-      placeholder = Lotus.Source.param_placeholder(q.data_repo, idx, var, final_type)
+      placeholder = Lotus.Source.param_placeholder(q.data_source, idx, var, final_type)
       new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder, global: false)
       {:ok, {new_sql, acc_params ++ [casted_value], idx + 1}}
     end
@@ -259,15 +259,15 @@ defmodule Lotus.Storage.Query do
   end
 
   defp get_repo(nil) do
-    {_name, repo} = Config.default_data_repo()
+    {_name, repo} = Config.default_data_source()
     repo
   end
 
-  defp get_repo(repo_name) when is_binary(repo_name) do
-    Config.data_repos()
-    |> Map.get(repo_name)
+  defp get_repo(source_name) when is_binary(source_name) do
+    Config.data_sources()
+    |> Map.get(source_name)
     |> case do
-      nil -> raise ArgumentError, "Unknown data repo: #{repo_name}"
+      nil -> raise ArgumentError, "Unknown data source: #{source_name}"
       repo -> repo
     end
   end
@@ -275,7 +275,7 @@ defmodule Lotus.Storage.Query do
   defp get_repo(repo) when is_atom(repo), do: repo
 
   defp get_source_type(nil) do
-    {_name, repo} = Config.default_data_repo()
+    {_name, repo} = Config.default_data_source()
     Sources.source_type(repo)
   end
 
@@ -460,27 +460,27 @@ defmodule Lotus.Storage.Query do
     end
   end
 
-  defp validate_data_repo(changeset) do
-    case get_change(changeset, :data_repo) do
+  defp validate_data_source(changeset) do
+    case get_change(changeset, :data_source) do
       nil ->
         changeset
 
       "" ->
-        put_change(changeset, :data_repo, nil)
+        put_change(changeset, :data_source, nil)
 
-      repo_name when is_binary(repo_name) ->
-        if repo_name in Map.keys(Config.data_repos()) do
+      source_name when is_binary(source_name) ->
+        if source_name in Map.keys(Config.data_sources()) do
           changeset
         else
           add_error(
             changeset,
-            :data_repo,
-            "must be one of: #{Enum.join(Map.keys(Config.data_repos()), ", ")}"
+            :data_source,
+            "must be one of: #{Enum.join(Map.keys(Config.data_sources()), ", ")}"
           )
         end
 
       _ ->
-        add_error(changeset, :data_repo, "must be a string")
+        add_error(changeset, :data_source, "must be a string")
     end
   end
 

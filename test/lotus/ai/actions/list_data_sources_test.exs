@@ -10,7 +10,7 @@ defmodule Lotus.AI.Actions.ListDataSourcesTest do
 
   describe "run/2" do
     test "returns available data sources with types" do
-      stub(Lotus, :list_data_repo_names, fn -> ["primary", "analytics"] end)
+      stub(Lotus, :list_data_source_names, fn -> ["primary", "analytics"] end)
 
       stub(Lotus.Sources, :source_type, fn
         "primary" -> :postgres
@@ -26,7 +26,7 @@ defmodule Lotus.AI.Actions.ListDataSourcesTest do
     end
 
     test "returns empty list when no data sources configured" do
-      stub(Lotus, :list_data_repo_names, fn -> [] end)
+      stub(Lotus, :list_data_source_names, fn -> [] end)
 
       assert {:ok, result} = ListDataSources.run(%{}, %{})
       assert result.data_sources == []

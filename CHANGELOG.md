@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed `data_repos` config key to `data_sources` (old key still works with deprecation warning)
+- Renamed `default_repo` config key to `default_source` (old key still works with deprecation warning)
+- Renamed public functions: `data_repos/0` → `data_sources/0`, `get_data_repo!/1` → `get_data_source!/1`, `list_data_repo_names/0` → `list_data_source_names/0`, `default_data_repo/0` → `default_data_source/0`, `rules_for_repo_name/1` → `rules_for_source_name/1` (and schema/column variants)
+- Renamed `data_repo` field in `Lotus.Storage.Query` to `data_source` (DB column unchanged)
+- Renamed `@type repo` in `Lotus.Source` to `@type source_module`
+
+### Deprecated
+
+- `:data_repos` config key — use `:data_sources` instead (will be removed in v1.0)
+- `:default_repo` config key — use `:default_source` instead (will be removed in v1.0)
+- `Lotus.data_repos/0` — use `Lotus.data_sources/0` (will be removed in v1.0)
+- `Lotus.get_data_repo!/1` — use `Lotus.get_data_source!/1` (will be removed in v1.0)
+- `Lotus.list_data_repo_names/0` — use `Lotus.list_data_source_names/0` (will be removed in v1.0)
+- `Lotus.default_data_repo/0` — use `Lotus.default_data_source/0` (will be removed in v1.0)
+- `Lotus.Config.rules_for_repo_name/1` — use `Lotus.Config.rules_for_source_name/1` (will be removed in v1.0)
+- `Lotus.Config.schema_rules_for_repo_name/1` — use `Lotus.Config.schema_rules_for_source_name/1` (will be removed in v1.0)
+- `Lotus.Config.column_rules_for_repo_name/1` — use `Lotus.Config.column_rules_for_source_name/1` (will be removed in v1.0)
+
 ### Fixed
 
 - `get_table_schema/3` and `get_table_stats/3` now propagate adapter errors (e.g. permission denied, connection errors) instead of masking them as "Table not found" (#189)

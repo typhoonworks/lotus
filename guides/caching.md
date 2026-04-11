@@ -25,7 +25,7 @@ Lotus ships with built-in cache profiles (`:results`, `:schema`, `:options`) tha
 # config/config.exs
 config :lotus,
   ecto_repo: MyApp.Repo,
-  data_repos: %{
+  data_sources: %{
     "main" => MyApp.Repo
   },
   cache: %{

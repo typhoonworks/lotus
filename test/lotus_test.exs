@@ -102,18 +102,18 @@ defmodule LotusTest do
       assert query.description == "A test query"
       assert query.statement == "SELECT * FROM test_users"
       assert query.variables == []
-      assert query.data_repo == nil
+      assert query.data_source == nil
     end
 
-    test "creates query with data_repo" do
+    test "creates query with data_source" do
       attrs = %{
         name: "Analytics Query",
         statement: "SELECT COUNT(*) FROM page_views",
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       assert {:ok, query} = Lotus.create_query(attrs)
-      assert query.data_repo == "sqlite"
+      assert query.data_source == "sqlite"
     end
 
     test "returns error with invalid attributes" do
@@ -397,12 +397,12 @@ defmodule LotusTest do
       assert error =~ "relation \"nonexistent_table\" does not exist"
     end
 
-    test "uses stored data_repo when specified" do
+    test "uses stored data_source when specified" do
       query = %Query{
         name: "Test Data Query",
         statement: "SELECT 1 as result",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:ok, result} = Lotus.run_query(query)
@@ -410,12 +410,12 @@ defmodule LotusTest do
       assert result.rows == [[1]]
     end
 
-    test "runtime repo option overrides stored data_repo" do
+    test "runtime repo option overrides stored data_source" do
       query = %Query{
         name: "Override Test Query",
         statement: "SELECT 1 as result",
         variables: [],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       assert {:ok, result} = Lotus.run_query(query, repo: "postgres")
@@ -423,7 +423,7 @@ defmodule LotusTest do
       assert result.rows == [[1]]
     end
 
-    test "falls back to default repo when no data_repo specified" do
+    test "falls back to default repo when no data_source specified" do
       query = %Query{
         name: "Default Repo Query",
         statement: "SELECT 1 as result",

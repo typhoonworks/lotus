@@ -107,7 +107,7 @@ defmodule Lotus.Cache.KeyBuilderTest do
         Default.result_key(
           "SELECT * FROM users",
           %{id: 1},
-          [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"],
+          [data_source: "primary", search_path: "public", lotus_version: "1.0.0"],
           nil
         )
 
@@ -115,7 +115,7 @@ defmodule Lotus.Cache.KeyBuilderTest do
     end
 
     test "different SQL produces different keys" do
-      opts = [data_repo: "primary", search_path: "", lotus_version: "1.0.0"]
+      opts = [data_source: "primary", search_path: "", lotus_version: "1.0.0"]
       key_a = Default.result_key("SELECT 1", %{}, opts, nil)
       key_b = Default.result_key("SELECT 2", %{}, opts, nil)
 
@@ -127,7 +127,7 @@ defmodule Lotus.Cache.KeyBuilderTest do
         Default.result_key(
           "SELECT * FROM users WHERE id = $1",
           [42],
-          [data_repo: "primary", lotus_version: "1.0.0"],
+          [data_source: "primary", lotus_version: "1.0.0"],
           nil
         )
 
@@ -135,14 +135,14 @@ defmodule Lotus.Cache.KeyBuilderTest do
     end
 
     test "nil scope produces same key format as unscoped" do
-      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "primary", search_path: "public", lotus_version: "1.0.0"]
       key = Default.result_key("SELECT 1", %{}, opts, nil)
 
       assert Regex.match?(~r/^result:primary:[a-f0-9]{64}$/, key)
     end
 
     test "non-nil scope appends scope digest to key" do
-      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "primary", search_path: "public", lotus_version: "1.0.0"]
       scope = %{tenant_id: 42}
       key = Default.result_key("SELECT 1", %{}, opts, scope)
 
@@ -152,7 +152,7 @@ defmodule Lotus.Cache.KeyBuilderTest do
     end
 
     test "different scopes produce different keys for same query" do
-      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "primary", search_path: "public", lotus_version: "1.0.0"]
       sql = "SELECT * FROM users"
 
       key_a = Default.result_key(sql, %{}, opts, %{tenant_id: 1})
@@ -162,7 +162,7 @@ defmodule Lotus.Cache.KeyBuilderTest do
     end
 
     test "same scope produces same key for same query" do
-      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "primary", search_path: "public", lotus_version: "1.0.0"]
       sql = "SELECT * FROM users"
       scope = %{tenant_id: 42}
 

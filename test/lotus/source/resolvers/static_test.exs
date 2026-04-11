@@ -113,7 +113,7 @@ defmodule Lotus.Source.Resolvers.StaticTest do
     end
 
     test "raises for unknown name" do
-      assert_raise ArgumentError, ~r/Data repo 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
         Static.get_source!("unknown")
       end
     end

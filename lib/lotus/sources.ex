@@ -8,24 +8,24 @@ defmodule Lotus.Sources do
   Resolve to an `%Adapter{}` struct.
 
   Accepts:
-    * `repo_opt` — configured name (string) or repo module (atom) or nil
-    * `q_repo`   — query's stored repo (string or module) or nil
+    * `source_opt` — configured name (string) or source module (atom) or nil
+    * `q_source`   — query's stored source (string or module) or nil
 
   Falls back to the default source. Raises on resolution failure.
   """
   @spec resolve!(nil | String.t() | module(), nil | String.t() | module()) :: Adapter.t()
-  def resolve!(repo_opt, q_repo) do
-    case resolver().resolve(repo_opt, q_repo) do
+  def resolve!(source_opt, q_source) do
+    case resolver().resolve(source_opt, q_source) do
       {:ok, %Adapter{} = adapter} ->
         adapter
 
       {:error, :not_found} ->
         available = resolver().list_source_names()
-        label = repo_opt || q_repo
+        label = source_opt || q_source
 
         raise ArgumentError,
-              "Data repo '#{label}' not configured. " <>
-                "Available repos: #{inspect(available)}"
+              "Data source '#{label}' not configured. " <>
+                "Available sources: #{inspect(available)}"
     end
   end
 
@@ -53,14 +53,14 @@ defmodule Lotus.Sources do
   @doc false
   @spec name_from_module!(module()) :: String.t()
   def name_from_module!(mod) do
-    case Enum.find(Config.data_repos(), fn {_name, m} -> m == mod end) do
+    case Enum.find(Config.data_sources(), fn {_name, m} -> m == mod end) do
       {name, _} ->
         name
 
       nil ->
         raise ArgumentError,
-              "Repo module #{inspect(mod)} isn't in :lotus, :data_repos. " <>
-                "Configured names: #{inspect(Map.keys(Config.data_repos()))}"
+              "Source module #{inspect(mod)} isn't in :lotus, :data_sources. " <>
+                "Configured names: #{inspect(Map.keys(Config.data_sources()))}"
     end
   end
 
@@ -72,7 +72,7 @@ defmodule Lotus.Sources do
   def source_type(%Adapter{source_type: st}), do: st
 
   def source_type(repo_name) when is_binary(repo_name) do
-    repo = Config.get_data_repo!(repo_name)
+    repo = Config.get_data_source!(repo_name)
     source_type(repo)
   end
 
