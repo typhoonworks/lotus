@@ -9,6 +9,11 @@
 - Renamed public functions: `data_repos/0` → `data_sources/0`, `get_data_repo!/1` → `get_data_source!/1`, `list_data_repo_names/0` → `list_data_source_names/0`, `default_data_repo/0` → `default_data_source/0`, `rules_for_repo_name/1` → `rules_for_source_name/1` (and schema/column variants)
 - Renamed `data_repo` field in `Lotus.Storage.Query` to `data_source` (DB column unchanged)
 - Renamed `@type repo` in `Lotus.Source` to `@type source_module`
+- Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
+- Removed duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
+- Extracted shared filter → sort → window → cache → execute pipeline from `Lotus.run_sql/3` and `Lotus.execute_query/5` into a single private `execute_with_options/7` helper. `run_sql/3` now reuses `build_cache_tags/3` and `determine_cache_profile/1` instead of inlining the same logic. No public API or behavior changes (#160)
+- `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
+- Extracted SQL sanitization (`assert_single_statement`, deny-list), EXPLAIN-based relation extraction, and window pagination SQL construction from `Runner`, `Preflight`, and `Lotus` into 4 new optional adapter callbacks (`sanitize_query/3`, `transform_query/4`, `extract_accessed_resources/4`, `apply_window/4`). `Runner` and `Preflight` now delegate to `Adapter` dispatch helpers with safe defaults for adapters that don't implement the optional callbacks. No public API or behavior changes (#208)
 
 ### Deprecated
 
@@ -22,12 +27,10 @@
 - `Lotus.Config.schema_rules_for_repo_name/1` — use `Lotus.Config.schema_rules_for_source_name/1` (will be removed in v1.0)
 - `Lotus.Config.column_rules_for_repo_name/1` — use `Lotus.Config.column_rules_for_source_name/1` (will be removed in v1.0)
 
-### Fixed
-
-- `get_table_schema/3` and `get_table_stats/3` now propagate adapter errors (e.g. permission denied, connection errors) instead of masking them as "Table not found" (#189)
-
 ### Breaking
 
+- `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string
+- `Lotus.Source.apply_filters/2` callback is now `apply_filters/3` — accepts `params` list and returns `{sql, params}` tuple. All source adapters (Postgres, MySQL, SQLite3, Default) updated accordingly
 - `Lotus.Visibility.Resolver` callbacks now accept a second `scope` argument: `schema_rules_for/2`, `table_rules_for/2`, `column_rules_for/2`. Existing implementations must update their function signatures to accept `scope` (even if ignored). The default `Static` resolver accepts and ignores scope, so static config users are unaffected.
 - Middleware payload key `:repo` renamed to `:source` across all events (`:before_query`, `:after_query`, `:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, `:after_list_relations`, `:after_discover`). The duplicate `:repo_name` key has been removed from discovery event payloads. Middleware modules that pattern-match on `%{repo: _}` or `%{repo_name: _}` must update to `%{source: _}`.
 - `Sources.resolve!/2` returns `%Lotus.Source.Adapter{}` struct instead of `{module, name}` tuple
@@ -36,7 +39,6 @@
 - Source behaviour SQL generation callbacks (`param_placeholder`, `apply_filters`, `apply_sorts`, `quote_identifier`, `limit_offset_placeholders`) now take `state` as first argument
 - Source behaviour error handling callbacks (`format_error`, `handled_errors`) now take `state` as first argument
 - `Lotus.Storage.Query.to_sql_params/2` now returns `{:ok, sql, params} | {:error, reason}` instead of returning `{sql, params}` and raising `ArgumentError` for missing variables, empty list variables, or invalid type-cast values. A new `Lotus.Storage.Query.to_sql_params!/2` preserves the previous raising behaviour for callers that prefer exceptions (#163).
-- **Note:** The public API (`Lotus.run_query/2`, `Lotus.run_sql/3`, `Lotus.list_schemas/2`, etc.) is unchanged. These are internal API changes affecting code that calls `Runner`, `Sources`, `Preflight`, or `Source` directly.
 
 ### Added
 
@@ -54,37 +56,30 @@
 - `Lotus.Cache.KeyBuilder` behaviour for pluggable cache key generation. Defines `discovery_key/2` and `result_key/4` callbacks plus a public `scope_digest/1` utility function. Configure via `cache: %{key_builder: MyApp.KeyBuilder}`. Default implementation (`Lotus.Cache.KeyBuilder.Default`) preserves existing key generation logic (#195)
 - Scope-aware result cache keys: `result_key/4` accepts an optional `scope` parameter (default `nil`). When non-nil, the scope digest is appended to the result cache key and a `"scope:<digest>"` tag is added to the cache entry, so `invalidate_scope/1` now clears both discovery and result cache entries for the given scope (#196)
 - `Lotus.Config.cache_key_builder/0` helper to retrieve the configured key builder module (defaults to `Lotus.Cache.KeyBuilder.Default`)
+- 4 optional adapter callbacks for query pipeline participation: `sanitize_query/3`, `transform_query/4`, `extract_accessed_resources/4`, `apply_window/4`. Non-SQL adapters can implement these to sanitize, transform, authorize, and paginate queries using native mechanisms. Dispatch helpers in `Lotus.Source.Adapter` use `function_exported?/3` with safe defaults (`:ok`, passthrough, `:skip`, `nil`) so existing adapters continue to work unchanged (#208)
 - Middleware exception safety: raised exceptions inside middleware `call/2` are now caught and surfaced as `{:error, exception}` instead of propagating uncaught. The `rescue` is scoped to the individual `call/2` invocation so subsequent middleware never runs (#177)
 - `:context` metadata in query telemetry events (`[:lotus, :query, :start | :stop | :exception]`). The caller-supplied `:context` option is now included in event metadata, enabling per-endpoint attribution, distributed trace correlation, and request ID tagging without wrapping or forking `Runner` (#175)
 
 ### Security
 
-- **FIX:** Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)
-- **FIX:** Validate column names in `FilterInjector` and `SortInjector` against `[a-zA-Z_][a-zA-Z0-9_]*` using `Lotus.SQL.Identifier`, rejecting column names containing spaces, quotes, semicolons, or other special characters (#152)
-- **FIX:** Track nesting depth in `Runner`'s `skip_block_comment/1` so the single-statement parser matches PostgreSQL's nested block comment semantics. The previous implementation exited at the first `*/`, which could let a second statement slip past `assert_single_statement/1` when hidden inside a nested comment (#164)
+- Use parameterized queries in `FilterInjector` instead of string-interpolated values — filter values are now bound as query parameters (`$1`, `?`) and never appear in the SQL string, eliminating SQL injection risk via crafted filter values (#152)
+- Validate column names in `FilterInjector` and `SortInjector` against `[a-zA-Z_][a-zA-Z0-9_]*` using `Lotus.SQL.Identifier`, rejecting column names containing spaces, quotes, semicolons, or other special characters (#152)
+- Track nesting depth in `Runner`'s `skip_block_comment/1` so the single-statement parser matches PostgreSQL's nested block comment semantics. The previous implementation exited at the first `*/`, which could let a second statement slip past `assert_single_statement/1` when hidden inside a nested comment (#164)
 
 ### Fixed
 
-- **FIX:** `Lotus.Storage.Query.to_sql_params/2` now correctly uses falsy supplied values (`false`, `0`) instead of short-circuiting through `||` and falling back to the variable's default. `nil` supplied values still fall back to the default (#163).
-- **FIX:** `Lotus.Config.cache_namespace/0` now returns a consistent `"lotus:v1"` default regardless of whether a cache is configured, eliminating an inconsistency where the un-configured path returned `"lotus:v0"` (#165)
-- **FIX:** `Lotus.Normalizer` implementation for `URI` now uses `URI.to_string/1` instead of `inspect/1`, producing the actual URL string rather than the `%URI{}` struct representation (#159)
-- **FIX:** Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
-- **FIX:** Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
-- **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
-- **DOCS:** Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
-- **DOCS:** Add `@spec` annotations to all public functions in `Lotus.Cache` (`get/1`, `put/4`, `get_or_store/4`, `delete/1`, `invalidate_tags/1`, `enabled?/0`) to improve discoverability and Dialyzer coverage (#161)
-- **FIX:** `guides/middleware.md` documented the `:after_get_table_schema` payload key as `:table_schema`, but `Lotus.Schema` actually sends `:columns` (plus the previously-undocumented `:table_name` and `:schema` keys). Middleware written to the documented contract would have raised `KeyError`. Doc now matches the code (#173)
-- **FIX:** Discovery middleware (`:after_list_*`) previously ran **inside** the schema cache callback, so context-sensitive filtering was cached by the first caller's context and served to later callers with different contexts. The middleware pipeline now runs outside the cache; only the raw, visibility-filtered adapter result is cached. Side-effecting middleware (e.g. audit logging) that previously undercounted by logging only on cache misses will now run on every call — adjust if this change in volume matters for your use case (#173)
-- **BEHAVIOR:** Discovery middleware that raises an exception now propagates the exception to the caller instead of being converted to `{:error, message}`. The previous conversion was an incidental side-effect of an adapter-level `try/rescue` that wrapped the middleware pipeline; after the cache refactor above, middleware runs outside that rescue. This matches the existing behavior of `:before_query` / `:after_query` middleware in `Lotus.Runner`. Middleware should return `{:halt, reason}` for error conditions, not raise (#173)
-
-### Changed
-
-- **BREAKING:** `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string
-- **BREAKING:** `Lotus.Source.apply_filters/2` callback is now `apply_filters/3` — accepts `params` list and returns `{sql, params}` tuple. All source adapters (Postgres, MySQL, SQLite3, Default) updated accordingly
-- Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
-- **REFACTOR:** Remove duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
-- **REFACTOR:** Extract shared filter → sort → window → cache → execute pipeline from `Lotus.run_sql/3` and `Lotus.execute_query/5` into a single private `execute_with_options/7` helper. `run_sql/3` now reuses `build_cache_tags/3` and `determine_cache_profile/1` instead of inlining the same logic. No public API or behavior changes (#160)
-- **REFACTOR:** `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
+- `get_table_schema/3` and `get_table_stats/3` now propagate adapter errors (e.g. permission denied, connection errors) instead of masking them as "Table not found" (#189)
+- `Lotus.Storage.Query.to_sql_params/2` now correctly uses falsy supplied values (`false`, `0`) instead of short-circuiting through `||` and falling back to the variable's default. `nil` supplied values still fall back to the default (#163).
+- `Lotus.Config.cache_namespace/0` now returns a consistent `"lotus:v1"` default regardless of whether a cache is configured, eliminating an inconsistency where the un-configured path returned `"lotus:v0"` (#165)
+- `Lotus.Normalizer` implementation for `URI` now uses `URI.to_string/1` instead of `inspect/1`, producing the actual URL string rather than the `%URI{}` struct representation (#159)
+- Propagate `Repo.transaction/1` errors from `Dashboards.reorder_dashboard_cards/2` instead of unconditionally returning `:ok`. Spec updated to `:ok | {:error, term()}` (#157)
+- Use `Task.Supervisor` instead of bare `Task.async` for dashboard card execution, ensuring proper OTP supervision and fault tolerance. Added `Lotus.TaskSupervisor` to the supervision tree.
+- Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
+- Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
+- Add `@spec` annotations to all public functions in `Lotus.Cache` (`get/1`, `put/4`, `get_or_store/4`, `delete/1`, `invalidate_tags/1`, `enabled?/0`) to improve discoverability and Dialyzer coverage (#161)
+- `guides/middleware.md` documented the `:after_get_table_schema` payload key as `:table_schema`, but `Lotus.Schema` actually sends `:columns` (plus the previously-undocumented `:table_name` and `:schema` keys). Middleware written to the documented contract would have raised `KeyError`. Doc now matches the code (#173)
+- Discovery middleware (`:after_list_*`) previously ran **inside** the schema cache callback, so context-sensitive filtering was cached by the first caller's context and served to later callers with different contexts. The middleware pipeline now runs outside the cache; only the raw, visibility-filtered adapter result is cached. Side-effecting middleware (e.g. audit logging) that previously undercounted by logging only on cache misses will now run on every call — adjust if this change in volume matters for your use case (#173)
+- Discovery middleware that raises an exception now propagates the exception to the caller instead of being converted to `{:error, message}`. The previous conversion was an incidental side-effect of an adapter-level `try/rescue` that wrapped the middleware pipeline; after the cache refactor above, middleware runs outside that rescue. This matches the existing behavior of `:before_query` / `:after_query` middleware in `Lotus.Runner`. Middleware should return `{:halt, reason}` for error conditions, not raise (#173)
 
 ## [0.16.4] - 2026-03-10
 

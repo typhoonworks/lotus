@@ -25,15 +25,26 @@ defmodule Lotus.PreflightTest do
   end
 
   describe "fallback behavior" do
-    test "allows queries for unknown adapters" do
+    test "allows queries when adapter returns :skip" do
       unknown_adapter = %Lotus.Source.Adapter{
         name: "unknown",
-        module: Lotus.Source.Adapters.Ecto,
-        state: Lotus.Test.Repo,
+        module: Lotus.Test.NoOpAdapter,
+        state: nil,
         source_type: :other
       }
 
       assert :ok = Preflight.authorize(unknown_adapter, "SELECT * FROM anything", [])
+    end
+
+    test "allows queries when adapter does not implement extract_accessed_resources" do
+      stub_adapter = %Lotus.Source.Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert :ok = Preflight.authorize(stub_adapter, "SELECT * FROM anything", [])
     end
   end
 end

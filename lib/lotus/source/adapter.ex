@@ -126,6 +126,81 @@ defmodule Lotus.Source.Adapter do
               {:ok, String.t()} | {:error, term()}
 
   # ---------------------------------------------------------------------------
+  # Callbacks — Pipeline (Query Processing)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Validate that a query is safe to execute.
+
+  Called before execution to enforce single-statement and deny-list rules.
+  Return `:ok` to allow or `{:error, reason}` to block.
+
+  ## Options
+
+    * `:read_only` — when `true`, block write operations
+
+  Default (when not implemented): `:ok` (allow all queries).
+  """
+  @callback sanitize_query(state :: term(), query :: String.t(), opts :: keyword()) ::
+              :ok | {:error, String.t()}
+
+  @doc """
+  Transform a query before filters and sorts are applied.
+
+  Allows adapters to normalize or rewrite the query format. SQL adapters
+  typically pass through unchanged; non-SQL adapters may translate here.
+
+  Default (when not implemented): `{query, params}` (passthrough).
+  """
+  @callback transform_query(
+              state :: term(),
+              query :: String.t(),
+              params :: list(),
+              opts :: keyword()
+            ) ::
+              {String.t(), list()}
+
+  @doc """
+  Extract the set of tables/relations a query will access.
+
+  Used by `Lotus.Preflight` to check visibility rules before execution.
+  Return `{:ok, MapSet}` with `{schema, table}` tuples, `{:error, reason}`,
+  or `:skip` to allow the query without checking.
+
+  Default (when not implemented): `:skip`.
+  """
+  @callback extract_accessed_resources(
+              state :: term(),
+              query :: String.t(),
+              params :: list(),
+              opts :: keyword()
+            ) ::
+              {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
+
+  @doc """
+  Wrap a query with pagination (LIMIT/OFFSET) and optionally compute a count.
+
+  Returns `{paged_query, paged_params, window_meta}` where `window_meta`
+  is a map consumed by `Lotus.merge_window_meta/2`, or `nil` to skip windowing.
+
+  Default (when not implemented): `{query, params, nil}` (no windowing).
+  """
+  @callback apply_window(
+              state :: term(),
+              query :: String.t(),
+              params :: list(),
+              window_opts :: keyword()
+            ) ::
+              {String.t(), list(), map() | nil}
+
+  @optional_callbacks [
+    sanitize_query: 3,
+    transform_query: 4,
+    extract_accessed_resources: 4,
+    apply_window: 4
+  ]
+
+  # ---------------------------------------------------------------------------
   # Callbacks — Safety & Visibility
   # ---------------------------------------------------------------------------
 
@@ -248,6 +323,43 @@ defmodule Lotus.Source.Adapter do
   @spec disconnect(t()) :: :ok
   def disconnect(%__MODULE__{module: mod, state: state}) do
     mod.disconnect(state)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Dispatch helpers — Pipeline (optional callbacks with defaults)
+  # ---------------------------------------------------------------------------
+
+  @doc "Validate query safety via the adapter. Returns `:ok` if not implemented."
+  @spec sanitize_query(t(), String.t(), keyword()) :: :ok | {:error, String.t()}
+  def sanitize_query(%__MODULE__{module: mod, state: state}, query, opts) do
+    if function_exported?(mod, :sanitize_query, 3),
+      do: mod.sanitize_query(state, query, opts),
+      else: :ok
+  end
+
+  @doc "Transform query before filters/sorts. Returns `{query, params}` if not implemented."
+  @spec transform_query(t(), String.t(), list(), keyword()) :: {String.t(), list()}
+  def transform_query(%__MODULE__{module: mod, state: state}, query, params, opts) do
+    if function_exported?(mod, :transform_query, 4),
+      do: mod.transform_query(state, query, params, opts),
+      else: {query, params}
+  end
+
+  @doc "Extract accessed resources for preflight checks. Returns `:skip` if not implemented."
+  @spec extract_accessed_resources(t(), String.t(), list(), keyword()) ::
+          {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
+  def extract_accessed_resources(%__MODULE__{module: mod, state: state}, query, params, opts) do
+    if function_exported?(mod, :extract_accessed_resources, 4),
+      do: mod.extract_accessed_resources(state, query, params, opts),
+      else: :skip
+  end
+
+  @doc "Apply windowed pagination. Returns `{query, params, nil}` if not implemented."
+  @spec apply_window(t(), String.t(), list(), keyword()) :: {String.t(), list(), map() | nil}
+  def apply_window(%__MODULE__{module: mod, state: state}, query, params, window_opts) do
+    if function_exported?(mod, :apply_window, 4),
+      do: mod.apply_window(state, query, params, window_opts),
+      else: {query, params, nil}
   end
 
   # ---------------------------------------------------------------------------
