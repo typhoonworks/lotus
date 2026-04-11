@@ -162,6 +162,34 @@ defmodule Lotus.Source do
   @callback limit_query(statement :: String.t(), limit :: pos_integer()) :: String.t()
 
   @doc """
+  Whether this source supports a given feature.
+
+  Examples of features: `:schema_hierarchy`, `:search_path`, `:arrays`, `:json`.
+  """
+  @callback supports_feature?(feature :: atom()) :: boolean()
+
+  @doc """
+  Return the human-readable label for the top-level hierarchy in this source.
+
+  Examples:
+    * PostgreSQL/MySQL → `"Tables"`
+    * Elasticsearch    → `"Indices"`
+    * MongoDB          → `"Collections"`
+  """
+  @callback hierarchy_label() :: String.t()
+
+  @doc """
+  Return an example query string suitable for placeholder text in the query editor.
+
+  The example should demonstrate the basic query syntax for this source.
+
+  ## Parameters
+    * `table` — an example table name to use in the query
+    * `schema` — an optional schema name (nil for schema-less sources)
+  """
+  @callback example_query(table :: String.t(), schema :: String.t() | nil) :: String.t()
+
+  @doc """
   Lists all schemas in the given repository.
 
   Returns a list of schema names. For databases without schema support
@@ -240,6 +268,12 @@ defmodule Lotus.Source do
   """
   @callback resolve_table_schema(repo, table :: String.t(), schemas :: [String.t()]) ::
               String.t() | nil
+
+  @optional_callbacks [
+    supports_feature?: 1,
+    hierarchy_label: 0,
+    example_query: 2
+  ]
 
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
