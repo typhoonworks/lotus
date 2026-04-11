@@ -263,9 +263,54 @@ Lotus generates cache keys based on:
 - **Parameters** - Query parameters and variable values
 - **Repository** - Which database the query targets
 - **Search path** - PostgreSQL schema search path
+- **Scope** - When non-nil, hashed into discovery cache keys
 - **Lotus version** - Ensures cache invalidation across version upgrades
 
 This ensures that different queries, even with slight variations, get separate cache entries.
+
+### Custom Key Builder
+
+The default key generation can be replaced by implementing the `Lotus.Cache.KeyBuilder` behaviour. This is useful when you need to incorporate additional context into cache keys or use a different hashing strategy.
+
+```elixir
+defmodule MyApp.CustomKeyBuilder do
+  @behaviour Lotus.Cache.KeyBuilder
+
+  @impl true
+  def discovery_key(params, scope) do
+    # Add environment to discovery keys
+    env = Application.get_env(:my_app, :env, :prod)
+
+    Lotus.Cache.KeyBuilder.Default.discovery_key(
+      %{params | components: Tuple.append(params.components, env)},
+      scope
+    )
+  end
+
+  @impl true
+  def result_key(sql, bound, opts) do
+    # Delegate to default for result keys
+    Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts)
+  end
+end
+```
+
+Configure it in your cache settings:
+
+```elixir
+config :lotus,
+  cache: %{
+    adapter: Lotus.Cache.ETS,
+    key_builder: MyApp.CustomKeyBuilder
+  }
+```
+
+The behaviour defines two callbacks:
+
+- `discovery_key/2` — builds keys for schema introspection cache entries (list_tables, get_table_schema, etc.)
+- `result_key/3` — builds keys for SQL query result cache entries
+
+When no `key_builder` is configured, `Lotus.Cache.KeyBuilder.Default` is used, which preserves the built-in key generation logic.
 
 ## Schema Function Caching
 
@@ -336,6 +381,27 @@ Lotus.Cache.invalidate_tags(["table:public.users"])
 - `"repo:#{repo_name}"` - Repository-specific data
 - `"schema:#{function_name}"` - Function-specific data
 - `"table:#{schema}.#{table}"` - Table-specific data (when applicable)
+- `"scope:<digest>"` - Scope-specific data (when a non-nil `:scope` option is passed)
+
+### Per-Scope Cache Invalidation
+
+When using the `:scope` option on discovery functions, each cached entry is automatically tagged with a scope digest. This lets you invalidate all cached entries for a specific scope without flushing the entire cache:
+
+```elixir
+# Populate cache for different scopes
+{:ok, _} = Lotus.list_tables("postgres", scope: %{tenant_id: 1})
+{:ok, _} = Lotus.list_tables("postgres", scope: %{tenant_id: 2})
+
+# Invalidate only tenant 1's cached entries
+:ok = Lotus.invalidate_scope(%{tenant_id: 1})
+
+# Tenant 2's cache is untouched — this is still a cache hit
+{:ok, _} = Lotus.list_tables("postgres", scope: %{tenant_id: 2})
+```
+
+This is useful when visibility rules change for a specific scope (e.g. a tenant's permissions are updated) and you need to clear stale cache entries without affecting other scopes.
+
+`invalidate_scope/1` accepts any non-nil term and returns `:ok`. Passing `nil` is a no-op (there is no scope tag to invalidate).
 
 ## Working with run_query
 
@@ -368,6 +434,9 @@ Lotus.Cache.invalidate_tags(["user:123"])
 
 # Invalidate multiple tags
 Lotus.Cache.invalidate_tags(["user_data", "reports", "dashboard"])
+
+# Invalidate all cached discovery entries for a specific scope
+Lotus.invalidate_scope(%{tenant_id: 42})
 ```
 
 ### Automatic Tagging
@@ -472,6 +541,9 @@ alter table(:users) do
   add :new_column, :string
 end
 Lotus.Cache.invalidate_tags(["table:public.users"])
+
+# After tenant permissions change — clear only that tenant's cached entries
+Lotus.invalidate_scope(%{tenant_id: tenant.id})
 ```
 
 ## Troubleshooting

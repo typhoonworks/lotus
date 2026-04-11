@@ -700,6 +700,20 @@ defmodule Lotus do
   """
   def list_relations(repo_or_name, opts \\ []), do: Schema.list_relations(repo_or_name, opts)
 
+  @doc """
+  Invalidates all cached discovery entries associated with the given scope.
+
+  Uses tag-based invalidation — each scoped cache entry is tagged with a
+  scope digest, so this clears only entries for the specified scope without
+  flushing the entire cache.
+
+  ## Examples
+
+      :ok = Lotus.invalidate_scope(%{tenant_id: 42})
+      :ok = Lotus.invalidate_scope(%{role: :admin})
+  """
+  defdelegate invalidate_scope(scope), to: Lotus.Cache
+
   defp cache_mode(nil) do
     case Config.cache_adapter() do
       {:ok, _adapter} -> :use
