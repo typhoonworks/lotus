@@ -21,7 +21,7 @@ defmodule Lotus.Integration.Postgres.WindowPaginationTest do
     :ok
   end
 
-  describe "run_sql/3 with window pagination (postgres)" do
+  describe "run_statement/3 with window pagination (postgres)" do
     test "pages results without total count" do
       sql = """
       SELECT name FROM test_users
@@ -30,7 +30,7 @@ defmodule Lotus.Integration.Postgres.WindowPaginationTest do
       """
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [],
+               Lotus.run_statement(sql, [],
                  repo: "postgres",
                  window: [limit: 1, offset: 0, count: :none]
                )
@@ -50,7 +50,7 @@ defmodule Lotus.Integration.Postgres.WindowPaginationTest do
       """
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [],
+               Lotus.run_statement(sql, [],
                  repo: "postgres",
                  window: [limit: 2, offset: 1, count: :exact]
                )

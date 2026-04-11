@@ -32,7 +32,7 @@ defmodule Lotus do
       {:ok, results} = Lotus.run_query(query)
 
       # Execute SQL directly (read-only)
-      {:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
+      {:ok, results} = Lotus.run_statement("SELECT * FROM products WHERE price > $1", [100])
   """
 
   @default_page_size 1000
@@ -490,7 +490,7 @@ defmodule Lotus do
     profile = determine_cache_profile(opts)
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_sql(adapter, sql, params, runner_opts) do
+      with {:ok, %Result{} = res} <- Runner.run_statement(adapter, sql, params, runner_opts) do
         {:ok, merge_window_meta(res, window_meta)}
       end
     end)
@@ -579,19 +579,19 @@ defmodule Lotus do
   ## Examples
 
       # Run against default configured repo
-      {:ok, result} = Lotus.run_sql("SELECT * FROM users")
+      {:ok, result} = Lotus.run_statement("SELECT * FROM users")
 
       # Run against specific repo
-      {:ok, result} = Lotus.run_sql("SELECT * FROM products", [], repo: MyApp.DataRepo)
+      {:ok, result} = Lotus.run_statement("SELECT * FROM products", [], repo: MyApp.DataRepo)
 
       # With parameters
-      {:ok, result} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123])
+      {:ok, result} = Lotus.run_statement("SELECT * FROM users WHERE id = $1", [123])
 
       # With search_path for schema resolution
-      {:ok, result} = Lotus.run_sql("SELECT * FROM users", [], search_path: "reporting, public")
+      {:ok, result} = Lotus.run_statement("SELECT * FROM users", [], search_path: "reporting, public")
 
       # Allow write queries (development use)
-      {:ok, result} = Lotus.run_sql(
+      {:ok, result} = Lotus.run_statement(
         "INSERT INTO notes (body) VALUES ($1)",
         ["hello"],
         read_only: false
@@ -602,7 +602,7 @@ defmodule Lotus do
   page results from the SQL. See `run_query/2` for details. The cache key automatically
   incorporates the window so different pages are cached independently.
   """
-  @spec run_sql(binary(), list(any()), [
+  @spec run_statement(binary(), list(any()), [
           {:read_only, boolean()}
           | {:statement_timeout_ms, non_neg_integer()}
           | {:timeout, non_neg_integer()}
@@ -611,7 +611,7 @@ defmodule Lotus do
           | {:window, window_opts}
         ]) ::
           {:ok, Result.t()} | {:error, term()}
-  def run_sql(sql, params \\ [], opts \\ []) do
+  def run_statement(statement, params \\ [], opts \\ []) do
     adapter = Sources.resolve!(Keyword.get(opts, :repo), nil)
 
     runner_opts =
@@ -619,8 +619,14 @@ defmodule Lotus do
       |> Keyword.delete(:repo)
       |> Keyword.put_new_lazy(:read_only, &Config.read_only?/0)
 
-    execute_with_options(adapter, sql, params, opts, runner_opts, params, nil)
+    execute_with_options(adapter, statement, params, opts, runner_opts, params, nil)
   end
+
+  @doc false
+  @deprecated "Use Lotus.run_statement/3 instead"
+  @spec run_sql(binary(), list(any()), keyword()) :: {:ok, Result.t()} | {:error, term()}
+  def run_sql(statement, params \\ [], opts \\ []),
+    do: run_statement(statement, params, opts)
 
   @doc """
   Returns whether unique query names are enforced.
@@ -937,7 +943,7 @@ defmodule Lotus do
     runner_opts = build_runner_opts(meta)
 
     adapter
-    |> Runner.run_sql(count_sql, count_params, runner_opts)
+    |> Runner.run_statement(count_sql, count_params, runner_opts)
     |> parse_count_result()
   end
 

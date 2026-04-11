@@ -11,7 +11,7 @@ defmodule Lotus.AI.Actions.ExecuteSQLTest do
 
   describe "run/2" do
     test "executes SQL and returns result with metadata" do
-      stub(Lotus, :run_sql, fn _sql, _params, _opts ->
+      stub(Lotus, :run_statement, fn _sql, _params, _opts ->
         {:ok,
          Result.new(["region", "revenue"], [["US", 50_000], ["EU", 30_000]],
            num_rows: 2,
@@ -41,7 +41,7 @@ defmodule Lotus.AI.Actions.ExecuteSQLTest do
     test "truncates large result sets for LLM context" do
       rows = for i <- 1..100, do: [i, "row_#{i}"]
 
-      stub(Lotus, :run_sql, fn _sql, _params, _opts ->
+      stub(Lotus, :run_statement, fn _sql, _params, _opts ->
         {:ok, Result.new(["id", "name"], rows, num_rows: 100)}
       end)
 
@@ -57,7 +57,7 @@ defmodule Lotus.AI.Actions.ExecuteSQLTest do
     end
 
     test "captures query errors without failing the action" do
-      stub(Lotus, :run_sql, fn _sql, _params, _opts ->
+      stub(Lotus, :run_statement, fn _sql, _params, _opts ->
         {:error, "relation \"missing_table\" does not exist"}
       end)
 
@@ -77,7 +77,7 @@ defmodule Lotus.AI.Actions.ExecuteSQLTest do
     end
 
     test "enforces read-only execution" do
-      expect(Lotus, :run_sql, fn _sql, _params, opts ->
+      expect(Lotus, :run_statement, fn _sql, _params, opts ->
         assert opts[:read_only] == true
         {:ok, Result.new(["count"], [[42]], num_rows: 1)}
       end)
@@ -90,7 +90,7 @@ defmodule Lotus.AI.Actions.ExecuteSQLTest do
     end
 
     test "includes timing information" do
-      stub(Lotus, :run_sql, fn _sql, _params, _opts ->
+      stub(Lotus, :run_statement, fn _sql, _params, _opts ->
         {:ok, Result.new(["x"], [[1]], num_rows: 1)}
       end)
 
