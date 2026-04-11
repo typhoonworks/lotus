@@ -210,6 +210,41 @@ defmodule Lotus.Cache.KeyTest do
     end
   end
 
+  describe "result/4 with scope" do
+    test "nil scope produces same key as unscoped" do
+      sql = "SELECT * FROM users"
+      bound = %{"1" => 123}
+      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+
+      key_without = Key.result(sql, bound, opts)
+      key_with_nil = Key.result(sql, bound, opts, nil)
+
+      assert key_without == key_with_nil
+    end
+
+    test "non-nil scope produces different key" do
+      sql = "SELECT * FROM users"
+      bound = %{"1" => 123}
+      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+
+      key_unscoped = Key.result(sql, bound, opts)
+      key_scoped = Key.result(sql, bound, opts, %{tenant_id: 1})
+
+      refute key_unscoped == key_scoped
+    end
+
+    test "different scopes produce different keys" do
+      sql = "SELECT * FROM users WHERE id = $1"
+      bound = %{"1" => 123}
+      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+
+      key_a = Key.result(sql, bound, opts, %{tenant_id: 1})
+      key_b = Key.result(sql, bound, opts, %{tenant_id: 2})
+
+      refute key_a == key_b
+    end
+  end
+
   describe "key format and structure" do
     test "result keys follow expected format pattern" do
       sql = "SELECT * FROM test"

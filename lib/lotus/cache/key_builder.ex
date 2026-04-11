@@ -28,9 +28,9 @@ defmodule Lotus.Cache.KeyBuilder do
         end
 
         @impl true
-        def result_key(sql, bound, opts) do
+        def result_key(sql, bound, opts, scope) do
           # Custom key logic for result cache entries
-          Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts)
+          Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts, scope)
         end
       end
   """
@@ -64,8 +64,14 @@ defmodule Lotus.Cache.KeyBuilder do
   - `sql` - The SQL query string
   - `bound` - Bound parameters (map or list)
   - `opts` - Options including `:data_repo`, `:search_path`, `:lotus_version`
+  - `scope` - The scope term, or `nil` if no scope is set
   """
-  @callback result_key(sql :: binary(), bound :: map() | list(), opts :: keyword()) :: binary()
+  @callback result_key(
+              sql :: binary(),
+              bound :: map() | list(),
+              opts :: keyword(),
+              scope :: term() | nil
+            ) :: binary()
 
   @doc """
   Computes a 16-character hex digest for the given scope term.

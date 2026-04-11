@@ -78,3 +78,4 @@ plans/
 .claude/*
 !.claude/settings.json
 CLAUDE.local.md
+docs/superpowers/*

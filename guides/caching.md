@@ -288,9 +288,9 @@ defmodule MyApp.CustomKeyBuilder do
   end
 
   @impl true
-  def result_key(sql, bound, opts) do
+  def result_key(sql, bound, opts, scope) do
     # Delegate to default for result keys
-    Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts)
+    Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts, scope)
   end
 end
 ```
@@ -308,7 +308,7 @@ config :lotus,
 The behaviour defines two callbacks:
 
 - `discovery_key/2` — builds keys for schema introspection cache entries (list_tables, get_table_schema, etc.)
-- `result_key/3` — builds keys for SQL query result cache entries
+- `result_key/4` — builds keys for SQL query result cache entries (accepts `scope` as the 4th argument)
 
 When no `key_builder` is configured, `Lotus.Cache.KeyBuilder.Default` is used, which preserves the built-in key generation logic.
 
@@ -385,7 +385,7 @@ Lotus.Cache.invalidate_tags(["table:public.users"])
 
 ### Per-Scope Cache Invalidation
 
-When using the `:scope` option on discovery functions, each cached entry is automatically tagged with a scope digest. This lets you invalidate all cached entries for a specific scope without flushing the entire cache:
+When using the `:scope` option on discovery or query execution functions, each cached entry is automatically tagged with a scope digest. This lets you invalidate all cached entries for a specific scope without flushing the entire cache:
 
 ```elixir
 # Populate cache for different scopes
@@ -399,9 +399,11 @@ When using the `:scope` option on discovery functions, each cached entry is auto
 {:ok, _} = Lotus.list_tables("postgres", scope: %{tenant_id: 2})
 ```
 
-This is useful when visibility rules change for a specific scope (e.g. a tenant's permissions are updated) and you need to clear stale cache entries without affecting other scopes.
+This is useful when visibility rules change for a specific scope (e.g. a tenant's permissions are updated) and you need to clear stale cache entries without affecting other scopes. `invalidate_scope/1` clears both discovery and result cache entries tagged with the given scope.
 
 `invalidate_scope/1` accepts any non-nil term and returns `:ok`. Passing `nil` is a no-op (there is no scope tag to invalidate).
+
+When passing `:scope` to query execution (`run_query/2`, `run_sql/3`), the scope is hashed into the result cache key so different scopes produce independent cached results. This is important when the database uses row-level security (RLS) policies, middleware rewrites queries per-scope, or a `SET ROLE` / session variable changes what data the query sees.
 
 ## Working with run_query
 

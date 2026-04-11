@@ -65,7 +65,7 @@ defmodule Lotus do
           context: term()
         ]
 
-  alias Lotus.Cache.Key
+  alias Lotus.Cache.{Key, KeyBuilder}
   alias Lotus.{Config, Dashboards, Result, Runner, Schema, Sources, Storage, Viz}
   alias Lotus.Storage.Query
 
@@ -463,7 +463,8 @@ defmodule Lotus do
         Keyword.get(opts, :window)
       )
 
-    key = result_key(sql, cache_bound || cache_identity, adapter.name, search_path)
+    scope = Keyword.get(opts, :scope)
+    key = result_key(sql, cache_bound || cache_identity, adapter.name, search_path, scope)
     tags = build_cache_tags(query_id, adapter.name, opts)
     profile = determine_cache_profile(opts)
 
@@ -490,10 +491,19 @@ defmodule Lotus do
         id -> ["query:#{id}", "repo:#{repo_name}"]
       end
 
-    case opts[:cache] do
-      cache_opts when is_list(cache_opts) -> base_tags ++ Keyword.get(cache_opts, :tags, [])
-      _ -> base_tags
-    end
+    custom_tags =
+      case opts[:cache] do
+        cache_opts when is_list(cache_opts) -> Keyword.get(cache_opts, :tags, [])
+        _ -> []
+      end
+
+    base_tags ++ custom_tags ++ scope_tags(opts[:scope])
+  end
+
+  defp scope_tags(nil), do: []
+
+  defp scope_tags(scope) do
+    ["scope:#{KeyBuilder.scope_digest(scope)}"]
   end
 
   defp determine_cache_profile(opts) do
@@ -829,11 +839,12 @@ defmodule Lotus do
     end
   end
 
-  defp result_key(sql, bound_vars_map, repo_name, search_path) do
-    Key.result(sql, bound_vars_map,
-      data_repo: repo_name,
-      search_path: search_path,
-      lotus_version: Lotus.version()
+  defp result_key(sql, bound_vars_map, repo_name, search_path, scope) do
+    Key.result(
+      sql,
+      bound_vars_map,
+      [data_repo: repo_name, search_path: search_path, lotus_version: Lotus.version()],
+      scope
     )
   end
 
