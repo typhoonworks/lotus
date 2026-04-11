@@ -86,9 +86,16 @@ defmodule Lotus.Sources do
   end
 
   @doc """
-  Whether a source type supports a specific feature.
+  Whether a source supports a specific feature.
+
+  Accepts an `%Adapter{}` struct (delegates to the adapter callback) or
+  a source type atom (uses hardcoded fallback for backward compatibility).
   """
-  @spec supports_feature?(atom(), atom()) :: boolean()
+  @spec supports_feature?(Adapter.t() | atom(), atom()) :: boolean()
+  def supports_feature?(%Adapter{} = adapter, feature) do
+    Adapter.supports_feature?(adapter, feature)
+  end
+
   def supports_feature?(:postgres, :schema_hierarchy), do: true
 
   def supports_feature?(:postgres, :search_path), do: true
@@ -111,6 +118,27 @@ defmodule Lotus.Sources do
   def supports_feature?(:sqlite, :json), do: true
 
   def supports_feature?(_, _), do: false
+
+  @doc """
+  Return the human-readable label for the top-level hierarchy in a source.
+  """
+  @spec hierarchy_label(Adapter.t() | String.t()) :: String.t()
+  def hierarchy_label(%Adapter{} = adapter), do: Adapter.hierarchy_label(adapter)
+
+  def hierarchy_label(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.hierarchy_label()
+  end
+
+  @doc """
+  Return an example query string suitable for placeholder text.
+  """
+  @spec example_query(Adapter.t() | String.t(), String.t(), String.t() | nil) :: String.t()
+  def example_query(%Adapter{} = adapter, table, schema),
+    do: Adapter.example_query(adapter, table, schema)
+
+  def example_query(source_name, table, schema) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.example_query(table, schema)
+  end
 
   @doc """
   Return the query language identifier for a source.

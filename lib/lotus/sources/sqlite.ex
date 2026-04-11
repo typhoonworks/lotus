@@ -126,6 +126,22 @@ defmodule Lotus.Sources.SQLite3 do
   end
 
   @impl true
+  def supports_feature?(:schema_hierarchy), do: false
+  def supports_feature?(:search_path), do: false
+  def supports_feature?(:make_interval), do: false
+  def supports_feature?(:arrays), do: false
+  def supports_feature?(:json), do: true
+  def supports_feature?(_), do: false
+
+  @impl true
+  def hierarchy_label, do: "Tables"
+
+  @impl true
+  def example_query(table, _schema) do
+    "SELECT value_column FROM #{table}"
+  end
+
+  @impl true
   def builtin_schema_denies(_repo) do
     # SQLite doesn't have schemas
     []

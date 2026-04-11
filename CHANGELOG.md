@@ -49,6 +49,11 @@
 - `limit_query/2` callback in `Lotus.Source` behaviour and dispatch in `Lotus.Source.Adapter` — wraps a statement with a source-specific limit clause (#122)
 - `:schema_hierarchy` feature flag in `Lotus.Sources.supports_feature?/2` — true for Postgres, false for MySQL/SQLite (#122)
 - `Lotus.Sources.query_language/1` and `Lotus.Sources.limit_query/3` convenience functions accepting adapter structs or source name strings (#122)
+- `supports_feature?/1`, `hierarchy_label/0`, and `example_query/2` optional callbacks in `Lotus.Source` behaviour — source implementations can define feature flags, UI hierarchy labels, and example query placeholders (#123)
+- `hierarchy_label/1` and `example_query/3` optional callbacks in `Lotus.Source.Adapter` with dispatch helpers (#123)
+- `Lotus.Sources.hierarchy_label/1` and `Lotus.Sources.example_query/3` public API wrappers (#123)
+- `Lotus.Sources.supports_feature?/2` now accepts `%Adapter{}` structs, delegating to the adapter callback (#123)
+- `Lotus.Source.Adapters.Ecto.supports_feature?/2` now delegates to the inner source implementation instead of calling back to `Lotus.Sources` (#123)
 - `:preload` option on `Lotus.Dashboards.list_dashboards/1` and `list_dashboards_by/1` for eager-loading associations (e.g. `:cards`) in a single query. Fixes N+1 patterns in callers that need card counts or card lists alongside the dashboard list (see elixir-lotus/lotus_web#103).
 - Pluggable source adapter abstraction (`Lotus.Source.Adapter`) — behaviour and struct wrapping data sources behind a uniform callback interface with consistent `{:ok, _} | {:error, _}` return types
 - `Lotus.Source.Resolver` behaviour for configurable source resolution

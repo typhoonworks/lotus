@@ -107,6 +107,17 @@ defmodule Lotus.Sources.Default do
   end
 
   @impl true
+  def supports_feature?(_), do: false
+
+  @impl true
+  def hierarchy_label, do: "Tables"
+
+  @impl true
+  def example_query(table, _schema) do
+    "SELECT value_column FROM #{table}"
+  end
+
+  @impl true
   def builtin_schema_denies(_repo) do
     # Conservative denies covering common system schemas from various databases
     ["pg_catalog", "information_schema", "mysql", "performance_schema", "sys"]

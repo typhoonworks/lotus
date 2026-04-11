@@ -244,13 +244,22 @@ defmodule Lotus.Source.Adapter do
   @callback limit_query(state :: term(), statement :: String.t(), limit :: pos_integer()) ::
               String.t()
 
+  @doc ~S'Return the human-readable label for the top-level hierarchy (e.g. "Tables", "Indices").'
+  @callback hierarchy_label(state :: term()) :: String.t()
+
+  @doc "Return an example query string for placeholder text in the query editor."
+  @callback example_query(state :: term(), table :: String.t(), schema :: String.t() | nil) ::
+              String.t()
+
   @optional_callbacks [
     sanitize_query: 3,
     transform_query: 4,
     extract_accessed_resources: 4,
     apply_window: 4,
     query_language: 1,
-    limit_query: 3
+    limit_query: 3,
+    hierarchy_label: 1,
+    example_query: 3
   ]
 
   # ---------------------------------------------------------------------------
@@ -443,5 +452,21 @@ defmodule Lotus.Source.Adapter do
     if function_exported?(mod, :limit_query, 3),
       do: mod.limit_query(state, statement, limit),
       else: "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
+  end
+
+  @doc "Return the hierarchy label via the adapter."
+  @spec hierarchy_label(t()) :: String.t()
+  def hierarchy_label(%__MODULE__{module: mod, state: state}) do
+    if function_exported?(mod, :hierarchy_label, 1),
+      do: mod.hierarchy_label(state),
+      else: "Tables"
+  end
+
+  @doc "Return an example query via the adapter."
+  @spec example_query(t(), String.t(), String.t() | nil) :: String.t()
+  def example_query(%__MODULE__{module: mod, state: state}, table, schema) do
+    if function_exported?(mod, :example_query, 3),
+      do: mod.example_query(state, table, schema),
+      else: "SELECT value_column FROM #{table}"
   end
 end

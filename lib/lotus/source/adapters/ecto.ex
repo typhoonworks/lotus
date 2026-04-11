@@ -328,8 +328,11 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def supports_feature?(repo, feature) do
-    source = detect_source_type(repo)
-    Lotus.Sources.supports_feature?(source, feature)
+    impl = impl_for(repo)
+
+    if function_exported?(impl, :supports_feature?, 1),
+      do: impl.supports_feature?(feature),
+      else: false
   end
 
   @impl true
@@ -337,6 +340,24 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def limit_query(repo, statement, limit), do: impl_for(repo).limit_query(statement, limit)
+
+  @impl true
+  def hierarchy_label(repo) do
+    impl = impl_for(repo)
+
+    if function_exported?(impl, :hierarchy_label, 0),
+      do: impl.hierarchy_label(),
+      else: "Tables"
+  end
+
+  @impl true
+  def example_query(repo, table, schema) do
+    impl = impl_for(repo)
+
+    if function_exported?(impl, :example_query, 2),
+      do: impl.example_query(table, schema),
+      else: "SELECT value_column FROM #{table}"
+  end
 
   # ---------------------------------------------------------------------------
   # Private helpers

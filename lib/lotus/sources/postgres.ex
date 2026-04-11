@@ -125,6 +125,26 @@ defmodule Lotus.Sources.Postgres do
   end
 
   @impl true
+  def supports_feature?(:schema_hierarchy), do: true
+  def supports_feature?(:search_path), do: true
+  def supports_feature?(:make_interval), do: true
+  def supports_feature?(:arrays), do: true
+  def supports_feature?(:json), do: true
+  def supports_feature?(_), do: false
+
+  @impl true
+  def hierarchy_label, do: "Tables"
+
+  @impl true
+  def example_query(table, schema) when is_binary(schema) do
+    "SELECT value_column FROM #{schema}.#{table}"
+  end
+
+  def example_query(table, _schema) do
+    "SELECT value_column FROM #{table}"
+  end
+
+  @impl true
   def builtin_schema_denies(_repo) do
     ["pg_catalog", "information_schema", "pg_toast", ~r/^pg_temp/, ~r/^pg_toast/]
   end
