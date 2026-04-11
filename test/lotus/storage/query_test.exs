@@ -127,7 +127,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE id = {{id}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:ok, "SELECT * FROM users WHERE id = $1", [1]} =
@@ -138,7 +138,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:error, "Missing required variable: min_age"} =
@@ -149,7 +149,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE country IN ({{countries}})",
         variables: [%{name: "countries", type: :text, list: true}],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:error, "List variable 'countries' must have at least one value"} =
@@ -163,7 +163,7 @@ defmodule Lotus.Storage.QueryTest do
           %{name: "active", type: :boolean, default: true},
           %{name: "age", type: :number, default: "18"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:ok, _sql, [false, 0]} =
@@ -174,7 +174,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE status = {{status}}",
         variables: [%{name: "status", type: :text, default: "active"}],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:ok, _sql, ["active"]} =
@@ -185,7 +185,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}}",
         variables: [%{name: "min_age", type: :number}],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:error, "Invalid number format: 'not-a-number'" <> _} =
@@ -198,7 +198,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"min_age" => 30, "active" => true})
@@ -212,7 +212,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE age > {{min_age}} AND active = {{active}}",
         variables: [],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"min_age" => 30, "active" => true})
@@ -221,11 +221,11 @@ defmodule Lotus.Storage.QueryTest do
       assert params == [30, true]
     end
 
-    test "to_sql_params with nil data_repo defaults to PostgreSQL style" do
+    test "to_sql_params with nil data_source defaults to PostgreSQL style" do
       q = %Query{
         statement: "SELECT * FROM users WHERE id = {{id}}",
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"id" => 123})
@@ -240,7 +240,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number, default: "40"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -256,7 +256,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number, default: "40"}
         ],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -295,7 +295,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "name", type: :text, default: "Jack"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -311,7 +311,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "name", type: :text, default: "Jack"}
         ],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -326,7 +326,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "status", type: :text, default: "inactive"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"status" => "active"})
@@ -339,7 +339,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE deleted_at IS {{deleted}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert_raise ArgumentError, ~r/Missing required variable: deleted/, fn ->
@@ -351,7 +351,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "INSERT INTO users (name, age, email) VALUES ({{name}}, {{age}}, {{email}})",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} =
@@ -523,7 +523,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number, default: "30"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -538,7 +538,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "since", type: :date, default: "2024-01-01"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -553,7 +553,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "status", type: :text, default: "active"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -569,7 +569,7 @@ defmodule Lotus.Storage.QueryTest do
           %{name: "min_age", type: :number},
           %{name: "since", type: :date}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"min_age" => "25", "since" => "2024-06-01"})
@@ -584,7 +584,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number, default: "30"}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"min_age" => "45"})
@@ -597,7 +597,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"name" => "John"})
@@ -656,7 +656,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: String.trim(attrs.statement),
         variables: get_field(changeset, :variables),
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       # org_id has no default, so it should raise an error when called with empty vars
@@ -755,7 +755,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE users.id = {{user_id}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       uuid_string = "550e8400-e29b-41d4-a716-446655440000"
@@ -775,7 +775,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"min_age" => "25"})
@@ -790,7 +790,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM orders WHERE orders.total = {{amount}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       # Should not crash when schema cache unavailable
@@ -809,7 +809,7 @@ defmodule Lotus.Storage.QueryTest do
         WHERE u.status = {{status}}
         """,
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"status" => "active"})
@@ -826,7 +826,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "min_age", type: :number}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert_raise ArgumentError, ~r/Invalid number format/, fn ->
@@ -840,7 +840,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "since", type: :date}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert_raise ArgumentError, ~r/Invalid date format/, fn ->
@@ -852,7 +852,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE name = {{name}}",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       # No type, so value passes through as-is
@@ -868,7 +868,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"countries" => ["US", "UK", "DE"]})
@@ -884,7 +884,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"countries" => ["US", "UK", "DE"]})
@@ -900,7 +900,7 @@ defmodule Lotus.Storage.QueryTest do
           %{name: "countries", type: :text, list: true},
           %{name: "min_age", type: :number}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} =
@@ -918,7 +918,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "ids", type: :number, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"ids" => ["1", "2", "3"]})
@@ -933,7 +933,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert_raise ArgumentError, ~r/must have at least one value/, fn ->
@@ -947,7 +947,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"countries" => "US, UK, DE"})
@@ -962,7 +962,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"countries" => ["US"]})
@@ -980,7 +980,7 @@ defmodule Lotus.Storage.QueryTest do
           %{name: "countries", type: :text, list: true},
           %{name: "min_age", type: :number}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} =
@@ -1002,7 +1002,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE 1=1 [[AND status = {{status}}]]",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"status" => "active"})
@@ -1015,7 +1015,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE 1=1 [[AND status = {{status}}]]",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{})
@@ -1028,7 +1028,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE id = {{id}} [[AND status = {{status}}]]",
         variables: [],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, params} = Query.to_sql_params!(q, %{"id" => 1})
@@ -1043,7 +1043,7 @@ defmodule Lotus.Storage.QueryTest do
         variables: [
           %{name: "countries", type: :text, list: true}
         ],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       # With values
@@ -1070,7 +1070,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE created = {{date}}",
         variables: [%{name: "date", type: :date}],
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       {sql, _} = Query.to_sql_params!(q, %{"date" => "2024-01-01"})
@@ -1082,7 +1082,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE created = {{date}}",
         variables: [%{name: "date", type: :date}],
-        data_repo: "mysql"
+        data_source: "mysql"
       }
 
       {sql, _} = Query.to_sql_params!(q, %{"date" => "2024-01-01"})
@@ -1094,7 +1094,7 @@ defmodule Lotus.Storage.QueryTest do
       q = %Query{
         statement: "SELECT * FROM users WHERE created = {{date}}",
         variables: [%{name: "date", type: :date}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       {sql, _} = Query.to_sql_params!(q, %{"date" => "2024-01-01"})

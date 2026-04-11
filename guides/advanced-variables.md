@@ -629,7 +629,7 @@ WHERE last_activity >= NOW() - INTERVAL '7 {{unit}}'
   variables: [
     %{name: "days", type: :number, label: "Days Back", default: "30"}
   ],
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 
 # Execute with different time ranges
@@ -664,7 +664,7 @@ WHERE last_activity >= NOW() - INTERVAL '7 {{unit}}'
     %{name: "unit", type: :text, label: "Time Unit", default: "months",
       widget: :select, static_options: ["days", "weeks", "months", "years"]}
   ],
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 ```
 
@@ -689,7 +689,7 @@ WHERE last_activity >= NOW() - INTERVAL '7 {{unit}}'
         "1 month", "3 months", "6 months", "1 year"
       ]}
   ],
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 ```
 
@@ -703,7 +703,7 @@ For MySQL and SQLite databases, interval transformations are safely ignored sinc
   name: "PostgreSQL Time Query",
   statement: "SELECT * FROM events WHERE created_at >= NOW() - INTERVAL '{{days}} days'",
   variables: [%{name: "days", type: :number, default: "7"}],
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 
 # MySQL equivalent (no transformation needed)
@@ -711,7 +711,7 @@ For MySQL and SQLite databases, interval transformations are safely ignored sinc
   name: "MySQL Time Query",
   statement: "SELECT * FROM events WHERE created_at >= NOW() - INTERVAL {{days}} DAY",
   variables: [%{name: "days", type: :number, default: "7"}],
-  data_repo: "mysql"
+  data_source: "mysql"
 })
 
 # SQLite equivalent (no transformation needed)
@@ -719,6 +719,6 @@ For MySQL and SQLite databases, interval transformations are safely ignored sinc
   name: "SQLite Time Query",
   statement: "SELECT * FROM events WHERE created_at >= datetime('now', '-' || {{days}} || ' days')",
   variables: [%{name: "days", type: :number, default: "7"}],
-  data_repo: "sqlite"
+  data_source: "sqlite"
 })
 ```

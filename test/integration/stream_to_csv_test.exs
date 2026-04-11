@@ -31,7 +31,7 @@ defmodule Lotus.Integration.StreamtToCSVTest do
         ORDER BY name
         """,
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       stream = Export.stream_csv(q, repo: "postgres", page_size: 2)

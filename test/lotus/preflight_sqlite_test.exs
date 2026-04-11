@@ -131,7 +131,7 @@ defmodule Lotus.PreflightSqliteTest do
         ]
       ]
 
-      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      Lotus.Config |> stub(:rules_for_source_name, fn _repo_name -> config end)
       :ok
     end
 

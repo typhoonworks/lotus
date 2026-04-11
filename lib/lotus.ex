@@ -86,33 +86,51 @@ defmodule Lotus do
   def repo, do: Config.repo!()
 
   @doc """
-  Returns all configured data repositories.
+  Returns all configured data sources.
   """
-  def data_repos, do: Config.data_repos()
+  def data_sources, do: Config.data_sources()
 
   @doc """
-  Gets a data repository by name.
+  Gets a data source by name.
 
-  Raises if the repository is not configured.
+  Raises if the source is not configured.
   """
-  def get_data_repo!(name), do: Config.get_data_repo!(name)
+  def get_data_source!(name), do: Config.get_data_source!(name)
 
   @doc """
-  Lists the names of all configured data repositories.
+  Lists the names of all configured data sources.
 
   Useful for building UI dropdowns.
   """
-  def list_data_repo_names, do: Config.list_data_repo_names()
+  def list_data_source_names, do: Config.list_data_source_names()
 
   @doc """
-  Returns the default data repository as a {name, module} tuple.
+  Returns the default data source as a {name, module} tuple.
 
-  - If there's only one data repo configured, returns it
-  - If multiple repos are configured and default_repo is set, returns that repo
-  - If multiple repos are configured without default_repo, raises an error
-  - If no data repos are configured, raises an error
+  - If there's only one data source configured, returns it
+  - If multiple sources are configured and default_source is set, returns that source
+  - If multiple sources are configured without default_source, raises an error
+  - If no data sources are configured, raises an error
   """
-  def default_data_repo, do: Config.default_data_repo()
+  def default_data_source, do: Config.default_data_source()
+
+  # ── Deprecated aliases ──────────────────────────────────────────────────────
+
+  @doc false
+  @deprecated "Use data_sources/0 instead. Will be removed in v1.0"
+  def data_repos, do: data_sources()
+
+  @doc false
+  @deprecated "Use get_data_source!/1 instead. Will be removed in v1.0"
+  def get_data_repo!(name), do: get_data_source!(name)
+
+  @doc false
+  @deprecated "Use list_data_source_names/0 instead. Will be removed in v1.0"
+  def list_data_repo_names, do: list_data_source_names()
+
+  @doc false
+  @deprecated "Use default_data_source/0 instead. Will be removed in v1.0"
+  def default_data_repo, do: default_data_source()
 
   @doc """
   Lists all saved queries.
@@ -438,7 +456,7 @@ defmodule Lotus do
   end
 
   defp execute_query(q, sql, params, vars, opts) do
-    adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_repo)
+    adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_source)
     search_path = Keyword.get(opts, :search_path) || q.search_path
     runner_opts = prepare_final_opts(opts, search_path)
 
@@ -843,7 +861,7 @@ defmodule Lotus do
     Key.result(
       sql,
       bound_vars_map,
-      [data_repo: repo_name, search_path: search_path, lotus_version: Lotus.version()],
+      [data_source: repo_name, search_path: search_path, lotus_version: Lotus.version()],
       scope
     )
   end

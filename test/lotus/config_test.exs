@@ -3,7 +3,18 @@ defmodule Lotus.ConfigTest do
 
   alias Lotus.Config
 
-  @preserved_keys [:cache, :table_visibility, :schema_visibility, :column_visibility]
+  import ExUnit.CaptureLog
+
+  @preserved_keys [
+    :cache,
+    :table_visibility,
+    :schema_visibility,
+    :column_visibility,
+    :data_sources,
+    :data_repos,
+    :default_source,
+    :default_repo
+  ]
 
   setup do
     originals = Map.new(@preserved_keys, &{&1, Application.get_env(:lotus, &1)})
@@ -52,56 +63,56 @@ defmodule Lotus.ConfigTest do
 
   describe "visibility rules lookups" do
     @variants [
-      {:rules_for_repo_name, :table_visibility},
-      {:schema_rules_for_repo_name, :schema_visibility},
-      {:column_rules_for_repo_name, :column_visibility}
+      {:rules_for_source_name, :table_visibility},
+      {:schema_rules_for_source_name, :schema_visibility},
+      {:column_rules_for_source_name, :column_visibility}
     ]
 
-    test "returns repo-specific rules when repo_name matches a configured key" do
+    test "returns source-specific rules when source_name matches a configured key" do
       rules = [deny: ["secret_table"]]
 
       for {fun, key} <- @variants do
         put_visibility(key, %{postgres: rules})
 
         assert apply(Config, fun, ["postgres"]) == rules,
-               "#{fun} did not return repo-specific rules"
+               "#{fun} did not return source-specific rules"
       end
     end
 
-    test "returns an empty list when the repo-specific value is an empty list" do
+    test "returns an empty list when the source-specific value is an empty list" do
       for {fun, key} <- @variants do
         put_visibility(key, %{postgres: [], default: [deny: ["should_not_see"]]})
 
         assert apply(Config, fun, ["postgres"]) == [],
-               "#{fun} did not return empty list for empty repo-specific value"
+               "#{fun} did not return empty list for empty source-specific value"
       end
     end
 
-    test "falls through to :default when the repo-specific value is nil" do
+    test "falls through to :default when the source-specific value is nil" do
       default_rules = [deny: ["default_rule"]]
 
       for {fun, key} <- @variants do
         put_visibility(key, %{postgres: nil, default: default_rules})
 
         assert apply(Config, fun, ["postgres"]) == default_rules,
-               "#{fun} did not fall through to :default for nil repo-specific value"
+               "#{fun} did not fall through to :default for nil source-specific value"
       end
     end
 
-    test "returns :default rules when repo_name has no match and :default is present" do
+    test "returns :default rules when source_name has no match and :default is present" do
       default_rules = [deny: ["default_rule"]]
 
       for {fun, key} <- @variants do
-        put_visibility(key, %{other_repo: [deny: ["other"]], default: default_rules})
+        put_visibility(key, %{other_source: [deny: ["other"]], default: default_rules})
 
         assert apply(Config, fun, ["postgres"]) == default_rules,
                "#{fun} did not fall through to :default"
       end
     end
 
-    test "returns an empty list when repo_name has no match and :default is absent" do
+    test "returns an empty list when source_name has no match and :default is absent" do
       for {fun, key} <- @variants do
-        put_visibility(key, %{other_repo: [deny: ["other"]]})
+        put_visibility(key, %{other_source: [deny: ["other"]]})
 
         assert apply(Config, fun, ["postgres"]) == [],
                "#{fun} did not return [] when no match and no :default"
@@ -118,7 +129,7 @@ defmodule Lotus.ConfigTest do
       end
     end
 
-    test "returns :default rules for an arbitrary repo_name string with no matching key" do
+    test "returns :default rules for an arbitrary source_name string with no matching key" do
       unknown = "lotus_config_test_unknown_#{System.unique_integer([:positive])}"
       default_rules = [deny: ["secret"]]
 
@@ -126,8 +137,77 @@ defmodule Lotus.ConfigTest do
         put_visibility(key, %{postgres: [deny: ["should_not_match"]], default: default_rules})
 
         assert apply(Config, fun, [unknown]) == default_rules,
-               "#{fun} did not return :default rules for unknown repo_name"
+               "#{fun} did not return :default rules for unknown source_name"
       end
+    end
+  end
+
+  describe "deprecated config key backward compatibility" do
+    test "data_repos config key still works and resolves correctly" do
+      original_sources = Application.get_env(:lotus, :data_sources)
+      Application.delete_env(:lotus, :data_sources)
+      Application.put_env(:lotus, :data_repos, %{"test" => Lotus.Test.Repo})
+
+      log =
+        capture_log(fn ->
+          Config.reload!()
+          assert Config.data_sources() == %{"test" => Lotus.Test.Repo}
+        end)
+
+      assert log =~ "deprecated"
+      assert log =~ ":data_repos"
+      assert log =~ ":data_sources"
+
+      Application.delete_env(:lotus, :data_repos)
+      Application.put_env(:lotus, :data_sources, original_sources)
+      Config.reload!()
+    end
+
+    test "default_repo config key still works with warning" do
+      original_source = Application.get_env(:lotus, :default_source)
+      Application.delete_env(:lotus, :default_source)
+      Application.put_env(:lotus, :default_repo, "postgres")
+
+      log =
+        capture_log(fn ->
+          Config.reload!()
+          {name, _mod} = Config.default_data_source()
+          assert name == "postgres"
+        end)
+
+      assert log =~ "deprecated"
+      assert log =~ ":default_repo"
+      assert log =~ ":default_source"
+
+      Application.delete_env(:lotus, :default_repo)
+
+      if original_source do
+        Application.put_env(:lotus, :default_source, original_source)
+      end
+
+      Config.reload!()
+    end
+
+    test "both data_repos and data_sources present raises error" do
+      Application.put_env(:lotus, :data_repos, %{"old" => Lotus.Test.Repo})
+
+      assert_raise ArgumentError, ~r/Cannot configure both/, fn ->
+        Config.reload!()
+      end
+
+      Application.delete_env(:lotus, :data_repos)
+      Config.reload!()
+    end
+
+    test "both default_repo and default_source present raises error" do
+      Application.put_env(:lotus, :default_repo, "old")
+
+      assert_raise ArgumentError, ~r/Cannot configure both/, fn ->
+        Config.reload!()
+      end
+
+      Application.delete_env(:lotus, :default_repo)
+      Config.reload!()
     end
   end
 

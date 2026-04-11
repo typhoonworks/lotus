@@ -63,7 +63,7 @@ defmodule Lotus.Cache.KeyBuilder do
 
   - `sql` - The SQL query string
   - `bound` - Bound parameters (map or list)
-  - `opts` - Options including `:data_repo`, `:search_path`, `:lotus_version`
+  - `opts` - Options including `:data_source`, `:search_path`, `:lotus_version`
   - `scope` - The scope term, or `nil` if no scope is set
   """
   @callback result_key(

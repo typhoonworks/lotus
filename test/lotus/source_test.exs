@@ -173,7 +173,7 @@ defmodule Lotus.SourceTest do
     end
 
     test "defaults to configured default repo when repo is nil" do
-      {_name, default_mod} = Lotus.Config.default_data_repo()
+      {_name, default_mod} = Lotus.Config.default_data_source()
       result = Source.param_placeholder(nil, 1, "id", :integer)
 
       expected =

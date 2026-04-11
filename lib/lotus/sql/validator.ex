@@ -35,7 +35,7 @@ defmodule Lotus.SQL.Validator do
       |> OptionalClause.strip_brackets()
       |> Variables.neutralize("NULL")
 
-    repo = Lotus.Config.get_data_repo!(data_source)
+    repo = Lotus.Config.get_data_source!(data_source)
 
     case Lotus.Source.explain_plan(repo, neutralized) do
       {:ok, _plan} -> :ok

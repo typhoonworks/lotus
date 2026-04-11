@@ -213,7 +213,7 @@ defmodule Lotus.Integration.CachingTest do
       query = %Query{
         statement: "SELECT name FROM test_users WHERE id = {{user_id}}",
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
@@ -230,7 +230,7 @@ defmodule Lotus.Integration.CachingTest do
       query = %Query{
         statement: "SELECT name FROM test_users WHERE id = {{user_id}}",
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
@@ -252,7 +252,7 @@ defmodule Lotus.Integration.CachingTest do
       query = %Query{
         statement: "SELECT name FROM test_users WHERE id = {{user_id}}",
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, result1} = Lotus.run_query(query, vars: %{"user_id" => user.id})
@@ -280,7 +280,7 @@ defmodule Lotus.Integration.CachingTest do
       query = %Query{
         statement: "SELECT name FROM test_users WHERE id = {{user_id}}",
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, _result} =

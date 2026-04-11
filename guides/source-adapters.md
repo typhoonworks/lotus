@@ -30,13 +30,13 @@ Runner / Preflight / Schema  ──▶  Adapter.execute_query(adapter, sql, para
 
 ## Default Behaviour
 
-If you are using Ecto repos and static configuration, no changes are needed. The default source resolver (`Lotus.Source.Resolvers.Static`) reads your existing `data_repos` config and wraps each repo in `Lotus.Source.Adapters.Ecto` automatically. Your existing configuration continues to work as before:
+If you are using Ecto repos and static configuration, no changes are needed. The default source resolver (`Lotus.Source.Resolvers.Static`) reads your existing `data_sources` config and wraps each repo in `Lotus.Source.Adapters.Ecto` automatically. Your existing configuration continues to work as before:
 
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }

@@ -7,7 +7,7 @@ defmodule Lotus.Cache.KeyTest do
     test "generates consistent cache keys for same parameters" do
       sql = "SELECT * FROM users WHERE active = $1 AND created_at > $2"
       bound_vars = %{"1" => true, "2" => ~D[2023-01-01]}
-      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "my_repo", search_path: "public", lotus_version: "1.0.0"]
 
       key1 = Key.result(sql, bound_vars, opts)
       key2 = Key.result(sql, bound_vars, opts)
@@ -18,7 +18,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "generates different keys for different SQL queries" do
       bound_vars = %{"1" => 123}
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key1 = Key.result("SELECT * FROM users WHERE id = $1", bound_vars, opts)
       key2 = Key.result("SELECT * FROM orders WHERE user_id = $1", bound_vars, opts)
@@ -28,7 +28,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "generates different keys for different bound variables" do
       sql = "SELECT * FROM users WHERE id = $1"
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key1 = Key.result(sql, %{"1" => 123}, opts)
       key2 = Key.result(sql, %{"1" => 456}, opts)
@@ -36,12 +36,12 @@ defmodule Lotus.Cache.KeyTest do
       assert key1 != key2
     end
 
-    test "generates different keys for different data repositories" do
+    test "generates different keys for different data sources" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound_vars = %{"1" => 123}
 
-      key1 = Key.result(sql, bound_vars, data_repo: "repo1")
-      key2 = Key.result(sql, bound_vars, data_repo: "repo2")
+      key1 = Key.result(sql, bound_vars, data_source: "repo1")
+      key2 = Key.result(sql, bound_vars, data_source: "repo2")
 
       assert key1 != key2
       assert String.starts_with?(key1, "result:repo1:")
@@ -51,7 +51,7 @@ defmodule Lotus.Cache.KeyTest do
     test "generates different keys for different search paths" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound_vars = %{"1" => 123}
-      base_opts = [data_repo: "my_repo"]
+      base_opts = [data_source: "my_repo"]
 
       key1 = Key.result(sql, bound_vars, base_opts ++ [search_path: "public"])
       key2 = Key.result(sql, bound_vars, base_opts ++ [search_path: "tenant1"])
@@ -62,7 +62,7 @@ defmodule Lotus.Cache.KeyTest do
     test "generates different keys for different lotus versions" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound_vars = %{"1" => 123}
-      base_opts = [data_repo: "my_repo"]
+      base_opts = [data_source: "my_repo"]
 
       key1 = Key.result(sql, bound_vars, base_opts ++ [lotus_version: "1.0.0"])
       key2 = Key.result(sql, bound_vars, base_opts ++ [lotus_version: "1.1.0"])
@@ -96,7 +96,7 @@ defmodule Lotus.Cache.KeyTest do
         "9" => 0
       }
 
-      opts = [data_repo: "analytics_repo", search_path: "reports"]
+      opts = [data_source: "analytics_repo", search_path: "reports"]
 
       key = Key.result(sql, bound_vars, opts)
 
@@ -114,7 +114,7 @@ defmodule Lotus.Cache.KeyTest do
         "4" => ~D[2023-06-15]
       }
 
-      opts = [data_repo: "test_repo"]
+      opts = [data_source: "test_repo"]
       key = Key.result(sql, bound_vars, opts)
 
       assert String.starts_with?(key, "result:test_repo:")
@@ -123,7 +123,7 @@ defmodule Lotus.Cache.KeyTest do
     test "handles empty bound variables" do
       sql = "SELECT COUNT(*) FROM users"
       bound_vars = %{}
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key = Key.result(sql, bound_vars, opts)
 
@@ -133,7 +133,7 @@ defmodule Lotus.Cache.KeyTest do
     test "handles nil values in bound variables" do
       sql = "SELECT * FROM users WHERE optional_field = $1"
       bound_vars = %{"1" => nil}
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key = Key.result(sql, bound_vars, opts)
 
@@ -143,7 +143,7 @@ defmodule Lotus.Cache.KeyTest do
     test "generates deterministic keys across processes" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound_vars = %{"1" => 123}
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       task1 = Task.async(fn -> Key.result(sql, bound_vars, opts) end)
       task2 = Task.async(fn -> Key.result(sql, bound_vars, opts) end)
@@ -154,7 +154,7 @@ defmodule Lotus.Cache.KeyTest do
       assert key1 == key2
     end
 
-    test "requires data_repo option" do
+    test "requires data_source option" do
       sql = "SELECT * FROM users"
       bound_vars = %{}
 
@@ -166,7 +166,7 @@ defmodule Lotus.Cache.KeyTest do
     test "handles list params for ad-hoc SQL" do
       sql = "SELECT * FROM users WHERE id = $1 AND status = $2"
       params = [123, "active"]
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key = Key.result(sql, params, opts)
 
@@ -175,7 +175,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "generates same key for list params wrapped in __params__ vs direct list" do
       sql = "SELECT * FROM users WHERE id = $1"
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       wrapped_params = %{__params__: [123]}
       key1 = Key.result(sql, wrapped_params, opts)
@@ -188,7 +188,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "generates different keys for map vars vs list params with same values" do
       sql = "SELECT * FROM users WHERE id = $1"
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       vars = %{"id" => 123}
       key1 = Key.result(sql, vars, opts)
@@ -202,7 +202,7 @@ defmodule Lotus.Cache.KeyTest do
     test "uses default search_path when not provided" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound_vars = %{"1" => 123}
-      opts = [data_repo: "my_repo"]
+      opts = [data_source: "my_repo"]
 
       key = Key.result(sql, bound_vars, opts)
 
@@ -214,7 +214,7 @@ defmodule Lotus.Cache.KeyTest do
     test "nil scope produces same key as unscoped" do
       sql = "SELECT * FROM users"
       bound = %{"1" => 123}
-      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "my_repo", search_path: "public", lotus_version: "1.0.0"]
 
       key_without = Key.result(sql, bound, opts)
       key_with_nil = Key.result(sql, bound, opts, nil)
@@ -225,7 +225,7 @@ defmodule Lotus.Cache.KeyTest do
     test "non-nil scope produces different key" do
       sql = "SELECT * FROM users"
       bound = %{"1" => 123}
-      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "my_repo", search_path: "public", lotus_version: "1.0.0"]
 
       key_unscoped = Key.result(sql, bound, opts)
       key_scoped = Key.result(sql, bound, opts, %{tenant_id: 1})
@@ -236,7 +236,7 @@ defmodule Lotus.Cache.KeyTest do
     test "different scopes produce different keys" do
       sql = "SELECT * FROM users WHERE id = $1"
       bound = %{"1" => 123}
-      opts = [data_repo: "my_repo", search_path: "public", lotus_version: "1.0.0"]
+      opts = [data_source: "my_repo", search_path: "public", lotus_version: "1.0.0"]
 
       key_a = Key.result(sql, bound, opts, %{tenant_id: 1})
       key_b = Key.result(sql, bound, opts, %{tenant_id: 2})
@@ -249,7 +249,7 @@ defmodule Lotus.Cache.KeyTest do
     test "result keys follow expected format pattern" do
       sql = "SELECT * FROM test"
       bound_vars = %{"1" => "test"}
-      opts = [data_repo: "test_repo"]
+      opts = [data_source: "test_repo"]
 
       key = Key.result(sql, bound_vars, opts)
 
@@ -258,7 +258,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "keys use SHA256 hashes (64 hex characters)" do
       sql = "SELECT test"
-      opts = [data_repo: "repo"]
+      opts = [data_source: "repo"]
 
       result_key = Key.result(sql, %{}, opts)
 
@@ -270,7 +270,7 @@ defmodule Lotus.Cache.KeyTest do
 
     test "keys are case-insensitive (lowercase hex)" do
       sql = "SELECT test"
-      opts = [data_repo: "repo"]
+      opts = [data_source: "repo"]
 
       key = Key.result(sql, %{}, opts)
       hash = key |> String.split(":") |> List.last()

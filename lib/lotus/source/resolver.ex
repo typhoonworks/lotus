@@ -3,7 +3,7 @@ defmodule Lotus.Source.Resolver do
   Behaviour for resolving named data sources to adapters.
 
   This is a **supported extension point**. The default implementation
-  (`Lotus.Source.Resolvers.Static`) reads from static `data_repos`
+  (`Lotus.Source.Resolvers.Static`) reads from static `data_sources`
   configuration, which is all most applications need. Alternative
   implementations can resolve sources from registries, databases, or
   external services — for example to register sources at runtime, to
@@ -20,7 +20,7 @@ defmodule Lotus.Source.Resolver do
   """
 
   @callback resolve(
-              repo_opt :: nil | String.t() | module(),
+              source_opt :: nil | String.t() | module(),
               fallback :: nil | String.t() | module()
             ) :: {:ok, Lotus.Source.Adapter.t()} | {:error, term()}
 

@@ -7,7 +7,9 @@ defmodule Lotus.Source do
 
   alias Lotus.Source.Adapter
 
-  @type repo :: Ecto.Repo.t()
+  @type source_module :: Ecto.Repo.t()
+
+  @typep repo :: source_module()
 
   @callback execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
   @callback set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
@@ -315,7 +317,7 @@ defmodule Lotus.Source do
   @spec param_placeholder(repo | String.t() | nil, pos_integer(), String.t(), atom() | nil) ::
           String.t()
   def param_placeholder(repo_or_name, index, var, type) when is_integer(index) and index > 0 do
-    impl_for(resolve_repo!(repo_or_name)).param_placeholder(index, var, type)
+    impl_for(resolve_source!(repo_or_name)).param_placeholder(index, var, type)
   end
 
   @doc """
@@ -331,17 +333,17 @@ defmodule Lotus.Source do
   def limit_offset_placeholders(repo_or_name, limit_index, offset_index)
       when is_integer(limit_index) and limit_index > 0 and is_integer(offset_index) and
              offset_index > 0 do
-    impl_for(resolve_repo!(repo_or_name)).limit_offset_placeholders(limit_index, offset_index)
+    impl_for(resolve_source!(repo_or_name)).limit_offset_placeholders(limit_index, offset_index)
   end
 
-  defp resolve_repo!(repo) when is_atom(repo) and not is_nil(repo), do: repo
+  defp resolve_source!(source) when is_atom(source) and not is_nil(source), do: source
 
-  defp resolve_repo!(repo_name) when is_binary(repo_name) do
-    Lotus.Config.get_data_repo!(repo_name)
+  defp resolve_source!(source_name) when is_binary(source_name) do
+    Lotus.Config.get_data_source!(source_name)
   end
 
-  defp resolve_repo!(nil) do
-    {_name, mod} = Lotus.Config.default_data_repo()
+  defp resolve_source!(nil) do
+    {_name, mod} = Lotus.Config.default_data_source()
     mod
   end
 
@@ -433,7 +435,7 @@ defmodule Lotus.Source do
   """
   @spec quote_identifier(repo | String.t() | nil, String.t()) :: String.t()
   def quote_identifier(repo_or_name, identifier) do
-    impl_for(resolve_repo!(repo_or_name)).quote_identifier(identifier)
+    impl_for(resolve_source!(repo_or_name)).quote_identifier(identifier)
   end
 
   @doc """
@@ -449,7 +451,7 @@ defmodule Lotus.Source do
   end
 
   def apply_filters(repo_or_name, sql, params, filters) do
-    impl_for(resolve_repo!(repo_or_name)).apply_filters(sql, params, filters)
+    impl_for(resolve_source!(repo_or_name)).apply_filters(sql, params, filters)
   end
 
   @doc """
@@ -465,6 +467,6 @@ defmodule Lotus.Source do
   end
 
   def apply_sorts(repo_or_name, sql, sorts) do
-    impl_for(resolve_repo!(repo_or_name)).apply_sorts(sql, sorts)
+    impl_for(resolve_source!(repo_or_name)).apply_sorts(sql, sorts)
   end
 end

@@ -9,8 +9,8 @@ Lotus configuration is typically placed in your `config/config.exs` file:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,        # Repository for Lotus query storage
-  default_repo: "main",         # Default repository for query execution
-  data_repos: %{                # Repositories for executing queries
+  default_source: "main",       # Default data source for query execution
+  data_sources: %{              # Data sources for executing queries
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   },
@@ -35,15 +35,17 @@ config :lotus,
 
 **Type**: `module()`
 
-#### `data_repos` (required)
+#### `data_sources` (required)
 
-A map of repositories where queries can be executed against actual data. This powerful feature allows Lotus to work with multiple databases simultaneously, supporting PostgreSQL, MySQL, and SQLite.
+A map of data sources where queries can be executed against actual data. This powerful feature allows Lotus to work with multiple databases simultaneously, supporting PostgreSQL, MySQL, and SQLite.
 
 Keys are friendly names that you use when executing queries, values are Ecto repository modules.
 
+> **Deprecation note**: The old `:data_repos` config key is deprecated but still works. Please migrate to `:data_sources`.
+
 ```elixir
 config :lotus,
-  data_repos: %{
+  data_sources: %{
     "main" => MyApp.Repo,           # Can be the same as ecto_repo
     "analytics" => MyApp.AnalyticsRepo,
     "reporting" => MyApp.ReportingRepo,
@@ -54,26 +56,28 @@ config :lotus,
 
 **Type**: `%{String.t() => module()}`
 
-#### `default_repo` (required when multiple data_repos)
+#### `default_source` (required when multiple data_sources)
 
-When you have multiple data repositories configured, you must specify which one to use by default when no explicit repository is provided in query execution.
+When you have multiple data sources configured, you must specify which one to use by default when no explicit source is provided in query execution.
+
+> **Deprecation note**: The old `:default_repo` config key is deprecated but still works. Please migrate to `:default_source`.
 
 ```elixir
 config :lotus,
-  default_repo: "main",  # Must match a key in data_repos
-  data_repos: %{
+  default_source: "main",  # Must match a key in data_sources
+  data_sources: %{
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
 ```
 
 **Type**: `String.t()`
-**Default**: Not required if only one data repository is configured
+**Default**: Not required if only one data source is configured
 
 **Behavior**:
-- **Single repo**: When only one data repository is configured, it's automatically used as the default
-- **Multiple repos**: You must configure `default_repo` to specify which one to use when no repo is explicitly provided
-- **No repos**: Raises an error if no data repositories are configured
+- **Single source**: When only one data source is configured, it's automatically used as the default
+- **Multiple sources**: You must configure `default_source` to specify which one to use when no source is explicitly provided
+- **No sources**: Raises an error if no data sources are configured
 
 **Usage Examples:**
 
@@ -84,27 +88,27 @@ Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "analytics")
 # Execute against a repository module directly
 Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: MyApp.AnalyticsRepo)
 
-# When no repo is specified, uses the configured default_repo
-Lotus.run_sql("SELECT COUNT(*) FROM users")  # Uses "main" repo from default_repo config
+# When no repo is specified, uses the configured default_source
+Lotus.run_sql("SELECT COUNT(*) FROM users")  # Uses "main" from default_source config
 ```
 
-**Repository Management:**
+**Data Source Management:**
 
 ```elixir
-# List all configured data repository names
-repo_names = Lotus.list_data_repo_names()
+# List all configured data source names
+source_names = Lotus.list_data_source_names()
 # ["analytics", "main", "reporting", "sqlite_data"]
 
-# Get all configured repositories
-all_repos = Lotus.data_repos()
+# Get all configured data sources
+all_sources = Lotus.data_sources()
 # %{"analytics" => MyApp.AnalyticsRepo, "main" => MyApp.Repo, ...}
 
-# Get a specific repository by name (raises if not found)
-repo = Lotus.get_data_repo!("analytics")
+# Get a specific data source by name (raises if not found)
+source = Lotus.get_data_source!("analytics")
 # MyApp.AnalyticsRepo
 ```
 
-> **Note**: The `ecto_repo` can also be included in `data_repos` if you want to run queries against the same database where Lotus stores its data. This is common in single-database applications.
+> **Note**: The `ecto_repo` can also be included in `data_sources` if you want to run queries against the same database where Lotus stores its data. This is common in single-database applications.
 
 ### Optional Features
 
@@ -330,11 +334,11 @@ Lotus automatically blocks access to sensitive system tables:
 
 **Per-Repository Rules:**
 
-You can configure different visibility rules for each data repository:
+You can configure different visibility rules for each data source:
 
 ```elixir
 config :lotus,
-  data_repos: %{
+  data_sources: %{
     "public" => MyApp.PublicRepo,
     "finance" => MyApp.FinanceRepo
   },
@@ -357,7 +361,7 @@ config :lotus,
 
 #### `source_resolver`
 
-Configures the module responsible for turning repo names or modules into `%Lotus.Source.Adapter{}` structs at query time. The default static resolver reads from `data_repos` and is suitable for most applications.
+Configures the module responsible for turning repo names or modules into `%Lotus.Source.Adapter{}` structs at query time. The default static resolver reads from `data_sources` and is suitable for most applications.
 
 ```elixir
 config :lotus,
@@ -461,7 +465,7 @@ Configure Lotus to use your read-only repository for data queries:
 # config/config.exs
 config :lotus,
   ecto_repo: MyApp.Repo,           # Use regular repo for storing Lotus queries
-  data_repos: %{
+  data_sources: %{
     "main" => MyApp.ReadOnlyRepo,  # Use read-only repo for data queries
     "analytics" => MyApp.AnalyticsReadOnlyRepo
   }
@@ -476,7 +480,7 @@ config :my_app, MyApp.ReadOnlyRepo,
 
 ### How It Interacts with Lotus
 
-When a data repo is configured with Ecto's `read_only: true`:
+When a data source is configured with Ecto's `read_only: true`:
 
 1. **Ecto blocks writes first** — the repo rejects INSERT/UPDATE/DELETE before Lotus is involved
 2. **Lotus's `read_only: false` has no effect** — even if you pass it, the repo won't execute writes
@@ -593,8 +597,8 @@ You can mix PostgreSQL, MySQL, and SQLite repositories:
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,          # PostgreSQL for storage
-  default_repo: "postgres",       # Default repository for queries
-  data_repos: %{
+  default_source: "postgres",     # Default data source for queries
+  data_sources: %{
     "postgres" => MyApp.Repo,     # PostgreSQL data
     "mysql" => MyApp.MySQLRepo,   # MySQL data
     "sqlite" => MyApp.SqliteRepo, # SQLite data

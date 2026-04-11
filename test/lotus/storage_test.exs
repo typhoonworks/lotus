@@ -167,41 +167,41 @@ defmodule Lotus.StorageTest do
       assert query.name == "Minimal Query"
       assert query.description == nil
       assert query.statement == "SELECT 1"
-      assert query.data_repo == nil
+      assert query.data_source == nil
     end
 
-    test "creates query with valid data_repo" do
+    test "creates query with valid data_source" do
       attrs = %{
         name: "Analytics Query",
         statement: "SELECT COUNT(*) FROM page_views",
-        data_repo: "postgres"
+        data_source: "postgres"
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
-      assert query.data_repo == "postgres"
+      assert query.data_source == "postgres"
     end
 
-    test "normalizes empty string data_repo to nil" do
+    test "normalizes empty string data_source to nil" do
       attrs = %{
         name: "Test Query",
         statement: "SELECT 1",
-        data_repo: ""
+        data_source: ""
       }
 
       assert {:ok, query} = Storage.create_query(attrs)
-      assert query.data_repo == nil
+      assert query.data_source == nil
     end
 
-    test "returns error with invalid data_repo" do
+    test "returns error with invalid data_source" do
       attrs = %{
-        name: "Invalid Repo Query",
+        name: "Invalid Source Query",
         statement: "SELECT 1",
-        data_repo: "nonexistent_repo"
+        data_source: "nonexistent_repo"
       }
 
       assert {:error, changeset} = Storage.create_query(attrs)
       refute changeset.valid?
-      assert %{data_repo: [error_msg]} = errors_on(changeset)
+      assert %{data_source: [error_msg]} = errors_on(changeset)
       assert error_msg =~ "must be one of: mysql, postgres, sqlite"
     end
 

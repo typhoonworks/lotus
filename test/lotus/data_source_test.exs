@@ -1,31 +1,31 @@
-defmodule Lotus.DataRepoTest do
+defmodule Lotus.DataSourceTest do
   use Lotus.Case, async: true
 
-  describe "data repository configuration" do
-    test "lists configured data repositories" do
-      repo_names = Lotus.list_data_repo_names()
-      assert "postgres" in repo_names
-      assert "sqlite" in repo_names
-      assert "mysql" in repo_names
+  describe "data source configuration" do
+    test "lists configured data sources" do
+      source_names = Lotus.list_data_source_names()
+      assert "postgres" in source_names
+      assert "sqlite" in source_names
+      assert "mysql" in source_names
     end
 
-    test "gets data repository by name" do
-      assert Lotus.get_data_repo!("postgres") == Lotus.Test.Repo
-      assert Lotus.get_data_repo!("sqlite") == Lotus.Test.SqliteRepo
-      assert Lotus.get_data_repo!("mysql") == Lotus.Test.MysqlRepo
+    test "gets data source by name" do
+      assert Lotus.get_data_source!("postgres") == Lotus.Test.Repo
+      assert Lotus.get_data_source!("sqlite") == Lotus.Test.SqliteRepo
+      assert Lotus.get_data_source!("mysql") == Lotus.Test.MysqlRepo
     end
 
-    test "raises when getting non-existent data repo" do
-      assert_raise ArgumentError, ~r/Data repo 'nonexistent' not configured/, fn ->
-        Lotus.get_data_repo!("nonexistent")
+    test "raises when getting non-existent data source" do
+      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+        Lotus.get_data_source!("nonexistent")
       end
     end
 
-    test "returns all configured data repos" do
-      data_repos = Lotus.data_repos()
-      assert data_repos["postgres"] == Lotus.Test.Repo
-      assert data_repos["sqlite"] == Lotus.Test.SqliteRepo
-      assert data_repos["mysql"] == Lotus.Test.MysqlRepo
+    test "returns all configured data sources" do
+      data_sources = Lotus.data_sources()
+      assert data_sources["postgres"] == Lotus.Test.Repo
+      assert data_sources["sqlite"] == Lotus.Test.SqliteRepo
+      assert data_sources["mysql"] == Lotus.Test.MysqlRepo
     end
   end
 
@@ -56,7 +56,7 @@ defmodule Lotus.DataRepoTest do
       assert result.rows == [[2]]
     end
 
-    test "defaults to first configured data repo when no repo specified" do
+    test "defaults to first configured data source when no repo specified" do
       # Should use "postgres" since it's first in alphabetical order
       {:ok, result} = Lotus.run_sql("SELECT 3 as test_value")
       assert result.columns == ["test_value"]

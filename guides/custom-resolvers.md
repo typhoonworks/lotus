@@ -13,7 +13,7 @@ The default static resolvers load configuration at compile time and cache it in 
 
 ### Custom `Source.Resolver`
 
-- Sources are registered at runtime (not via `config :lotus, data_repos: ...`).
+- Sources are registered at runtime (not via `config :lotus, data_sources: ...`).
 - Data sources live in a database, registry service, or admin UI.
 - Per-tenant sources must be added or removed without restarts.
 - Each environment (dev/staging/prod) needs a different resolution strategy.
@@ -41,7 +41,7 @@ config :lotus,
   visibility_resolver: MyApp.VisibilityResolver
 ```
 
-When omitted, the defaults read from `:data_repos`, `:schema_visibility`, `:table_visibility`, and `:column_visibility` — the same behaviour Lotus has always had.
+When omitted, the defaults read from `:data_sources`, `:schema_visibility`, `:table_visibility`, and `:column_visibility` — the same behaviour Lotus has always had.
 
 > ### Note {: .info}
 >
@@ -80,11 +80,11 @@ A source resolver turns query options (`repo_opt`, `fallback`) into `%Lotus.Sour
 
 The default resolver (`Lotus.Source.Resolvers.Static`) follows this priority inside `resolve/2`:
 
-1. `repo_opt` as string name — lookup in `data_repos`, wrap in adapter
+1. `repo_opt` as string name — lookup in `data_sources`, wrap in adapter
 2. `repo_opt` as module — reverse lookup (find name for module), wrap in adapter
 3. `fallback` as string name — lookup
 4. `fallback` as module — reverse lookup
-5. Both `nil` — use the configured `default_repo`
+5. Both `nil` — use the configured `default_source`
 6. Not found — `{:error, :not_found}`
 
 Custom implementations are free to adopt a different priority but should accept the same arguments so the public API (`Lotus.run_sql/3`, `Lotus.run_query/2`, etc.) continues to work without changes.

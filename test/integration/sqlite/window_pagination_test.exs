@@ -69,7 +69,7 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
         ORDER BY name
         """,
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, result} =
@@ -89,7 +89,7 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
         ORDER BY name
         """,
         variables: [],
-        data_repo: nil
+        data_source: nil
       }
 
       assert {:ok, result} =

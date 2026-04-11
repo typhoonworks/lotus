@@ -191,7 +191,7 @@ defmodule Lotus.PreflightMysqlTest do
     setup do
       Mimic.copy(Lotus.Config)
       config = [allow: [], deny: ["test_users", "test_posts"]]
-      Lotus.Config |> stub(:rules_for_repo_name, fn _repo_name -> config end)
+      Lotus.Config |> stub(:rules_for_source_name, fn _repo_name -> config end)
       :ok
     end
 

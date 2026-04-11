@@ -413,7 +413,7 @@ defmodule MyApp.QueryBuilder do
         Lotus.create_query(%{
           name: "Count #{schema_name}.#{table_name}",
           query: %{sql: sql},
-          data_repo: repo_name,
+          data_source: repo_name,
           search_path: schema_name
         })
         

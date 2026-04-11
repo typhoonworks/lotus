@@ -152,7 +152,7 @@ defmodule Lotus.SourcesTest do
     end
 
     test "raises for unknown repo name" do
-      assert_raise ArgumentError, ~r/Data repo 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
         Sources.source_type("unknown")
       end
     end
@@ -191,7 +191,7 @@ defmodule Lotus.SourcesTest do
     end
 
     test "raises for unknown name" do
-      assert_raise ArgumentError, ~r/Data repo 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
         Sources.get_source!("unknown")
       end
     end

@@ -24,7 +24,7 @@ defmodule Lotus.Integration.Sqlite.QuotedVarsTest do
         WHERE name = '{{name}}'
         """,
         variables: [%{name: "name", type: :text, default: nil}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"name" => "John Doe"})
@@ -43,7 +43,7 @@ defmodule Lotus.Integration.Sqlite.QuotedVarsTest do
         ORDER BY name
         """,
         variables: [%{name: "q", type: :text, default: nil}],
-        data_repo: "sqlite"
+        data_source: "sqlite"
       }
 
       result = Lotus.run_query(query, vars: %{"q" => "John"})

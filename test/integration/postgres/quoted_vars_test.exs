@@ -24,7 +24,7 @@ defmodule Lotus.Integration.Postgres.QuotedVarsTest do
         WHERE name = '{{name}}'
         """,
         variables: [%{name: "name", type: :text, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"name" => "John Doe"})
@@ -42,7 +42,7 @@ defmodule Lotus.Integration.Postgres.QuotedVarsTest do
         WHERE email = '{{email}}'
         """,
         variables: [%{name: "email", type: :text, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"email" => "jane@example.com"})
@@ -60,7 +60,7 @@ defmodule Lotus.Integration.Postgres.QuotedVarsTest do
         WHERE id = '{{user_id}}'::int
         """,
         variables: [%{name: "user_id", type: :number, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"user_id" => john_id})
@@ -79,7 +79,7 @@ defmodule Lotus.Integration.Postgres.QuotedVarsTest do
         ORDER BY name
         """,
         variables: [%{name: "q", type: :text, default: nil}],
-        data_repo: nil
+        data_source: nil
       }
 
       result = Lotus.run_query(query, vars: %{"q" => "John"})

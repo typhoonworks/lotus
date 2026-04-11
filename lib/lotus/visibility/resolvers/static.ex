@@ -41,16 +41,16 @@ defmodule Lotus.Visibility.Resolvers.Static do
 
   @impl true
   def schema_rules_for(source_name, _scope) do
-    Lotus.Config.schema_rules_for_repo_name(source_name)
+    Lotus.Config.schema_rules_for_source_name(source_name)
   end
 
   @impl true
   def table_rules_for(source_name, _scope) do
-    Lotus.Config.rules_for_repo_name(source_name)
+    Lotus.Config.rules_for_source_name(source_name)
   end
 
   @impl true
   def column_rules_for(source_name, _scope) do
-    Lotus.Config.column_rules_for_repo_name(source_name)
+    Lotus.Config.column_rules_for_source_name(source_name)
   end
 end

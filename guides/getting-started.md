@@ -96,9 +96,9 @@ IO.inspect(result.rows)
 # ]
 ```
 
-## Working with Multiple Data Repositories
+## Working with Multiple Data Sources
 
-Lotus supports PostgreSQL, MySQL, and SQLite databases. If you have configured multiple data repositories, you can execute queries against specific databases:
+Lotus supports PostgreSQL, MySQL, and SQLite databases. If you have configured multiple data sources, you can execute queries against specific databases:
 
 ```elixir
 # Execute against a specific repository by name
@@ -115,15 +115,15 @@ Lotus supports PostgreSQL, MySQL, and SQLite databases. If you have configured m
   repo: MyApp.MySQLRepo
 )
 
-# List all available data repositories
-repo_names = Lotus.list_data_repo_names()
-IO.inspect(repo_names)
+# List all available data sources
+source_names = Lotus.list_data_source_names()
+IO.inspect(source_names)
 # ["postgres", "mysql", "sqlite", "analytics"]
 ```
 
-### Storing Queries with Specific Data Repositories
+### Storing Queries with Specific Data Sources
 
-You can store queries with a specific data repository, so they automatically execute against the correct database:
+You can store queries with a specific data source, so they automatically execute against the correct database:
 
 ```elixir
 # Create a query that will run against the analytics database
@@ -133,31 +133,31 @@ You can store queries with a specific data repository, so they automatically exe
     sql: "SELECT COUNT(*) FROM page_views WHERE date = $1",
     params: [Date.utc_today()]
   },
-  data_repo: "analytics"
+  data_source: "analytics"
 })
 
 # Create a query for the main database
 {:ok, user_query} = Lotus.create_query(%{
   name: "Active Users",
   statement: "SELECT COUNT(*) FROM users WHERE active = true",
-  data_repo: "main"
+  data_source: "main"
 })
 
-# Execute queries - they automatically use their stored data_repo
+# Execute queries - they automatically use their stored data_source
 {:ok, analytics_result} = Lotus.run_query(analytics_query)
 {:ok, user_result} = Lotus.run_query(user_query)
 ```
 
 ### Runtime Repository Override
 
-You can override the stored data repository at execution time:
+You can override the stored data source at execution time:
 
 ```elixir
-# Query was saved with data_repo: "analytics"
+# Query was saved with data_source: "analytics"
 {:ok, query} = Lotus.create_query(%{
   name: "User Count",
   statement: "SELECT COUNT(*) FROM users",
-  data_repo: "analytics"
+  data_source: "analytics"
 })
 
 # Execute against the stored repository
@@ -167,27 +167,27 @@ You can override the stored data repository at execution time:
 {:ok, result} = Lotus.run_query(query, repo: "main")
 ```
 
-### Default Repository Behavior
+### Default Data Source Behavior
 
-If you don't specify a `data_repo` when creating a query, it will use the configured `default_repo` when executed:
+If you don't specify a `data_source` when creating a query, it will use the configured `default_source` when executed:
 
 ```elixir
-# Configuration with default_repo
+# Configuration with default_source
 config :lotus,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
 
-# Query without specific data_repo
+# Query without specific data_source
 {:ok, query} = Lotus.create_query(%{
   name: "Generic Query",
   statement: "SELECT 1"
-  # No data_repo specified
+  # No data_source specified
 })
 
-# Will use the "main" repository (from default_repo config)
+# Will use the "main" data source (from default_source config)
 {:ok, result} = Lotus.run_query(query)
 ```
 
@@ -413,7 +413,7 @@ You can save a `search_path` with your queries to make them automatically resolv
     params: []
   },
   search_path: "reporting, public",
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 
 # Execute - automatically uses the stored search_path
@@ -452,7 +452,7 @@ Here are common patterns for using `search_path`:
   variables: [
     %{name: "is_active", type: :text, label: "Is Active", default: "true"}
   ],
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 
 # Execute for different tenants by overriding search_path
@@ -478,7 +478,7 @@ Here are common patterns for using `search_path`:
     """
   },
   search_path: "reporting, public",
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 
 # Use the same query structure for different contexts
@@ -505,7 +505,7 @@ Here are common patterns for using `search_path`:
     """
   },
   search_path: "public, analytics",  # users in public, events in analytics
-  data_repo: "postgres"
+  data_source: "postgres"
 })
 ```
 

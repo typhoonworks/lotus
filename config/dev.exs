@@ -2,8 +2,8 @@ import Config
 
 config :lotus,
   ecto_repo: Lotus.Test.Repo,
-  default_repo: "postgres",
-  data_repos: %{
+  default_source: "postgres",
+  data_sources: %{
     "postgres" => Lotus.Test.Repo,
     "mysql" => Lotus.Test.MysqlRepo,
     "sqlite" => Lotus.Test.SqliteRepo

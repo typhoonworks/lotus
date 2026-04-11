@@ -12,7 +12,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
 
-      stub(Lotus.Config, :get_data_repo!, fn "postgres" -> Lotus.Test.Repo end)
+      stub(Lotus.Config, :get_data_source!, fn "postgres" -> Lotus.Test.Repo end)
 
       stub(Lotus.Source, :explain_plan, fn _repo, _sql, _params, _opts ->
         {:ok, postgres_explain_plan()}
