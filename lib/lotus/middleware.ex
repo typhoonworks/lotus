@@ -125,7 +125,14 @@ defmodule Lotus.Middleware do
   defp run_pipeline([], payload), do: {:cont, payload}
 
   defp run_pipeline([{mod, compiled_opts} | rest], payload) do
-    case mod.call(payload, compiled_opts) do
+    result =
+      try do
+        mod.call(payload, compiled_opts)
+      rescue
+        e -> {:halt, e}
+      end
+
+    case result do
       {:cont, new_payload} -> run_pipeline(rest, new_payload)
       {:halt, reason} -> {:halt, reason}
     end
