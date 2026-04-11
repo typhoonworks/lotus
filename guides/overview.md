@@ -83,7 +83,7 @@ Lotus is perfect for:
 
 ## Lotus Web UI
 
-For teams that need a visual interface, [Lotus Web](https://github.com/typhoonworks/lotus_web) provides a Phoenix LiveView-powered dashboard that you can mount directly in your application. It's a lightweight alternative to complex BI tools like Metabase or Grafana, offering:
+For teams that need a visual interface, [Lotus Web](https://github.com/elixir-lotus/lotus_web) provides a Phoenix LiveView-powered dashboard that you can mount directly in your application. It's a lightweight alternative to complex BI tools like Metabase or Grafana, offering:
 
 - **Web-based SQL editor** with syntax highlighting
 - **Interactive query management** and organization

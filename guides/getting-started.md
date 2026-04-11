@@ -776,7 +776,7 @@ end
 
 ## Using Lotus Web
 
-If you prefer a visual interface or need to provide query access to non-technical users, consider setting up [Lotus Web](https://github.com/typhoonworks/lotus_web). It provides a beautiful web interface that mounts directly in your Phoenix application:
+If you prefer a visual interface or need to provide query access to non-technical users, consider setting up [Lotus Web](https://github.com/elixir-lotus/lotus_web). It provides a beautiful web interface that mounts directly in your Phoenix application:
 
 ```elixir
 # In your router

@@ -20,7 +20,7 @@
 
 ### Added
 
-- `:preload` option on `Lotus.Dashboards.list_dashboards/1` and `list_dashboards_by/1` for eager-loading associations (e.g. `:cards`) in a single query. Fixes N+1 patterns in callers that need card counts or card lists alongside the dashboard list (see typhoonworks/lotus_web#103).
+- `:preload` option on `Lotus.Dashboards.list_dashboards/1` and `list_dashboards_by/1` for eager-loading associations (e.g. `:cards`) in a single query. Fixes N+1 patterns in callers that need card counts or card lists alongside the dashboard list (see elixir-lotus/lotus_web#103).
 - Pluggable source adapter abstraction (`Lotus.Source.Adapter`) — behaviour and struct wrapping data sources behind a uniform callback interface with consistent `{:ok, _} | {:error, _}` return types
 - `Lotus.Source.Resolver` behaviour for configurable source resolution
 - `Lotus.Visibility.Resolver` behaviour for configurable visibility rule resolution
@@ -120,7 +120,7 @@
   - Source-aware: each database adapter handles its own identifier quoting via new `apply_sorts/2` callback on `Lotus.Source`
   - New `Lotus.Query.Sort` struct for source-agnostic sort representation
   - New `Lotus.SQL.SortInjector` shared helper for SQL-based sources
-- **FIX:** AI SQL generation now validates plain SQL responses (without `` ```sql `` code blocks) against the database using EXPLAIN before rejecting them — valid SQL is accepted, conversational text is still rejected as `{:error, {:unable_to_generate, content}}` ([#127](https://github.com/typhoonworks/lotus/issues/127))
+- **FIX:** AI SQL generation now validates plain SQL responses (without `` ```sql `` code blocks) against the database using EXPLAIN before rejecting them — valid SQL is accepted, conversational text is still rejected as `{:error, {:unable_to_generate, content}}` ([#127](https://github.com/elixir-lotus/lotus/issues/127))
 - **NEW:** `Lotus.SQL.Validator` — validates SQL syntax against the database without executing, using EXPLAIN. Neutralizes `{{var}}` and `[[...]]` template syntax before validation
 - **NEW:** `Lotus.AI.Actions.ValidateSQL` — AI tool action that lets the LLM validate its SQL against the database before returning it
 - **NEW:** `Lotus.Variables` — universal utilities for `{{variable}}` template syntax: `regex/0`, `extract_names/1`, `neutralize/2`. Consolidates the variable regex previously duplicated across `OptionalClause`, `Query`, and `QueryOptimizer`

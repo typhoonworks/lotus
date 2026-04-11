@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Lotus! This guide will help you g
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/typhoonworks/lotus.git
+   git clone https://github.com/elixir-lotus/lotus.git
    cd lotus
    ```
 

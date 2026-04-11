@@ -231,7 +231,7 @@ This automatic session management ensures Lotus plays nicely with other parts of
 
 ## Lotus Web Setup
 
-[Lotus Web](https://github.com/typhoonworks/lotus_web) provides a beautiful web interface for Lotus that you can mount directly in your Phoenix application. It's perfect for teams who need visual query tools without the complexity of full BI solutions.
+[Lotus Web](https://github.com/elixir-lotus/lotus_web) provides a beautiful web interface for Lotus that you can mount directly in your Phoenix application. It's perfect for teams who need visual query tools without the complexity of full BI solutions.
 
 ### Installation
 
@@ -290,7 +290,7 @@ The dependency constraints in `mix.exs` will automatically ensure compatible ver
 
 ### Next Steps
 
-Once installed, visit `/lotus` in your application (or whatever path you mounted it at) to start using the web interface. For more details, see the [Lotus Web documentation](https://github.com/typhoonworks/lotus_web).
+Once installed, visit `/lotus` in your application (or whatever path you mounted it at) to start using the web interface. For more details, see the [Lotus Web documentation](https://github.com/elixir-lotus/lotus_web).
 
 ## Troubleshooting
 

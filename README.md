@@ -1,6 +1,6 @@
 # Lotus
 
-![Lotus](https://raw.githubusercontent.com/typhoonworks/lotus/main/media/banner.png)
+![Lotus](https://raw.githubusercontent.com/elixir-lotus/lotus/main/media/banner.png)
 
 <p>
   <a href="https://hex.pm/packages/lotus">
@@ -9,8 +9,8 @@
   <a href="https://hexdocs.pm/lotus">
     <img src="https://img.shields.io/badge/docs-hexdocs-blue" alt="HexDocs">
   </a>
-  <a href="https://github.com/typhoonworks/lotus/actions">
-    <img alt="CI Status" src="https://github.com/typhoonworks/lotus/workflows/ci/badge.svg">
+  <a href="https://github.com/elixir-lotus/lotus/actions">
+    <img alt="CI Status" src="https://github.com/elixir-lotus/lotus/workflows/ci/badge.svg">
   </a>
 </p>
 
@@ -39,7 +39,7 @@ We're running Lotus in production at [Accomplish](https://accomplish.dev).
 - 5 chart types (bar, line, area, scatter, pie) saved per query
 - Dashboards with grid layouts, auto-refresh, and public sharing
 
-Lotus Web is the companion UI package — see [lotus_web](https://github.com/typhoonworks/lotus_web).
+Lotus Web is the companion UI package — see [lotus_web](https://github.com/elixir-lotus/lotus_web).
 
 ## Quick Start
 
@@ -264,7 +264,7 @@ See the [configuration guide](guides/configuration.md) for all options including
 ### Setup
 
 ```bash
-git clone https://github.com/typhoonworks/lotus.git
+git clone https://github.com/elixir-lotus/lotus.git
 cd lotus
 mix deps.get
 
