@@ -119,6 +119,7 @@ config :lotus,
     namespace: "myapp_cache",         # Cache namespace (optional)
     max_bytes: 5_000_000,            # Max cache entry size: 5MB (default)
     compress: true,                   # Compress cache entries (default)
+    key_builder: MyApp.KeyBuilder,   # Custom key builder (optional)
     profiles: %{                      # Cache profiles with different TTL strategies
       results: [ttl_ms: 30_000],     # Short-term results (30 seconds)
       options: [ttl_ms: 300_000],    # Medium-term data (5 minutes)  

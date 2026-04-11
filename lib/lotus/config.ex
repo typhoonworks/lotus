@@ -95,7 +95,8 @@ defmodule Lotus.Config do
           max_bytes: non_neg_integer(),
           lock_timeout: non_neg_integer(),
           default_ttl_ms: non_neg_integer(),
-          default_profile: atom()
+          default_profile: atom(),
+          key_builder: module()
         }
 
   @schema [
@@ -487,6 +488,19 @@ defmodule Lotus.Config do
           nil -> :error
           mod when is_atom(mod) -> {:ok, mod}
         end
+    end
+  end
+
+  @doc """
+  Returns the configured cache key builder module.
+
+  Falls back to `Lotus.Cache.KeyBuilder.Default` when not configured.
+  """
+  @spec cache_key_builder() :: module()
+  def cache_key_builder do
+    case cache_config() do
+      nil -> Lotus.Cache.KeyBuilder.Default
+      config -> config[:key_builder] || Lotus.Cache.KeyBuilder.Default
     end
   end
 

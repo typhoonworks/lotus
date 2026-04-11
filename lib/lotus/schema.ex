@@ -46,6 +46,7 @@ defmodule Lotus.Schema do
   - **SQLite**: Returns table names as strings (schema-less)
   """
 
+  alias Lotus.Cache.KeyBuilder
   alias Lotus.{Config, Middleware, Sources, Telemetry, Visibility}
   alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
@@ -87,7 +88,7 @@ defmodule Lotus.Schema do
     start_time = Telemetry.schema_introspection_start(:list_schemas, adapter.name)
 
     key = schema_key(:list_schemas, adapter.name, scope)
-    tags = ["repo:#{adapter.name}", "schema:list_schemas"]
+    tags = ["repo:#{adapter.name}", "schema:list_schemas"] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -195,7 +196,7 @@ defmodule Lotus.Schema do
               scope
             )
 
-          tags = ["repo:#{adapter.name}", "schema:list_tables"]
+          tags = ["repo:#{adapter.name}", "schema:list_tables"] ++ scope_tags(scope)
 
           profile =
             if is_list(opts[:cache]) do
@@ -350,11 +351,12 @@ defmodule Lotus.Schema do
   defp get_table_schema_cached(adapter, table_name, resolved_schema, scope, opts) do
     key = schema_key(:get_table_schema, adapter.name, resolved_schema, table_name, scope)
 
-    tags = [
-      "repo:#{adapter.name}",
-      "schema:get_table_schema",
-      "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
-    ]
+    tags =
+      [
+        "repo:#{adapter.name}",
+        "schema:get_table_schema",
+        "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
+      ] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -468,11 +470,12 @@ defmodule Lotus.Schema do
   defp get_table_stats_cached(adapter, table_name, resolved_schema, scope, opts) do
     key = schema_key(:get_table_stats, adapter.name, resolved_schema, table_name, scope)
 
-    tags = [
-      "repo:#{adapter.name}",
-      "schema:get_table_stats",
-      "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
-    ]
+    tags =
+      [
+        "repo:#{adapter.name}",
+        "schema:get_table_stats",
+        "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
+      ] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -554,7 +557,7 @@ defmodule Lotus.Schema do
         scope
       )
 
-    tags = ["repo:#{adapter.name}", "schema:list_relations"]
+    tags = ["repo:#{adapter.name}", "schema:list_relations"] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -789,82 +792,27 @@ defmodule Lotus.Schema do
     end
   end
 
-  defp schema_key(:list_tables, repo_name, search_path, include_views, scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, search_path, include_views, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
-
-    "schema:list_tables:#{repo_name}:#{digest}#{scope_digest(scope)}"
+  defp schema_key(kind, repo_name, scope) do
+    key_builder().discovery_key(
+      %{kind: kind, source_name: repo_name, components: {}, version: Lotus.version()},
+      scope
+    )
   end
 
-  defp schema_key(:list_relations, repo_name, search_path, include_views, scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, search_path, include_views, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
-
-    "schema:list_relations:#{repo_name}:#{digest}#{scope_digest(scope)}"
+  defp schema_key(kind, repo_name, comp1, comp2, scope) do
+    key_builder().discovery_key(
+      %{kind: kind, source_name: repo_name, components: {comp1, comp2}, version: Lotus.version()},
+      scope
+    )
   end
 
-  defp schema_key(:get_table_schema, repo_name, resolved_schema, table_name, scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, resolved_schema, table_name, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
+  defp scope_tags(nil), do: []
 
-    "schema:get_table_schema:#{repo_name}:#{digest}#{scope_digest(scope)}"
+  defp scope_tags(scope) do
+    ["scope:#{KeyBuilder.scope_digest(scope)}"]
   end
 
-  defp schema_key(:get_table_stats, repo_name, resolved_schema, table_name, scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, resolved_schema, table_name, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
-
-    "schema:get_table_stats:#{repo_name}:#{digest}#{scope_digest(scope)}"
-  end
-
-  defp schema_key(:resolve_table_schema, repo_name, search_key, table, _scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, search_key, table, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
-
-    "schema:resolve_table_schema:#{repo_name}:#{digest}"
-  end
-
-  defp schema_key(:list_schemas, repo_name, scope) do
-    digest =
-      :crypto.hash(
-        :sha256,
-        :erlang.term_to_binary({repo_name, Lotus.version()})
-      )
-      |> Base.encode16(case: :lower)
-
-    "schema:list_schemas:#{repo_name}:#{digest}#{scope_digest(scope)}"
-  end
-
-  defp scope_digest(nil), do: ""
-
-  defp scope_digest(scope) do
-    hash =
-      :crypto.hash(:sha256, :erlang.term_to_binary(scope))
-      |> Base.encode16(case: :lower)
-      |> binary_part(0, 16)
-
-    ":#{hash}"
-  end
+  defp key_builder, do: Config.cache_key_builder()
 
   defp result_status({:ok, _}), do: :ok
   defp result_status({:error, _}), do: :error

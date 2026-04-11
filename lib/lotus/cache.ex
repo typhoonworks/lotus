@@ -3,6 +3,7 @@ defmodule Lotus.Cache do
   Lotus cache facade. If no adapter configured, acts as a no-op pass-through.
   """
 
+  alias Lotus.Cache.KeyBuilder
   alias Lotus.{Config, Telemetry}
 
   @type key :: binary()
@@ -75,6 +76,25 @@ defmodule Lotus.Cache do
       {:ok, adapter} -> adapter.delete(ns(key))
       _ -> :ok
     end
+  end
+
+  @doc """
+  Invalidates all cache entries associated with the given scope.
+
+  Uses tag-based invalidation — each scoped cache entry is tagged with
+  `"scope:<digest>"`, so this clears only entries for the specified scope
+  without flushing the entire source cache.
+
+  ## Examples
+
+      Lotus.Cache.invalidate_scope(%{tenant_id: 42})
+      Lotus.Cache.invalidate_scope(%{role: :admin})
+  """
+  @spec invalidate_scope(term()) :: :ok | {:error, term}
+  def invalidate_scope(nil), do: :ok
+
+  def invalidate_scope(scope) do
+    invalidate_tags(["scope:#{KeyBuilder.scope_digest(scope)}"])
   end
 
   @spec invalidate_tags([binary()]) :: :ok | {:error, term}

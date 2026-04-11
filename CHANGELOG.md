@@ -26,6 +26,9 @@
 - Guide: `custom-resolvers.md` documenting the `Lotus.Source.Resolver` and `Lotus.Visibility.Resolver` extension points, including use cases, contract details, `Agent`- and ETS-backed examples, and testing guidance (#176)
 - `:after_discover` middleware event fires after any discovery call (`Lotus.list_schemas/2`, `list_tables/2`, `get_table_schema/3`, `list_relations/2`), alongside the kind-specific `:after_list_*` event. Payload is uniform: `%{kind:, source:, result:, scope:, context:}`. Lets a single middleware module handle every discovery kind by dispatching on `:kind` (#173)
 - `:scope` option on all discovery functions (`list_schemas/2`, `list_tables/2`, `get_table_schema/3`, `list_relations/2`, `get_table_stats/3`). Scope is an opaque term passed to the visibility resolver and hashed into the cache key, enabling context-aware visibility rules (e.g. per-role, per-tenant) with correct per-scope caching. When `nil` (the default), cache keys and behavior are identical to pre-scope versions. Discovery middleware payloads now include `:scope`
+- Per-scope cache invalidation via `Lotus.invalidate_scope/1` (delegates to `Lotus.Cache.invalidate_scope/1`). Selectively clears all cached discovery entries associated with a specific scope without flushing the entire cache. Uses tag-based invalidation — each scoped cache entry is automatically tagged with `"scope:<digest>"` (#195)
+- `Lotus.Cache.KeyBuilder` behaviour for pluggable cache key generation. Defines `discovery_key/2` and `result_key/3` callbacks plus a public `scope_digest/1` utility function. Configure via `cache: %{key_builder: MyApp.KeyBuilder}`. Default implementation (`Lotus.Cache.KeyBuilder.Default`) preserves existing key generation logic (#195)
+- `Lotus.Config.cache_key_builder/0` helper to retrieve the configured key builder module (defaults to `Lotus.Cache.KeyBuilder.Default`)
 
 ### Security
 
