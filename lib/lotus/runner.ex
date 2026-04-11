@@ -12,7 +12,7 @@ defmodule Lotus.Runner do
   alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
 
-  @type sql :: String.t()
+  @type statement :: String.t()
   @type params :: list()
   @type query_result :: Result.t()
   @type opts :: [
@@ -22,20 +22,20 @@ defmodule Lotus.Runner do
           search_path: String.t() | nil
         ]
 
-  @spec run_sql(Adapter.t(), sql(), params(), opts()) ::
+  @spec run_statement(Adapter.t(), statement(), params(), opts()) ::
           {:ok, query_result()} | {:error, term()}
-  def run_sql(%Adapter{} = adapter, sql, params \\ [], opts \\ [])
-      when is_binary(sql) and is_list(params) do
+  def run_statement(%Adapter{} = adapter, statement, params \\ [], opts \\ [])
+      when is_binary(statement) and is_list(params) do
     context = Keyword.get(opts, :context)
-    telemetry_meta = %{repo: adapter.name, sql: sql, params: params, context: context}
+    telemetry_meta = %{repo: adapter.name, sql: statement, params: params, context: context}
     start_time = Telemetry.query_start(telemetry_meta)
 
     result =
-      with :ok <- Adapter.sanitize_query(adapter, sql, sanitize_opts(opts)),
-           :ok <- preflight_visibility(adapter, sql, params, opts),
-           :ok <- run_before_query(adapter, sql, params, context),
-           {:ok, %Result{} = res} <- exec_read_only(adapter, sql, params, opts),
-           {:ok, %Result{} = res} <- run_after_query(adapter, sql, params, res, context) do
+      with :ok <- Adapter.sanitize_query(adapter, statement, sanitize_opts(opts)),
+           :ok <- preflight_visibility(adapter, statement, params, opts),
+           :ok <- run_before_query(adapter, statement, params, context),
+           {:ok, %Result{} = res} <- exec_read_only(adapter, statement, params, opts),
+           {:ok, %Result{} = res} <- run_after_query(adapter, statement, params, res, context) do
         {:ok, res}
       end
 
@@ -53,6 +53,13 @@ defmodule Lotus.Runner do
         error
     end
   end
+
+  @doc false
+  @deprecated "Use Lotus.Runner.run_statement/4 instead"
+  @spec run_sql(Adapter.t(), statement(), params(), opts()) ::
+          {:ok, query_result()} | {:error, term()}
+  def run_sql(adapter, statement, params \\ [], opts \\ []),
+    do: run_statement(adapter, statement, params, opts)
 
   defp exec_read_only(%Adapter{} = adapter, sql, params, opts) do
     Adapter.transaction(

@@ -26,7 +26,7 @@ defmodule Lotus.SearchPathTest do
       sql = "SELECT COUNT(*) FROM customers"
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [], repo: "postgres", search_path: "reporting, public")
+               Lotus.run_statement(sql, [], repo: "postgres", search_path: "reporting, public")
 
       assert %Lotus.Result{columns: ["count"], rows: [[0]]} = result
     end
@@ -46,7 +46,7 @@ defmodule Lotus.SearchPathTest do
     test "query fails without search_path when table is in non-default schema" do
       sql = "SELECT COUNT(*) FROM customers"
 
-      assert {:error, error} = Lotus.run_sql(sql, [], repo: "postgres")
+      assert {:error, error} = Lotus.run_statement(sql, [], repo: "postgres")
       assert error =~ "relation \"customers\" does not exist"
     end
 
@@ -54,7 +54,7 @@ defmodule Lotus.SearchPathTest do
       sql = "SELECT * FROM customers WHERE email = $1"
 
       assert {:ok, _result} =
-               Lotus.run_sql(sql, ["test@example.com"],
+               Lotus.run_statement(sql, ["test@example.com"],
                  repo: "postgres",
                  search_path: "reporting, public"
                )
@@ -67,7 +67,7 @@ defmodule Lotus.SearchPathTest do
       sql = "SELECT COUNT(*) FROM products"
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [], repo: "sqlite", search_path: "ignored_schema")
+               Lotus.run_statement(sql, [], repo: "sqlite", search_path: "ignored_schema")
 
       assert %Lotus.Result{columns: ["COUNT(*)"], rows: [[0]]} = result
     end

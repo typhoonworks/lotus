@@ -469,11 +469,11 @@ defmodule LotusTest do
     end
   end
 
-  describe "run_sql/3" do
+  describe "run_statement/3" do
     test "runs SQL directly with no params" do
       sql = "SELECT name FROM test_users WHERE active = true ORDER BY name"
 
-      assert {:ok, result} = Lotus.run_sql(sql)
+      assert {:ok, result} = Lotus.run_statement(sql)
       assert result.num_rows == 2
       assert result.rows == [["Hunter S. Thompson"], ["Jack Kerouac"]]
     end
@@ -482,7 +482,7 @@ defmodule LotusTest do
       sql = "SELECT name, age FROM test_users WHERE age > $1 AND active = $2 ORDER BY name"
       params = [30, true]
 
-      assert {:ok, result} = Lotus.run_sql(sql, params)
+      assert {:ok, result} = Lotus.run_statement(sql, params)
       assert result.num_rows == 2
       assert ["Hunter S. Thompson", 37] in result.rows
       assert ["Jack Kerouac", 47] in result.rows
@@ -493,7 +493,7 @@ defmodule LotusTest do
       params = []
       opts = [timeout: 10_000]
 
-      assert {:ok, result} = Lotus.run_sql(sql, params, opts)
+      assert {:ok, result} = Lotus.run_statement(sql, params, opts)
       assert result.num_rows == 1
       assert result.rows == [[3]]
     end
@@ -501,7 +501,7 @@ defmodule LotusTest do
     test "handles SQL errors" do
       sql = "SELECT * FROM nonexistent_table"
 
-      assert {:error, error} = Lotus.run_sql(sql)
+      assert {:error, error} = Lotus.run_statement(sql)
       assert error =~ "relation \"nonexistent_table\" does not exist"
     end
   end
@@ -717,7 +717,7 @@ defmodule LotusTest do
     test "run_sql applies windowing when window options provided" do
       sql = "SELECT name FROM test_users ORDER BY name"
 
-      assert {:ok, result} = Lotus.run_sql(sql, [], window: [limit: 1])
+      assert {:ok, result} = Lotus.run_statement(sql, [], window: [limit: 1])
       assert result.num_rows == 1
       assert result.rows == [["Charles Bukowski"]]
       assert result.meta.window == %{limit: 1, offset: 0}
@@ -726,7 +726,7 @@ defmodule LotusTest do
     test "run_sql does not apply windowing when no window options provided" do
       sql = "SELECT name FROM test_users ORDER BY name"
 
-      assert {:ok, result} = Lotus.run_sql(sql)
+      assert {:ok, result} = Lotus.run_statement(sql)
       assert result.num_rows == 3
       assert Map.get(result.meta, :window) == nil
     end

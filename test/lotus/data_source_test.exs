@@ -31,34 +31,34 @@ defmodule Lotus.DataSourceTest do
 
   describe "query execution against different repos" do
     test "executes SQL against postgres repo by name" do
-      {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "postgres")
+      {:ok, result} = Lotus.run_statement("SELECT 1 as test_value", [], repo: "postgres")
       assert result.columns == ["test_value"]
       assert result.rows == [[1]]
     end
 
     @tag :sqlite
     test "executes SQL against sqlite repo by name" do
-      {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "sqlite")
+      {:ok, result} = Lotus.run_statement("SELECT 1 as test_value", [], repo: "sqlite")
       assert result.columns == ["test_value"]
       assert result.rows == [[1]]
     end
 
     @tag :mysql
     test "executes SQL against mysql repo by name" do
-      {:ok, result} = Lotus.run_sql("SELECT 1 as test_value", [], repo: "mysql")
+      {:ok, result} = Lotus.run_statement("SELECT 1 as test_value", [], repo: "mysql")
       assert result.columns == ["test_value"]
       assert result.rows == [[1]]
     end
 
     test "executes SQL against repo module directly" do
-      {:ok, result} = Lotus.run_sql("SELECT 2 as test_value", [], repo: Lotus.Test.Repo)
+      {:ok, result} = Lotus.run_statement("SELECT 2 as test_value", [], repo: Lotus.Test.Repo)
       assert result.columns == ["test_value"]
       assert result.rows == [[2]]
     end
 
     test "defaults to first configured data source when no repo specified" do
       # Should use "postgres" since it's first in alphabetical order
-      {:ok, result} = Lotus.run_sql("SELECT 3 as test_value")
+      {:ok, result} = Lotus.run_statement("SELECT 3 as test_value")
       assert result.columns == ["test_value"]
       assert result.rows == [[3]]
     end

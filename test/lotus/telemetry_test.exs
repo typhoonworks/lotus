@@ -27,7 +27,7 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num")
+      {:ok, _result} = Runner.run_statement(@pg_adapter, "SELECT 1 AS num")
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
                        %{repo: "postgres", sql: "SELECT 1 AS num"}}
@@ -56,7 +56,7 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num", [], context: ctx)
+      {:ok, _result} = Runner.run_statement(@pg_adapter, "SELECT 1 AS num", [], context: ctx)
 
       assert_received {:telemetry, [:lotus, :query, :start], _,
                        %{repo: "postgres", context: ^ctx}}
@@ -79,7 +79,7 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num")
+      {:ok, _result} = Runner.run_statement(@pg_adapter, "SELECT 1 AS num")
 
       assert_received {:telemetry, [:lotus, :query, :start], _, %{context: nil}}
       assert_received {:telemetry, [:lotus, :query, :stop], _, %{context: nil}}
@@ -101,7 +101,7 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:error, _} = Runner.run_sql(@pg_adapter, "DROP TABLE test_users", [], context: ctx)
+      {:error, _} = Runner.run_statement(@pg_adapter, "DROP TABLE test_users", [], context: ctx)
 
       assert_received {:telemetry, [:lotus, :query, :exception], _,
                        %{kind: :error, context: ^ctx}}
@@ -122,7 +122,7 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:error, _} = Runner.run_sql(@pg_adapter, "DROP TABLE test_users")
+      {:error, _} = Runner.run_statement(@pg_adapter, "DROP TABLE test_users")
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
                        %{repo: "postgres", sql: "DROP TABLE test_users"}}

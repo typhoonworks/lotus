@@ -41,7 +41,7 @@ defmodule Lotus.AI.Actions.ExecuteSQL do
   def run(params, _context) do
     started_at = DateTime.utc_now()
 
-    case Lotus.run_sql(params.sql, [], repo: params.data_source, read_only: true) do
+    case Lotus.run_statement(params.sql, [], repo: params.data_source, read_only: true) do
       {:ok, result} ->
         preview_rows =
           result.rows

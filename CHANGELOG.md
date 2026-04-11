@@ -12,6 +12,7 @@
 - Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
 - Removed duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
 - Extracted shared filter → sort → window → cache → execute pipeline from `Lotus.run_sql/3` and `Lotus.execute_query/5` into a single private `execute_with_options/7` helper. `run_sql/3` now reuses `build_cache_tags/3` and `determine_cache_profile/1` instead of inlining the same logic. No public API or behavior changes (#160)
+- Renamed `Lotus.run_sql/3` → `Lotus.run_statement/3` and `Lotus.Runner.run_sql/4` → `Lotus.Runner.run_statement/4`; `sql` parameter renamed to `statement` throughout (#211)
 - `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
 - Extracted SQL sanitization (`assert_single_statement`, deny-list), EXPLAIN-based relation extraction, and window pagination SQL construction from `Runner`, `Preflight`, and `Lotus` into 4 new optional adapter callbacks (`sanitize_query/3`, `transform_query/4`, `extract_accessed_resources/4`, `apply_window/4`). `Runner` and `Preflight` now delegate to `Adapter` dispatch helpers with safe defaults for adapters that don't implement the optional callbacks. No public API or behavior changes (#208)
 
@@ -26,6 +27,8 @@
 - `Lotus.Config.rules_for_repo_name/1` — use `Lotus.Config.rules_for_source_name/1` (will be removed in v1.0)
 - `Lotus.Config.schema_rules_for_repo_name/1` — use `Lotus.Config.schema_rules_for_source_name/1` (will be removed in v1.0)
 - `Lotus.Config.column_rules_for_repo_name/1` — use `Lotus.Config.column_rules_for_source_name/1` (will be removed in v1.0)
+- `Lotus.run_sql/3` — use `Lotus.run_statement/3` (will be removed in v1.0) (#211)
+- `Lotus.Runner.run_sql/4` — use `Lotus.Runner.run_statement/4` (will be removed in v1.0) (#211)
 
 ### Breaking
 

@@ -10,7 +10,7 @@ defmodule Lotus.AI.Actions.GetColumnValuesTest do
 
   describe "run/2" do
     test "returns distinct values for a column" do
-      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+      stub(Lotus, :run_statement, fn _query, _params, _opts ->
         {:ok, %{rows: [["active"], ["inactive"], ["pending"]]}}
       end)
 
@@ -27,7 +27,7 @@ defmodule Lotus.AI.Actions.GetColumnValuesTest do
     end
 
     test "returns empty values when column has no non-null values" do
-      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+      stub(Lotus, :run_statement, fn _query, _params, _opts ->
         {:ok, %{rows: []}}
       end)
 
@@ -42,7 +42,7 @@ defmodule Lotus.AI.Actions.GetColumnValuesTest do
     end
 
     test "handles schema-qualified table names in SQL" do
-      expect(Lotus, :run_sql, fn query, _params, _opts ->
+      expect(Lotus, :run_statement, fn query, _params, _opts ->
         assert query =~ ~s("reporting"."invoices")
         {:ok, %{rows: [["open"], ["paid"]]}}
       end)
@@ -89,7 +89,7 @@ defmodule Lotus.AI.Actions.GetColumnValuesTest do
     end
 
     test "returns error when query fails" do
-      stub(Lotus, :run_sql, fn _query, _params, _opts ->
+      stub(Lotus, :run_statement, fn _query, _params, _opts ->
         {:error, "Permission denied"}
       end)
 

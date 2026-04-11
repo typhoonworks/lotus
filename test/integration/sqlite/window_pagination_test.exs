@@ -21,7 +21,7 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
     :ok
   end
 
-  describe "run_sql/3 with window pagination (sqlite)" do
+  describe "run_statement/3 with window pagination (sqlite)" do
     test "pages results without total count" do
       sql = """
       SELECT name FROM test_users
@@ -30,7 +30,10 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
       """
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [], repo: "sqlite", window: [limit: 1, offset: 0, count: :none])
+               Lotus.run_statement(sql, [],
+                 repo: "sqlite",
+                 window: [limit: 1, offset: 0, count: :none]
+               )
 
       assert result.num_rows == 1
       assert result.rows == [["Window A"]]
@@ -47,7 +50,7 @@ defmodule Lotus.Integration.Sqlite.WindowPaginationTest do
       """
 
       assert {:ok, result} =
-               Lotus.run_sql(sql, [],
+               Lotus.run_statement(sql, [],
                  repo: "sqlite",
                  window: [limit: 2, offset: 1, count: :exact]
                )

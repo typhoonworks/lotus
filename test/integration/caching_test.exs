@@ -62,7 +62,7 @@ defmodule Lotus.Integration.CachingTest do
     end
   end
 
-  describe "run_sql/3 caching scenarios" do
+  describe "run_statement/3 caching scenarios" do
     setup do
       user = Fixtures.insert_user(%{name: "Cache Test User", email: "cache@test.com"})
       %{user: user}
@@ -71,12 +71,12 @@ defmodule Lotus.Integration.CachingTest do
     test "caching works by default when adapter configured", %{user: user} do
       sql = "SELECT name, email FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result1} = Lotus.run_statement(sql, [user.id])
       assert [["Cache Test User", "cache@test.com"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result2} = Lotus.run_statement(sql, [user.id])
 
       assert result1.rows == result2.rows
       assert result1.columns == result2.columns
@@ -91,12 +91,12 @@ defmodule Lotus.Integration.CachingTest do
 
       sql = "SELECT name FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [profile: :options])
+      assert {:ok, result1} = Lotus.run_statement(sql, [user.id], cache: [profile: :options])
       assert [["Cache Test User"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [profile: :options])
+      assert {:ok, result2} = Lotus.run_statement(sql, [user.id], cache: [profile: :options])
 
       assert result1.rows == result2.rows
       assert result1.columns == result2.columns
@@ -111,12 +111,12 @@ defmodule Lotus.Integration.CachingTest do
 
       sql = "SELECT email FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [ttl_ms: 5_000])
+      assert {:ok, result1} = Lotus.run_statement(sql, [user.id], cache: [ttl_ms: 5_000])
       assert [["cache@test.com"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [ttl_ms: 5_000])
+      assert {:ok, result2} = Lotus.run_statement(sql, [user.id], cache: [ttl_ms: 5_000])
 
       assert result1.rows == result2.rows
       assert result1.columns == result2.columns
@@ -126,15 +126,15 @@ defmodule Lotus.Integration.CachingTest do
     test "refresh mode updates cache with fresh data", %{user: user} do
       sql = "SELECT name FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result1} = Lotus.run_statement(sql, [user.id])
       assert [["Cache Test User"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: :refresh)
+      assert {:ok, result2} = Lotus.run_statement(sql, [user.id], cache: :refresh)
       assert [] = result2.rows
 
-      assert {:ok, result3} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result3} = Lotus.run_statement(sql, [user.id])
       assert [] = result3.rows
     end
 
@@ -146,39 +146,45 @@ defmodule Lotus.Integration.CachingTest do
 
       sql = "SELECT 'profile_refresh' as data"
 
-      assert {:ok, result} = Lotus.run_sql(sql, [], cache: [:refresh, profile: :options])
+      assert {:ok, result} = Lotus.run_statement(sql, [], cache: [:refresh, profile: :options])
       assert [["profile_refresh"]] = result.rows
     end
 
     test "tagged entries can be invalidated", %{user: user} do
       sql = "SELECT name FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+      assert {:ok, result1} =
+               Lotus.run_statement(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+
       assert [["Cache Test User"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+      assert {:ok, result2} =
+               Lotus.run_statement(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+
       assert result1.rows == result2.rows
 
       Cache.invalidate_tags(["user:#{user.id}"])
 
-      assert {:ok, result3} = Lotus.run_sql(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+      assert {:ok, result3} =
+               Lotus.run_statement(sql, [user.id], cache: [tags: ["user:#{user.id}"]])
+
       assert [] = result3.rows
     end
 
     test "bypass cache leaves existing cache intact", %{user: user} do
       sql = "SELECT name FROM test_users WHERE id = $1"
 
-      assert {:ok, result1} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result1} = Lotus.run_statement(sql, [user.id])
       assert [["Cache Test User"]] = result1.rows
 
       Repo.delete!(user)
 
-      assert {:ok, result2} = Lotus.run_sql(sql, [user.id], cache: :bypass)
+      assert {:ok, result2} = Lotus.run_statement(sql, [user.id], cache: :bypass)
       assert [] = result2.rows
 
-      assert {:ok, result3} = Lotus.run_sql(sql, [user.id])
+      assert {:ok, result3} = Lotus.run_statement(sql, [user.id])
       assert [["Cache Test User"]] = result3.rows
     end
 
@@ -189,7 +195,7 @@ defmodule Lotus.Integration.CachingTest do
       end)
 
       sql = "SELECT name FROM test_users WHERE id = $1"
-      assert {:ok, _result} = Lotus.run_sql(sql, [user.id], cache: [max_bytes: 100])
+      assert {:ok, _result} = Lotus.run_statement(sql, [user.id], cache: [max_bytes: 100])
     end
 
     test "compress option is passed to cache layer", %{user: user} do
@@ -199,7 +205,7 @@ defmodule Lotus.Integration.CachingTest do
       end)
 
       sql = "SELECT name FROM test_users WHERE id = $1"
-      assert {:ok, _result} = Lotus.run_sql(sql, [user.id], cache: [compress: false])
+      assert {:ok, _result} = Lotus.run_statement(sql, [user.id], cache: [compress: false])
     end
   end
 
