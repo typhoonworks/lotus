@@ -45,6 +45,10 @@
 
 ### Added
 
+- `query_language/0` callback in `Lotus.Source` behaviour and dispatch in `Lotus.Source.Adapter` — returns the query language identifier for a source (e.g. `"sql:postgres"`, `"sql:mysql"`) (#122)
+- `limit_query/2` callback in `Lotus.Source` behaviour and dispatch in `Lotus.Source.Adapter` — wraps a statement with a source-specific limit clause (#122)
+- `:schema_hierarchy` feature flag in `Lotus.Sources.supports_feature?/2` — true for Postgres, false for MySQL/SQLite (#122)
+- `Lotus.Sources.query_language/1` and `Lotus.Sources.limit_query/3` convenience functions accepting adapter structs or source name strings (#122)
 - `:preload` option on `Lotus.Dashboards.list_dashboards/1` and `list_dashboards_by/1` for eager-loading associations (e.g. `:cards`) in a single query. Fixes N+1 patterns in callers that need card counts or card lists alongside the dashboard list (see elixir-lotus/lotus_web#103).
 - Pluggable source adapter abstraction (`Lotus.Source.Adapter`) — behaviour and struct wrapping data sources behind a uniform callback interface with consistent `{:ok, _} | {:error, _}` return types
 - `Lotus.Source.Resolver` behaviour for configurable source resolution

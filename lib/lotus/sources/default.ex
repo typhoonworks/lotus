@@ -64,6 +64,14 @@ defmodule Lotus.Sources.Default do
   def handled_errors, do: []
 
   @impl true
+  def query_language, do: "sql"
+
+  @impl true
+  def limit_query(statement, limit) do
+    "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
+  end
+
+  @impl true
   @doc """
   Returns conservative deny rules covering common system tables from various databases.
 

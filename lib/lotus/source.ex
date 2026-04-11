@@ -145,6 +145,23 @@ defmodule Lotus.Source do
   @callback handled_errors() :: [module()]
 
   @doc """
+  Return the query language identifier for this source.
+
+  Examples:
+    * PostgreSQL → `"sql:postgres"`
+    * MySQL      → `"sql:mysql"`
+    * SQLite     → `"sql:sqlite"`
+  """
+  @callback query_language() :: String.t()
+
+  @doc """
+  Wrap a statement with a limit clause using source-specific syntax.
+
+  Used for preview queries where only a limited result set is needed.
+  """
+  @callback limit_query(statement :: String.t(), limit :: pos_integer()) :: String.t()
+
+  @doc """
   Lists all schemas in the given repository.
 
   Returns a list of schema names. For databases without schema support

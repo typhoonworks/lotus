@@ -193,13 +193,6 @@ defmodule Lotus.Source.Adapter do
             ) ::
               {String.t(), list(), map() | nil}
 
-  @optional_callbacks [
-    sanitize_query: 3,
-    transform_query: 4,
-    extract_accessed_resources: 4,
-    apply_window: 4
-  ]
-
   # ---------------------------------------------------------------------------
   # Callbacks — Safety & Visibility
   # ---------------------------------------------------------------------------
@@ -243,6 +236,22 @@ defmodule Lotus.Source.Adapter do
 
   @doc "Whether this adapter supports a given feature."
   @callback supports_feature?(state :: term(), atom()) :: boolean()
+
+  @doc "Return the query language identifier for this source (e.g. `\"sql:postgres\"`)."
+  @callback query_language(state :: term()) :: String.t()
+
+  @doc "Wrap a statement with a limit clause using source-specific syntax."
+  @callback limit_query(state :: term(), statement :: String.t(), limit :: pos_integer()) ::
+              String.t()
+
+  @optional_callbacks [
+    sanitize_query: 3,
+    transform_query: 4,
+    extract_accessed_resources: 4,
+    apply_window: 4,
+    query_language: 1,
+    limit_query: 3
+  ]
 
   # ---------------------------------------------------------------------------
   # Dispatch helpers — stateful (pass adapter.state as first arg)
@@ -418,5 +427,21 @@ defmodule Lotus.Source.Adapter do
   @spec supports_feature?(t(), atom()) :: boolean()
   def supports_feature?(%__MODULE__{module: mod, state: state}, feature) do
     mod.supports_feature?(state, feature)
+  end
+
+  @doc "Return the query language identifier via the adapter."
+  @spec query_language(t()) :: String.t()
+  def query_language(%__MODULE__{module: mod, state: state}) do
+    if function_exported?(mod, :query_language, 1),
+      do: mod.query_language(state),
+      else: "sql"
+  end
+
+  @doc "Wrap a statement with a limit clause via the adapter."
+  @spec limit_query(t(), String.t(), pos_integer()) :: String.t()
+  def limit_query(%__MODULE__{module: mod, state: state}, statement, limit) do
+    if function_exported?(mod, :limit_query, 3),
+      do: mod.limit_query(state, statement, limit),
+      else: "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
   end
 end

@@ -89,15 +89,21 @@ defmodule Lotus.Sources do
   Whether a source type supports a specific feature.
   """
   @spec supports_feature?(atom(), atom()) :: boolean()
+  def supports_feature?(:postgres, :schema_hierarchy), do: true
+
   def supports_feature?(:postgres, :search_path), do: true
   def supports_feature?(:postgres, :make_interval), do: true
   def supports_feature?(:postgres, :arrays), do: true
   def supports_feature?(:postgres, :json), do: true
 
+  def supports_feature?(:mysql, :schema_hierarchy), do: false
+
   def supports_feature?(:mysql, :search_path), do: false
   def supports_feature?(:mysql, :make_interval), do: false
   def supports_feature?(:mysql, :arrays), do: false
   def supports_feature?(:mysql, :json), do: true
+
+  def supports_feature?(:sqlite, :schema_hierarchy), do: false
 
   def supports_feature?(:sqlite, :search_path), do: false
   def supports_feature?(:sqlite, :make_interval), do: false
@@ -105,6 +111,27 @@ defmodule Lotus.Sources do
   def supports_feature?(:sqlite, :json), do: true
 
   def supports_feature?(_, _), do: false
+
+  @doc """
+  Return the query language identifier for a source.
+  """
+  @spec query_language(Adapter.t() | String.t()) :: String.t()
+  def query_language(%Adapter{} = adapter), do: Adapter.query_language(adapter)
+
+  def query_language(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.query_language()
+  end
+
+  @doc """
+  Wrap a statement with a limit clause using the source's syntax.
+  """
+  @spec limit_query(Adapter.t() | String.t(), String.t(), pos_integer()) :: String.t()
+  def limit_query(%Adapter{} = adapter, statement, limit),
+    do: Adapter.limit_query(adapter, statement, limit)
+
+  def limit_query(source_name, statement, limit) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.limit_query(statement, limit)
+  end
 
   defp resolver, do: Config.source_resolver()
 end
