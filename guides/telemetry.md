@@ -10,12 +10,17 @@ with monitoring tools like Phoenix LiveDashboard, AppSignal, Datadog, and others
 
 | Event                         | Measurements                   | Metadata                                      |
 |-------------------------------|--------------------------------|-----------------------------------------------|
-| `[:lotus, :query, :start]`    | `system_time`                  | `repo`, `sql`, `params`                       |
-| `[:lotus, :query, :stop]`     | `duration`, `row_count`        | `repo`, `sql`, `params`, `result`             |
-| `[:lotus, :query, :exception]`| `duration`                     | `repo`, `sql`, `params`, `kind`, `reason`, `stacktrace` |
+| `[:lotus, :query, :start]`    | `system_time`                  | `repo`, `sql`, `params`, `context`                       |
+| `[:lotus, :query, :stop]`     | `duration`, `row_count`        | `repo`, `sql`, `params`, `context`, `result`             |
+| `[:lotus, :query, :exception]`| `duration`                     | `repo`, `sql`, `params`, `context`, `kind`, `reason`, `stacktrace` |
 
 Duration is measured in native time units. Use `System.convert_time_unit/3` to
 convert to milliseconds or microseconds.
+
+The `context` field carries whatever value the caller passed as the `:context`
+option to `Lotus.run_sql/3` or `Lotus.run_query/2`. It defaults to `nil` when
+not provided. Typical uses include request IDs, controller names, or
+OpenTelemetry span contexts for trace correlation.
 
 ### Cache Operations
 

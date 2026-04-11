@@ -21,6 +21,7 @@ defmodule Lotus.Telemetry do
     * `:repo` - The Ecto repo module
     * `:sql` - The SQL statement being executed
     * `:params` - The query parameters
+    * `:context` - The caller-supplied context (or `nil`)
 
   ### `[:lotus, :query, :stop]`
 
@@ -36,6 +37,7 @@ defmodule Lotus.Telemetry do
     * `:repo` - The Ecto repo module
     * `:sql` - The SQL statement that was executed
     * `:params` - The query parameters
+    * `:context` - The caller-supplied context (or `nil`)
     * `:result` - The `Lotus.Result` struct
 
   ### `[:lotus, :query, :exception]`
@@ -51,6 +53,7 @@ defmodule Lotus.Telemetry do
     * `:repo` - The Ecto repo module
     * `:sql` - The SQL statement that was executed
     * `:params` - The query parameters
+    * `:context` - The caller-supplied context (or `nil`)
     * `:kind` - The kind of exception (`:error`, `:exit`, or `:throw`)
     * `:reason` - The exception or error reason
     * `:stacktrace` - The stacktrace
