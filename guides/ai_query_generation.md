@@ -19,7 +19,7 @@ The AI query generation feature:
 - **Query explanation** - Get plain-language explanations of full queries or selected fragments
 - **Query optimization** - Analyzes execution plans and suggests indexes, rewrites, and schema improvements
 
-> **Web-first design:** The AI module is designed to work hand-in-hand with the [Lotus Web](https://github.com/typhoonworks/lotus_web) interface. Generated variable configurations — widget types, labels, static options, and options queries — map directly to the web editor's `WidgetComponent`, which renders them as text inputs, dropdowns, multi-selects, date pickers, and tag inputs. While the API is usable standalone, the variable metadata is most valuable when paired with the web UI.
+> **Web-first design:** The AI module is designed to work hand-in-hand with the [Lotus Web](https://github.com/elixir-lotus/lotus_web) interface. Generated variable configurations — widget types, labels, static options, and options queries — map directly to the web editor's `WidgetComponent`, which renders them as text inputs, dropdowns, multi-selects, date pickers, and tag inputs. While the API is usable standalone, the variable metadata is most valuable when paired with the web UI.
 
 ## Supported Providers
 
