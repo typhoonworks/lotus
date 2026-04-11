@@ -94,6 +94,14 @@ defmodule Lotus.Sources.Postgres do
   def handled_errors, do: [Postgrex.Error]
 
   @impl true
+  def query_language, do: "sql:postgres"
+
+  @impl true
+  def limit_query(statement, limit) do
+    "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
+  end
+
+  @impl true
   def builtin_denies(repo) do
     ms = repo.config()[:migration_source] || "schema_migrations"
     prefix = repo.config()[:migration_default_prefix] || "public"

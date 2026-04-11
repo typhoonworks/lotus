@@ -96,6 +96,14 @@ defmodule Lotus.Sources.SQLite3 do
   def handled_errors, do: [Exqlite.Error]
 
   @impl true
+  def query_language, do: "sql:sqlite"
+
+  @impl true
+  def limit_query(statement, limit) do
+    "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
+  end
+
+  @impl true
   def builtin_denies(repo) do
     ms = repo.config()[:migration_source] || "schema_migrations"
 

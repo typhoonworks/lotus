@@ -240,5 +240,38 @@ defmodule Lotus.SourcesTest do
       assert Sources.supports_feature?(:sqlite, :unknown_feature) == false
       assert Sources.supports_feature?(:other, :unknown_feature) == false
     end
+
+    test "schema_hierarchy feature" do
+      assert Sources.supports_feature?(:postgres, :schema_hierarchy) == true
+      assert Sources.supports_feature?(:mysql, :schema_hierarchy) == false
+      assert Sources.supports_feature?(:sqlite, :schema_hierarchy) == false
+      assert Sources.supports_feature?(:other, :schema_hierarchy) == false
+    end
+  end
+
+  describe "query_language/1" do
+    test "returns query language from adapter struct" do
+      adapter = Sources.resolve!("postgres", nil)
+      assert Sources.query_language(adapter) == "sql:postgres"
+    end
+
+    test "returns query language from source name" do
+      assert Sources.query_language("postgres") == "sql:postgres"
+      assert Sources.query_language("mysql") == "sql:mysql"
+      assert Sources.query_language("sqlite") == "sql:sqlite"
+    end
+  end
+
+  describe "limit_query/3" do
+    test "wraps statement with limit from adapter struct" do
+      adapter = Sources.resolve!("postgres", nil)
+      result = Sources.limit_query(adapter, "SELECT * FROM users", 10)
+      assert result == "SELECT * FROM (SELECT * FROM users) AS limited_query LIMIT 10"
+    end
+
+    test "wraps statement with limit from source name" do
+      result = Sources.limit_query("postgres", "SELECT * FROM users", 10)
+      assert result == "SELECT * FROM (SELECT * FROM users) AS limited_query LIMIT 10"
+    end
   end
 end

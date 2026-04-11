@@ -171,6 +171,14 @@ defmodule Lotus.Sources.MySQL do
   def handled_errors, do: [MyXQL.Error]
 
   @impl true
+  def query_language, do: "sql:mysql"
+
+  @impl true
+  def limit_query(statement, limit) do
+    "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
+  end
+
+  @impl true
   def builtin_denies(repo) do
     ms = repo.config()[:migration_source] || "schema_migrations"
     database = repo.config()[:database]

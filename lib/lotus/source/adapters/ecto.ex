@@ -332,6 +332,12 @@ defmodule Lotus.Source.Adapters.Ecto do
     Lotus.Sources.supports_feature?(source, feature)
   end
 
+  @impl true
+  def query_language(repo), do: impl_for(repo).query_language()
+
+  @impl true
+  def limit_query(repo, statement, limit), do: impl_for(repo).limit_query(statement, limit)
+
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
