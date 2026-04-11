@@ -101,15 +101,14 @@ defmodule Lotus.Cache.KeyBuilderTest do
     end
   end
 
-  describe "Default.result_key/3" do
-    test "builds result key from SQL, params, and opts" do
+  describe "Default.result_key/4" do
+    test "builds result key from SQL, params, opts, and nil scope" do
       key =
         Default.result_key(
           "SELECT * FROM users",
           %{id: 1},
-          data_repo: "primary",
-          search_path: "public",
-          lotus_version: "1.0.0"
+          [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"],
+          nil
         )
 
       assert String.starts_with?(key, "result:primary:")
@@ -117,8 +116,8 @@ defmodule Lotus.Cache.KeyBuilderTest do
 
     test "different SQL produces different keys" do
       opts = [data_repo: "primary", search_path: "", lotus_version: "1.0.0"]
-      key_a = Default.result_key("SELECT 1", %{}, opts)
-      key_b = Default.result_key("SELECT 2", %{}, opts)
+      key_a = Default.result_key("SELECT 1", %{}, opts, nil)
+      key_b = Default.result_key("SELECT 2", %{}, opts, nil)
 
       refute key_a == key_b
     end
@@ -128,11 +127,49 @@ defmodule Lotus.Cache.KeyBuilderTest do
         Default.result_key(
           "SELECT * FROM users WHERE id = $1",
           [42],
-          data_repo: "primary",
-          lotus_version: "1.0.0"
+          [data_repo: "primary", lotus_version: "1.0.0"],
+          nil
         )
 
       assert String.starts_with?(key, "result:primary:")
+    end
+
+    test "nil scope produces same key format as unscoped" do
+      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      key = Default.result_key("SELECT 1", %{}, opts, nil)
+
+      assert Regex.match?(~r/^result:primary:[a-f0-9]{64}$/, key)
+    end
+
+    test "non-nil scope appends scope digest to key" do
+      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      scope = %{tenant_id: 42}
+      key = Default.result_key("SELECT 1", %{}, opts, scope)
+
+      expected_suffix = KeyBuilder.scope_digest(scope)
+      assert String.ends_with?(key, ":#{expected_suffix}")
+      assert Regex.match?(~r/^result:primary:[a-f0-9]{64}:[a-f0-9]{16}$/, key)
+    end
+
+    test "different scopes produce different keys for same query" do
+      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      sql = "SELECT * FROM users"
+
+      key_a = Default.result_key(sql, %{}, opts, %{tenant_id: 1})
+      key_b = Default.result_key(sql, %{}, opts, %{tenant_id: 2})
+
+      refute key_a == key_b
+    end
+
+    test "same scope produces same key for same query" do
+      opts = [data_repo: "primary", search_path: "public", lotus_version: "1.0.0"]
+      sql = "SELECT * FROM users"
+      scope = %{tenant_id: 42}
+
+      key_a = Default.result_key(sql, %{}, opts, scope)
+      key_b = Default.result_key(sql, %{}, opts, scope)
+
+      assert key_a == key_b
     end
   end
 end

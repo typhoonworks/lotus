@@ -34,7 +34,7 @@ defmodule Lotus.Cache.KeyBuilder.Default do
   end
 
   @impl true
-  def result_key(sql, bound, opts) do
+  def result_key(sql, bound, opts, scope) do
     repo = Keyword.fetch!(opts, :data_repo)
     path = Keyword.get(opts, :search_path, "") || ""
     version = Keyword.get(opts, :lotus_version, Lotus.version())
@@ -52,6 +52,12 @@ defmodule Lotus.Cache.KeyBuilder.Default do
       )
       |> Base.encode16(case: :lower)
 
-    "result:#{repo}:#{digest}"
+    scope_part =
+      case KeyBuilder.scope_digest(scope) do
+        "" -> ""
+        d -> ":#{d}"
+      end
+
+    "result:#{repo}:#{digest}#{scope_part}"
   end
 end
