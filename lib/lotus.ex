@@ -67,6 +67,7 @@ defmodule Lotus do
 
   alias Lotus.Cache.{Key, KeyBuilder}
   alias Lotus.{Config, Dashboards, Result, Runner, Schema, Sources, Storage, Viz}
+  alias Lotus.Source.Adapter
   alias Lotus.Storage.Query
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
@@ -465,6 +466,8 @@ defmodule Lotus do
 
   defp execute_with_options(adapter, sql, params, opts, runner_opts, cache_identity, query_id) do
     search_path = Keyword.get(runner_opts, :search_path)
+
+    {sql, params} = Adapter.transform_query(adapter, sql, params, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
     {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
@@ -886,45 +889,15 @@ defmodule Lotus do
 
   defp maybe_apply_window(sql, params, adapter, search_path, window_opts)
        when is_list(window_opts) do
-    alias Lotus.Source.Adapter
-    alias Lotus.SQL.Sanitizer
-
-    base_sql = Sanitizer.strip_trailing_semicolon(sql)
     limit = resolve_window_limit(window_opts)
     offset = Keyword.get(window_opts, :offset, 0)
     count_mode = Keyword.get(window_opts, :count, :none)
 
-    {limit_ph, offset_ph} =
-      Adapter.limit_offset_placeholders(
-        adapter,
-        length(params) + 1,
-        length(params) + 2
-      )
+    full_opts = [limit: limit, offset: offset, count: count_mode, search_path: search_path]
 
-    paged_sql =
-      "SELECT * FROM (" <>
-        base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+    {paged_sql, paged_params, window_meta} =
+      Adapter.apply_window(adapter, sql, params, full_opts)
 
-    paged_params = params ++ [limit, offset]
-
-    window_meta =
-      case count_mode do
-        :exact ->
-          %{
-            window: %{limit: limit, offset: offset},
-            total_count: :pending,
-            total_mode: :exact,
-            count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
-            count_params: params,
-            adapter: adapter,
-            search_path: search_path
-          }
-
-        _ ->
-          %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
-      end
-
-    # Include window in cache key bound variables
     cache_bound = %{
       __params__: params,
       __window__: %{limit: limit, offset: offset, count: count_mode}

@@ -22,11 +22,6 @@ defmodule Lotus.Runner do
           search_path: String.t() | nil
         ]
 
-  # Deny list for dangerous operations (defense-in-depth).
-  # Skipped when `read_only: false` is passed in opts.
-  # The DB-level read-only transaction guard provides an additional safety layer.
-  @deny ~r/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|VACUUM|ANALYZE|CALL|LOCK)\b/i
-
   @spec run_sql(Adapter.t(), sql(), params(), opts()) ::
           {:ok, query_result()} | {:error, term()}
   def run_sql(%Adapter{} = adapter, sql, params \\ [], opts \\ [])
@@ -34,11 +29,9 @@ defmodule Lotus.Runner do
     context = Keyword.get(opts, :context)
     telemetry_meta = %{repo: adapter.name, sql: sql, params: params, context: context}
     start_time = Telemetry.query_start(telemetry_meta)
-    read_only = Keyword.get(opts, :read_only, true)
 
     result =
-      with :ok <- assert_single_statement(sql),
-           :ok <- assert_not_denied(sql, read_only),
+      with :ok <- Adapter.sanitize_query(adapter, sql, sanitize_opts(opts)),
            :ok <- preflight_visibility(adapter, sql, params, opts),
            :ok <- run_before_query(adapter, sql, params, context),
            {:ok, %Result{} = res} <- exec_read_only(adapter, sql, params, opts),
@@ -206,102 +199,8 @@ defmodule Lotus.Runner do
     left_part <> masked <> right_part
   end
 
-  # Allow a single statement with an optional trailing semicolon.
-  # Reject any additional top-level semicolons (outside strings/comments).
-  defp assert_single_statement(sql) do
-    s = String.trim(sql)
-
-    s =
-      if String.ends_with?(s, ";") do
-        s
-        |> String.trim_trailing()
-        |> String.trim_trailing(";")
-        |> String.trim_trailing()
-      else
-        s
-      end
-
-    if has_top_level_semicolon?(s) do
-      {:error, "Only a single statement is allowed"}
-    else
-      :ok
-    end
-  end
-
-  defp has_top_level_semicolon?(bin), do: scan_semicolons(bin, :code)
-
-  # State machine that skips semicolons inside:
-  # - single-quoted strings
-  # - double-quoted identifiers
-  # - PostgreSQL dollar-quoted strings ($tag$ ... $tag$ or $ ... $)
-  # - line comments (-- ...\n)
-  # - block comments (/* ... */)
-  defp scan_semicolons(<<>>, _state), do: false
-
-  defp scan_semicolons(<<?;, _::binary>>, :code), do: true
-
-  defp scan_semicolons(<<"--", rest::binary>>, :code),
-    do: scan_semicolons(skip_to_eol(rest), :code)
-
-  defp scan_semicolons(<<"/*", rest::binary>>, :code),
-    do: scan_semicolons(skip_block_comment(rest), :code)
-
-  defp scan_semicolons(<<"'", rest::binary>>, :code),
-    do: scan_semicolons(skip_single_quoted(rest), :code)
-
-  defp scan_semicolons(<<"\"", rest::binary>>, :code),
-    do: scan_semicolons(skip_double_quoted(rest), :code)
-
-  defp scan_semicolons(<<"$", rest::binary>>, :code) do
-    case take_dollar_tag(rest, "") do
-      {:tag, tag, after_tag} -> scan_semicolons(skip_dollar_quoted(after_tag, tag), :code)
-      :no_tag -> scan_semicolons(rest, :code)
-    end
-  end
-
-  defp scan_semicolons(<<_::utf8, rest::binary>>, :code),
-    do: scan_semicolons(rest, :code)
-
-  defp skip_to_eol(<<>>), do: <<>>
-  defp skip_to_eol(<<"\n", rest::binary>>), do: rest
-  defp skip_to_eol(<<_::utf8, rest::binary>>), do: skip_to_eol(rest)
-
-  # PostgreSQL supports nested block comments. Track depth so a nested `/*`
-  # does not let the parser exit early on the first `*/`, which would let a
-  # subsequent statement slip past `assert_single_statement/1`.
-  defp skip_block_comment(rest), do: skip_block_comment(rest, 1)
-
-  defp skip_block_comment(<<>>, _depth), do: <<>>
-  defp skip_block_comment(<<"*/", rest::binary>>, 1), do: rest
-  defp skip_block_comment(<<"*/", rest::binary>>, depth), do: skip_block_comment(rest, depth - 1)
-  defp skip_block_comment(<<"/*", rest::binary>>, depth), do: skip_block_comment(rest, depth + 1)
-  defp skip_block_comment(<<_::utf8, rest::binary>>, depth), do: skip_block_comment(rest, depth)
-
-  defp skip_single_quoted(<<>>), do: <<>>
-  defp skip_single_quoted(<<"''", rest::binary>>), do: skip_single_quoted(rest)
-  defp skip_single_quoted(<<"'", rest::binary>>), do: rest
-  defp skip_single_quoted(<<_::utf8, rest::binary>>), do: skip_single_quoted(rest)
-
-  defp skip_double_quoted(<<>>), do: <<>>
-  defp skip_double_quoted(<<"\"\"", rest::binary>>), do: skip_double_quoted(rest)
-  defp skip_double_quoted(<<"\"", rest::binary>>), do: rest
-  defp skip_double_quoted(<<_::utf8, rest::binary>>), do: skip_double_quoted(rest)
-
-  defp take_dollar_tag(<<"$", rest::binary>>, acc), do: {:tag, acc, rest}
-
-  defp take_dollar_tag(<<c, rest::binary>>, acc)
-       when c in ?A..?Z or c in ?a..?z or c in ?0..?9 or c == ?_,
-       do: take_dollar_tag(rest, <<acc::binary, c>>)
-
-  defp take_dollar_tag(_, _), do: :no_tag
-
-  defp skip_dollar_quoted(bin, tag) do
-    closer = "$" <> tag <> "$"
-
-    case :binary.match(bin, closer) do
-      :nomatch -> <<>>
-      {pos, len} -> :binary.part(bin, pos + len, byte_size(bin) - pos - len)
-    end
+  defp sanitize_opts(opts) do
+    Keyword.take(opts, [:read_only])
   end
 
   defp run_before_query(%Adapter{} = adapter, sql, params, context) do
@@ -320,12 +219,6 @@ defmodule Lotus.Runner do
       {:cont, %{result: res}} -> {:ok, res}
       {:halt, reason} -> {:error, reason}
     end
-  end
-
-  defp assert_not_denied(_sql, false = _read_only), do: :ok
-
-  defp assert_not_denied(sql, _read_only) do
-    if Regex.match?(@deny, sql), do: {:error, "Only read-only queries are allowed"}, else: :ok
   end
 
   defp preflight_visibility(%Adapter{} = adapter, sql, params, opts) do

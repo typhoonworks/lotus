@@ -180,6 +180,158 @@ defmodule Lotus.Source.Adapters.EctoTest do
     end
   end
 
+  describe "sanitize_query/3" do
+    test "allows a single SELECT statement" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      assert :ok = Adapter.sanitize_query(adapter, "SELECT 1", [])
+    end
+
+    test "rejects multiple statements" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:error, "Only a single statement is allowed"} =
+               Adapter.sanitize_query(adapter, "SELECT 1; DROP TABLE users", [])
+    end
+
+    test "blocks DML when read_only is true" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:error, "Only read-only queries are allowed"} =
+               Adapter.sanitize_query(adapter, "INSERT INTO users VALUES (1)", read_only: true)
+    end
+
+    test "allows DML when read_only is false" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert :ok =
+               Adapter.sanitize_query(adapter, "INSERT INTO users VALUES (1)", read_only: false)
+    end
+
+    test "defaults to read_only: true" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:error, "Only read-only queries are allowed"} =
+               Adapter.sanitize_query(adapter, "DELETE FROM users", [])
+    end
+  end
+
+  describe "transform_query/4" do
+    test "passes through query and params unchanged" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      assert {"SELECT 1", [42]} = Adapter.transform_query(adapter, "SELECT 1", [42], [])
+    end
+  end
+
+  describe "extract_accessed_resources/4" do
+    test "extracts postgres relations via EXPLAIN" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:ok, relations} =
+               Adapter.extract_accessed_resources(adapter, "SELECT * FROM lotus_queries", [], [])
+
+      assert MapSet.member?(relations, {"public", "lotus_queries"})
+    end
+
+    test "returns error for invalid SQL" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:error, _reason} =
+               Adapter.extract_accessed_resources(
+                 adapter,
+                 "SELECT * FROM nonexistent_xyz",
+                 [],
+                 []
+               )
+    end
+  end
+
+  describe "apply_window/4" do
+    test "wraps query with LIMIT/OFFSET for postgres" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      {paged_sql, paged_params, window_meta} =
+        Adapter.apply_window(adapter, "SELECT * FROM users", [], limit: 10, offset: 0)
+
+      assert paged_sql =~ "LIMIT"
+      assert paged_sql =~ "OFFSET"
+      assert paged_params == [10, 0]
+      assert %{window: %{limit: 10, offset: 0}} = window_meta
+    end
+
+    test "includes count metadata when count: :exact" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      {_paged_sql, _paged_params, window_meta} =
+        Adapter.apply_window(adapter, "SELECT * FROM users", [],
+          limit: 10,
+          offset: 0,
+          count: :exact
+        )
+
+      assert %{total_mode: :exact, count_sql: count_sql} = window_meta
+      assert count_sql =~ "COUNT(*)"
+    end
+
+    test "returns nil total_count when count: :none" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      {_paged_sql, _paged_params, window_meta} =
+        Adapter.apply_window(adapter, "SELECT * FROM users", [],
+          limit: 10,
+          offset: 0,
+          count: :none
+        )
+
+      assert %{total_mode: :none, total_count: nil} = window_meta
+    end
+  end
+
+  describe "dispatch helpers for optional callbacks" do
+    test "sanitize_query returns :ok for adapter without the callback" do
+      adapter = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert :ok = Adapter.sanitize_query(adapter, "anything", [])
+    end
+
+    test "transform_query passes through for adapter without the callback" do
+      adapter = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert {"SELECT 1", []} = Adapter.transform_query(adapter, "SELECT 1", [], [])
+    end
+
+    test "extract_accessed_resources returns :skip for adapter without the callback" do
+      adapter = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert :skip = Adapter.extract_accessed_resources(adapter, "SELECT 1", [], [])
+    end
+
+    test "apply_window passes through for adapter without the callback" do
+      adapter = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert {"SELECT 1", [], nil} = Adapter.apply_window(adapter, "SELECT 1", [], [])
+    end
+  end
+
   describe "error handling" do
     test "format_error/1 formats exceptions" do
       adapter = EctoAdapter.wrap("main", Repo)
