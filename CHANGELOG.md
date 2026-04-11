@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `get_table_schema/3` and `get_table_stats/3` now propagate adapter errors (e.g. permission denied, connection errors) instead of masking them as "Table not found" (#189)
+
 ### Breaking
 
 - `Lotus.Visibility.Resolver` callbacks now accept a second `scope` argument: `schema_rules_for/2`, `table_rules_for/2`, `column_rules_for/2`. Existing implementations must update their function signatures to accept `scope` (even if ignored). The default `Static` resolver accepts and ignores scope, so static config users are unaffected.

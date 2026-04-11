@@ -308,6 +308,9 @@ defmodule Lotus.Schema do
           {nil,
            {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}}
 
+        {:error, reason} ->
+          {nil, {:error, reason}}
+
         resolved_schema ->
           {resolved_schema,
            get_table_schema_cached(adapter, table_name, resolved_schema, scope, opts)}
@@ -452,6 +455,9 @@ defmodule Lotus.Schema do
 
         nil ->
           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
+
+        {:error, reason} ->
+          {:error, reason}
 
         resolved_schema ->
           get_table_stats_cached(adapter, table_name, resolved_schema, scope, opts)
@@ -647,6 +653,7 @@ defmodule Lotus.Schema do
   defp parse_search_path(sp) when is_binary(sp),
     do: sp |> String.split(",") |> Enum.map(&String.trim/1)
 
+  # Returns: String.t() (resolved schema) | nil (not found) | {:error, term()} (adapter error)
   defp resolve_table_schema_with_cache(
          adapter,
          table,
@@ -668,14 +675,14 @@ defmodule Lotus.Schema do
         case Adapter.resolve_table_schema(adapter, table, schemas) do
           {:ok, nil} -> {:ok, :not_found}
           {:ok, schema} -> {:ok, {:found, schema}}
-          {:error, _} -> {:ok, :not_found}
+          {:error, reason} -> {:error, reason}
         end
       end)
 
     case cache_result do
       {:ok, :not_found} -> nil
       {:ok, {:found, schema}} -> schema
-      {:error, _} -> nil
+      {:error, _} = err -> err
     end
   end
 
