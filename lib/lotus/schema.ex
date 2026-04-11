@@ -17,6 +17,28 @@ defmodule Lotus.Schema do
   Schema visibility takes precedence - if a schema is denied, all tables within it
   are blocked regardless of table-level rules.
 
+  ## Middleware and Caching
+
+  Every discovery call fires two middleware events (see `Lotus.Middleware`):
+
+  1. The kind-specific `:after_list_*` event with a kind-specific payload.
+  2. The unified `:after_discover` event with `%{kind:, source:, result:, context:}`.
+
+  Both events run **outside** the cache callback — only the raw, visibility-filtered
+  adapter result is cached. Context-sensitive middleware (e.g. per-tenant table
+  filtering) is therefore safe to use without poisoning the cache, at the cost of
+  running the middleware pipeline on every call.
+
+  `Lotus.Visibility.Resolver` callbacks receive `(source_name, scope)`. When `scope`
+  is `nil` (the default), cache keys are identical to pre-scope versions. When
+  non-nil, a digest of the scope is appended to the cache key so different scopes
+  produce independent cached entries. Keep scope low-cardinality for good cache
+  hit rates.
+
+  A resolver that reads runtime context (e.g. the process dictionary) instead of
+  using the `scope` argument will cache incorrectly — place context-dependent
+  logic in middleware or use `scope` to key the cache.
+
   ## Database-Specific Behavior
 
   - **PostgreSQL**: Returns namespaced `{schema, table}` tuples
@@ -40,6 +62,10 @@ defmodule Lotus.Schema do
   ## Options
 
   - `:cache` - Cache options (profile, ttl_ms, etc.)
+  - `:context` - Opaque value passed to the `:after_list_schemas` and
+    `:after_discover` middleware events (see `Lotus.Middleware`)
+  - `:scope` - Opaque value passed to the visibility resolver and hashed
+    into the cache key. Different scopes produce independent cached entries.
 
   ## Examples
 
@@ -57,9 +83,10 @@ defmodule Lotus.Schema do
   def list_schemas(repo_or_name, opts \\ []) do
     adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
+    scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_schemas, adapter.name)
 
-    key = schema_key(:list_schemas, adapter.name)
+    key = schema_key(:list_schemas, adapter.name, scope)
     tags = ["repo:#{adapter.name}", "schema:list_schemas"]
 
     profile =
@@ -69,19 +96,12 @@ defmodule Lotus.Schema do
         :schema
       end
 
-    result =
+    cache_result =
       exec_with_cache(opts[:cache], profile, key, tags, fn ->
         try do
           case Adapter.list_schemas(adapter) do
             {:ok, raw_schemas} ->
-              filtered_schemas = Visibility.filter_schemas(raw_schemas, adapter.name)
-
-              run_after_discover(:after_list_schemas, :schemas, %{
-                repo: adapter.name,
-                repo_name: adapter.name,
-                schemas: filtered_schemas,
-                context: context
-              })
+              {:ok, Visibility.filter_schemas(raw_schemas, adapter.name, scope)}
 
             {:error, reason} ->
               {:error, reason}
@@ -90,6 +110,18 @@ defmodule Lotus.Schema do
           e -> {:error, Exception.message(e)}
         end
       end)
+
+    result =
+      with {:ok, filtered_schemas} <- cache_result,
+           {:ok, schemas} <-
+             run_after_discover(:after_list_schemas, :schemas, %{
+               source: adapter.name,
+               schemas: filtered_schemas,
+               scope: scope,
+               context: context
+             }) do
+        run_after_discover_unified(:list_schemas, adapter.name, schemas, scope, context)
+      end
 
     Telemetry.schema_introspection_stop(
       start_time,
@@ -119,6 +151,11 @@ defmodule Lotus.Schema do
   - `:schemas` - Search in multiple schemas (e.g., `schemas: ["reporting", "public"]`)
   - `:search_path` - Use PostgreSQL search_path (e.g., `search_path: "reporting, public"`)
   - `:include_views` - Include views in results (default: false)
+  - `:cache` - Cache options (profile, ttl_ms, etc.)
+  - `:context` - Opaque value passed to the `:after_list_tables` and
+    `:after_discover` middleware events (see `Lotus.Middleware`)
+  - `:scope` - Opaque value passed to the visibility resolver and hashed
+    into the cache key. Different scopes produce independent cached entries.
 
   ## Examples
 
@@ -139,12 +176,13 @@ defmodule Lotus.Schema do
   def list_tables(repo_or_name, opts \\ []) do
     adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
+    scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_tables, adapter.name)
     schemas = effective_schemas(adapter, opts)
     include_views? = Keyword.get(opts, :include_views, false)
 
-    result =
-      case Visibility.validate_schemas(schemas, adapter.name) do
+    cache_result =
+      case Visibility.validate_schemas(schemas, adapter.name, scope) do
         :ok ->
           search_path = Keyword.get(opts, :search_path)
 
@@ -153,7 +191,8 @@ defmodule Lotus.Schema do
               :list_tables,
               adapter.name,
               search_path || Enum.join(schemas, ","),
-              include_views?
+              include_views?,
+              scope
             )
 
           tags = ["repo:#{adapter.name}", "schema:list_tables"]
@@ -171,7 +210,7 @@ defmodule Lotus.Schema do
                 {:ok, raw_relations} ->
                   filtered =
                     raw_relations
-                    |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1))
+                    |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1, scope))
 
                   tables =
                     if Enum.all?(filtered, fn {schema, _table} -> is_nil(schema) end) do
@@ -180,12 +219,7 @@ defmodule Lotus.Schema do
                       filtered
                     end
 
-                  run_after_discover(:after_list_tables, :tables, %{
-                    repo: adapter.name,
-                    repo_name: adapter.name,
-                    tables: tables,
-                    context: context
-                  })
+                  {:ok, tables}
 
                 {:error, reason} ->
                   {:error, reason}
@@ -197,6 +231,18 @@ defmodule Lotus.Schema do
 
         {:error, :schema_not_visible, denied: denied} ->
           {:error, "Schema(s) not visible: #{Enum.join(denied, ", ")}"}
+      end
+
+    result =
+      with {:ok, filtered_tables} <- cache_result,
+           {:ok, tables} <-
+             run_after_discover(:after_list_tables, :tables, %{
+               source: adapter.name,
+               tables: filtered_tables,
+               scope: scope,
+               context: context
+             }) do
+        run_after_discover_unified(:list_tables, adapter.name, tables, scope, context)
       end
 
     Telemetry.schema_introspection_stop(
@@ -220,6 +266,10 @@ defmodule Lotus.Schema do
   - `:schemas` - Search for table in multiple schemas (first match wins)
   - `:search_path` - Use PostgreSQL search_path to resolve table location
   - `:cache` - Cache options (profile, ttl_ms, etc.)
+  - `:context` - Opaque value passed to the `:after_get_table_schema` and
+    `:after_discover` middleware events (see `Lotus.Middleware`)
+  - `:scope` - Opaque value passed to the visibility resolver and hashed
+    into the cache key. Different scopes produce independent cached entries.
 
   ## Examples
 
@@ -237,10 +287,11 @@ defmodule Lotus.Schema do
   def get_table_schema(repo_or_name, table_name, opts \\ []) do
     adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
+    scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:get_table_schema, adapter.name)
     schemas = effective_schemas(adapter, opts)
 
-    result =
+    cache_result =
       case resolve_table_schema_with_cache(
              adapter,
              table_name,
@@ -250,13 +301,40 @@ defmodule Lotus.Schema do
            ) do
         nil when schemas == [] ->
           # Schema-less database (SQLite) - nil is expected, proceed with nil schema
-          get_table_schema_cached(adapter, table_name, nil, context, opts)
+          {nil, get_table_schema_cached(adapter, table_name, nil, scope, opts)}
 
         nil ->
-          {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
+          {nil,
+           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}}
 
         resolved_schema ->
-          get_table_schema_cached(adapter, table_name, resolved_schema, context, opts)
+          {resolved_schema,
+           get_table_schema_cached(adapter, table_name, resolved_schema, scope, opts)}
+      end
+
+    result =
+      case cache_result do
+        {_resolved, {:error, _} = err} ->
+          err
+
+        {resolved_schema, {:ok, annotated}} ->
+          with {:ok, columns} <-
+                 run_after_discover(:after_get_table_schema, :columns, %{
+                   source: adapter.name,
+                   table_name: table_name,
+                   schema: resolved_schema,
+                   columns: annotated,
+                   scope: scope,
+                   context: context
+                 }) do
+            run_after_discover_unified(
+              :get_table_schema,
+              adapter.name,
+              columns,
+              scope,
+              context
+            )
+          end
       end
 
     Telemetry.schema_introspection_stop(
@@ -269,8 +347,8 @@ defmodule Lotus.Schema do
     result
   end
 
-  defp get_table_schema_cached(adapter, table_name, resolved_schema, context, opts) do
-    key = schema_key(:get_table_schema, adapter.name, resolved_schema, table_name)
+  defp get_table_schema_cached(adapter, table_name, resolved_schema, scope, opts) do
+    key = schema_key(:get_table_schema, adapter.name, resolved_schema, table_name, scope)
 
     tags = [
       "repo:#{adapter.name}",
@@ -286,28 +364,21 @@ defmodule Lotus.Schema do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}) do
-        fetch_and_annotate_columns(adapter, resolved_schema, table_name, context)
+      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}, scope) do
+        fetch_and_annotate_columns(adapter, resolved_schema, table_name, scope)
       else
         {:error, table_not_visible_message(resolved_schema, table_name)}
       end
     end)
   end
 
-  defp fetch_and_annotate_columns(adapter, resolved_schema, table_name, context) do
+  defp fetch_and_annotate_columns(adapter, resolved_schema, table_name, scope) do
     case Adapter.get_table_schema(adapter, resolved_schema, table_name) do
       {:ok, cols} ->
         annotated =
-          annotate_columns_with_visibility(cols, adapter.name, resolved_schema, table_name)
+          annotate_columns_with_visibility(cols, adapter.name, resolved_schema, table_name, scope)
 
-        run_after_discover(:after_get_table_schema, :columns, %{
-          repo: adapter.name,
-          repo_name: adapter.name,
-          table_name: table_name,
-          schema: resolved_schema,
-          columns: annotated,
-          context: context
-        })
+        {:ok, annotated}
 
       {:error, reason} ->
         {:error, reason}
@@ -316,12 +387,12 @@ defmodule Lotus.Schema do
     e -> {:error, Exception.message(e)}
   end
 
-  defp annotate_columns_with_visibility(cols, source_name, schema, table_name) do
+  defp annotate_columns_with_visibility(cols, source_name, schema, table_name, scope) do
     rels = [{schema, table_name}]
 
     cols
     |> Enum.reduce([], fn col, acc ->
-      policy = Visibility.column_policy_for(source_name, rels, col.name)
+      policy = Visibility.column_policy_for(source_name, rels, col.name, scope)
 
       cond do
         Policy.hidden_from_schema?(policy) -> acc
@@ -362,6 +433,7 @@ defmodule Lotus.Schema do
           {:ok, %{row_count: non_neg_integer()}} | {:error, binary()}
   def get_table_stats(repo_or_name, table_name, opts \\ []) do
     adapter = Sources.resolve!(repo_or_name, nil)
+    scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:get_table_stats, adapter.name)
     schemas = effective_schemas(adapter, opts)
 
@@ -374,13 +446,13 @@ defmodule Lotus.Schema do
              :results
            ) do
         nil when schemas == [] ->
-          get_table_stats_cached(adapter, table_name, nil, opts)
+          get_table_stats_cached(adapter, table_name, nil, scope, opts)
 
         nil ->
           {:error, "Table '#{table_name}' not found in schemas: #{Enum.join(schemas, ", ")}"}
 
         resolved_schema ->
-          get_table_stats_cached(adapter, table_name, resolved_schema, opts)
+          get_table_stats_cached(adapter, table_name, resolved_schema, scope, opts)
       end
 
     Telemetry.schema_introspection_stop(
@@ -393,8 +465,8 @@ defmodule Lotus.Schema do
     result
   end
 
-  defp get_table_stats_cached(adapter, table_name, resolved_schema, opts) do
-    key = schema_key(:get_table_stats, adapter.name, resolved_schema, table_name)
+  defp get_table_stats_cached(adapter, table_name, resolved_schema, scope, opts) do
+    key = schema_key(:get_table_stats, adapter.name, resolved_schema, table_name, scope)
 
     tags = [
       "repo:#{adapter.name}",
@@ -410,14 +482,15 @@ defmodule Lotus.Schema do
       end
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}) do
+      if Visibility.allowed_relation?(adapter.name, {resolved_schema, table_name}, scope) do
         try do
           count_sql =
             if resolved_schema do
               qi = &Adapter.quote_identifier(adapter, &1)
               "SELECT COUNT(*) FROM #{qi.(resolved_schema)}.#{qi.(table_name)}"
             else
-              "SELECT COUNT(*) FROM #{table_name}"
+              qi = &Adapter.quote_identifier(adapter, &1)
+              "SELECT COUNT(*) FROM #{qi.(table_name)}"
             end
 
           case Adapter.execute_query(adapter, count_sql, [], []) do
@@ -443,6 +516,18 @@ defmodule Lotus.Schema do
   Similar to list_tables/2 but returns {schema, table} tuples instead of just table names.
   Useful for UIs that need to display schema information.
 
+  ## Options
+
+  - `:schema` - Search in specific schema
+  - `:schemas` - Search in multiple schemas
+  - `:search_path` - Use PostgreSQL search_path
+  - `:include_views` - Include views in results (default: false)
+  - `:cache` - Cache options (profile, ttl_ms, etc.)
+  - `:context` - Opaque value passed to the `:after_list_relations` and
+    `:after_discover` middleware events (see `Lotus.Middleware`)
+  - `:scope` - Opaque value passed to the visibility resolver and hashed
+    into the cache key. Different scopes produce independent cached entries.
+
   ## Examples
 
       {:ok, relations} = Lotus.Schema.list_relations("postgres", search_path: "reporting, public")
@@ -453,6 +538,7 @@ defmodule Lotus.Schema do
   def list_relations(repo_or_name, opts \\ []) do
     adapter = Sources.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
+    scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_relations, adapter.name)
     schemas = effective_schemas(adapter, opts)
     include_views? = Keyword.get(opts, :include_views, false)
@@ -464,7 +550,8 @@ defmodule Lotus.Schema do
         :list_relations,
         adapter.name,
         search_path || Enum.join(schemas, ","),
-        include_views?
+        include_views?,
+        scope
       )
 
     tags = ["repo:#{adapter.name}", "schema:list_relations"]
@@ -476,21 +563,16 @@ defmodule Lotus.Schema do
         :schema
       end
 
-    result =
+    cache_result =
       exec_with_cache(opts[:cache], profile, key, tags, fn ->
         try do
           case Adapter.list_tables(adapter, schemas, include_views: include_views?) do
             {:ok, raw_relations} ->
               filtered =
                 raw_relations
-                |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1))
+                |> Enum.filter(&Visibility.allowed_relation?(adapter.name, &1, scope))
 
-              run_after_discover(:after_list_relations, :relations, %{
-                repo: adapter.name,
-                repo_name: adapter.name,
-                relations: filtered,
-                context: context
-              })
+              {:ok, filtered}
 
             {:error, reason} ->
               {:error, reason}
@@ -499,6 +581,18 @@ defmodule Lotus.Schema do
           e -> {:error, Exception.message(e)}
         end
       end)
+
+    result =
+      with {:ok, filtered_relations} <- cache_result,
+           {:ok, relations} <-
+             run_after_discover(:after_list_relations, :relations, %{
+               source: adapter.name,
+               relations: filtered_relations,
+               scope: scope,
+               context: context
+             }) do
+        run_after_discover_unified(:list_relations, adapter.name, relations, scope, context)
+      end
 
     Telemetry.schema_introspection_stop(
       start_time,
@@ -513,6 +607,15 @@ defmodule Lotus.Schema do
   defp run_after_discover(event, result_key, payload) do
     case Middleware.run(event, payload) do
       {:cont, updated} -> {:ok, Map.fetch!(updated, result_key)}
+      {:halt, reason} -> {:error, reason}
+    end
+  end
+
+  defp run_after_discover_unified(kind, source_name, result, scope, context) do
+    payload = %{kind: kind, source: source_name, result: result, scope: scope, context: context}
+
+    case Middleware.run(:after_discover, payload) do
+      {:cont, %{result: new_result}} -> {:ok, new_result}
       {:halt, reason} -> {:error, reason}
     end
   end
@@ -549,7 +652,7 @@ defmodule Lotus.Schema do
          default_profile
        ) do
     search_key = Enum.join(schemas, ",")
-    key = schema_key(:resolve_table_schema, adapter.name, search_key, table)
+    key = schema_key(:resolve_table_schema, adapter.name, search_key, table, nil)
     tags = ["repo:#{adapter.name}", "schema:resolve_table_schema", "table:#{table}"]
 
     profile =
@@ -686,7 +789,7 @@ defmodule Lotus.Schema do
     end
   end
 
-  defp schema_key(:list_tables, repo_name, search_path, include_views) do
+  defp schema_key(:list_tables, repo_name, search_path, include_views, scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -694,10 +797,10 @@ defmodule Lotus.Schema do
       )
       |> Base.encode16(case: :lower)
 
-    "schema:list_tables:#{repo_name}:#{digest}"
+    "schema:list_tables:#{repo_name}:#{digest}#{scope_digest(scope)}"
   end
 
-  defp schema_key(:list_relations, repo_name, search_path, include_views) do
+  defp schema_key(:list_relations, repo_name, search_path, include_views, scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -705,10 +808,10 @@ defmodule Lotus.Schema do
       )
       |> Base.encode16(case: :lower)
 
-    "schema:list_relations:#{repo_name}:#{digest}"
+    "schema:list_relations:#{repo_name}:#{digest}#{scope_digest(scope)}"
   end
 
-  defp schema_key(:get_table_schema, repo_name, resolved_schema, table_name) do
+  defp schema_key(:get_table_schema, repo_name, resolved_schema, table_name, scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -716,10 +819,10 @@ defmodule Lotus.Schema do
       )
       |> Base.encode16(case: :lower)
 
-    "schema:get_table_schema:#{repo_name}:#{digest}"
+    "schema:get_table_schema:#{repo_name}:#{digest}#{scope_digest(scope)}"
   end
 
-  defp schema_key(:get_table_stats, repo_name, resolved_schema, table_name) do
+  defp schema_key(:get_table_stats, repo_name, resolved_schema, table_name, scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -727,10 +830,10 @@ defmodule Lotus.Schema do
       )
       |> Base.encode16(case: :lower)
 
-    "schema:get_table_stats:#{repo_name}:#{digest}"
+    "schema:get_table_stats:#{repo_name}:#{digest}#{scope_digest(scope)}"
   end
 
-  defp schema_key(:resolve_table_schema, repo_name, search_key, table) do
+  defp schema_key(:resolve_table_schema, repo_name, search_key, table, _scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -741,7 +844,7 @@ defmodule Lotus.Schema do
     "schema:resolve_table_schema:#{repo_name}:#{digest}"
   end
 
-  defp schema_key(:list_schemas, repo_name) do
+  defp schema_key(:list_schemas, repo_name, scope) do
     digest =
       :crypto.hash(
         :sha256,
@@ -749,7 +852,18 @@ defmodule Lotus.Schema do
       )
       |> Base.encode16(case: :lower)
 
-    "schema:list_schemas:#{repo_name}:#{digest}"
+    "schema:list_schemas:#{repo_name}:#{digest}#{scope_digest(scope)}"
+  end
+
+  defp scope_digest(nil), do: ""
+
+  defp scope_digest(scope) do
+    hash =
+      :crypto.hash(:sha256, :erlang.term_to_binary(scope))
+      |> Base.encode16(case: :lower)
+      |> binary_part(0, 16)
+
+    ":#{hash}"
   end
 
   defp result_status({:ok, _}), do: :ok

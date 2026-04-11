@@ -237,20 +237,22 @@ A visibility resolver returns the schema, table, and column rules that Lotus app
 ### Callbacks
 
 ```elixir
-@callback schema_rules_for(source_name :: String.t()) :: keyword()
-@callback table_rules_for(source_name :: String.t()) :: keyword()
-@callback column_rules_for(source_name :: String.t()) :: list()
+@callback schema_rules_for(source_name :: String.t(), scope :: term()) :: keyword()
+@callback table_rules_for(source_name :: String.t(), scope :: term()) :: keyword()
+@callback column_rules_for(source_name :: String.t(), scope :: term()) :: list()
 ```
 
 | Callback | Returns | Example shape |
 |---|---|---|
-| `schema_rules_for/1` | `keyword()` | `[allow: ["public"], deny: ["legacy"]]` |
-| `table_rules_for/1` | `keyword()` | `[allow: [{"public", ~r/^dim_/}], deny: ["api_keys"]]` |
-| `column_rules_for/1` | `list()` | `[{"public", "users", "ssn", :mask}]` |
+| `schema_rules_for/2` | `keyword()` | `[allow: ["public"], deny: ["legacy"]]` |
+| `table_rules_for/2` | `keyword()` | `[allow: [{"public", ~r/^dim_/}], deny: ["api_keys"]]` |
+| `column_rules_for/2` | `list()` | `[{"public", "users", "ssn", :mask}]` |
 
 The rule formats are exactly the same as those consumed by the default static resolver — see the [Visibility Guide](visibility.md) for the full syntax.
 
-Each callback is invoked with the source name (a string) so you can return different rules for different sources. Return an empty list or empty keyword list when no rules apply — Lotus treats missing allow lists as "allow all" and missing deny lists as "deny nothing".
+Each callback is invoked with the source name (a string) and an opaque `scope` term so you can return different rules for different sources and scopes. The scope is `nil` when the caller doesn't pass one. Return an empty list or empty keyword list when no rules apply — Lotus treats missing allow lists as "allow all" and missing deny lists as "deny nothing".
+
+The `scope` value is also hashed into the discovery cache key, so different scopes produce independent cached entries. Keep scope low-cardinality for good cache hit rates — per-role or per-tenant is fine; per-request is not.
 
 ### Example: ETS-backed `Visibility.Resolver` with Hot Reload
 
@@ -309,15 +311,15 @@ defmodule MyApp.EtsVisibilityResolver do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def schema_rules_for(source_name),
+  def schema_rules_for(source_name, _scope),
     do: Keyword.get(lookup(source_name), :schema_rules, [])
 
   @impl true
-  def table_rules_for(source_name),
+  def table_rules_for(source_name, _scope),
     do: Keyword.get(lookup(source_name), :table_rules, [])
 
   @impl true
-  def column_rules_for(source_name),
+  def column_rules_for(source_name, _scope),
     do: Keyword.get(lookup(source_name), :column_rules, [])
 
   # ---------------------------------------------------------------------------
@@ -360,6 +362,49 @@ MyApp.EtsVisibilityResolver.put_rules("main",
   ]
 )
 ```
+
+### Example: Scope-Aware Visibility Resolver
+
+A resolver can use the `scope` argument to return different rules for different contexts. The caller passes `:scope` to discovery functions; Lotus forwards it to the resolver and hashes it into the cache key.
+
+```elixir
+defmodule MyApp.ScopedVisibilityResolver do
+  @behaviour Lotus.Visibility.Resolver
+
+  @impl true
+  def schema_rules_for(source_name, scope) do
+    case scope do
+      %{role: :admin} -> []  # admins see all schemas
+      _ -> MyApp.Store.schema_rules(source_name, scope)
+    end
+  end
+
+  @impl true
+  def table_rules_for(source_name, scope) do
+    MyApp.Store.table_rules(source_name, scope)
+  end
+
+  @impl true
+  def column_rules_for(source_name, scope) do
+    MyApp.Store.column_rules(source_name, scope)
+  end
+end
+```
+
+Callers pass scope via opts:
+
+```elixir
+# Admins see everything
+Lotus.list_tables("postgres", scope: %{role: :admin})
+
+# Regular users get filtered results (cached separately from admins)
+Lotus.list_tables("postgres", scope: %{role: :viewer, tenant: "acme"})
+
+# No scope — identical to pre-scope behavior
+Lotus.list_tables("postgres")
+```
+
+> **Cache cardinality warning:** Each unique scope value produces a separate cache entry. Keep scopes low-cardinality (per-role, per-tenant) for good hit rates. Per-request or per-user scopes will fill the cache with one-off entries.
 
 ## Testing Custom Resolvers
 
@@ -425,14 +470,14 @@ defmodule MyApp.EtsVisibilityResolverTest do
       schema_rules: [allow: ["public"], deny: ["legacy"]]
     )
 
-    assert EtsVisibilityResolver.schema_rules_for("main") ==
+    assert EtsVisibilityResolver.schema_rules_for("main", nil) ==
              [allow: ["public"], deny: ["legacy"]]
   end
 
   test "returns an empty list when a source has no rules" do
-    assert EtsVisibilityResolver.schema_rules_for("unknown") == []
-    assert EtsVisibilityResolver.table_rules_for("unknown") == []
-    assert EtsVisibilityResolver.column_rules_for("unknown") == []
+    assert EtsVisibilityResolver.schema_rules_for("unknown", nil) == []
+    assert EtsVisibilityResolver.table_rules_for("unknown", nil) == []
+    assert EtsVisibilityResolver.column_rules_for("unknown", nil) == []
   end
 end
 ```

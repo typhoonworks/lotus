@@ -4,6 +4,8 @@
 
 ### Breaking
 
+- `Lotus.Visibility.Resolver` callbacks now accept a second `scope` argument: `schema_rules_for/2`, `table_rules_for/2`, `column_rules_for/2`. Existing implementations must update their function signatures to accept `scope` (even if ignored). The default `Static` resolver accepts and ignores scope, so static config users are unaffected.
+- Middleware payload key `:repo` renamed to `:source` across all events (`:before_query`, `:after_query`, `:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, `:after_list_relations`, `:after_discover`). The duplicate `:repo_name` key has been removed from discovery event payloads. Middleware modules that pattern-match on `%{repo: _}` or `%{repo_name: _}` must update to `%{source: _}`.
 - `Sources.resolve!/2` returns `%Lotus.Source.Adapter{}` struct instead of `{module, name}` tuple
 - `Runner.run_sql/4` first argument changed from repo module to `%Lotus.Source.Adapter{}`
 - `Preflight.authorize` accepts `%Lotus.Source.Adapter{}` instead of `(repo, repo_name)` tuple
@@ -22,6 +24,8 @@
 - Config keys: `:source_resolver` (default `Lotus.Source.Resolvers.Static`), `:visibility_resolver` (default `Lotus.Visibility.Resolvers.Static`)
 - Guide: `source-adapters.md` documenting the adapter system, custom resolvers, and custom adapters
 - Guide: `custom-resolvers.md` documenting the `Lotus.Source.Resolver` and `Lotus.Visibility.Resolver` extension points, including use cases, contract details, `Agent`- and ETS-backed examples, and testing guidance (#176)
+- `:after_discover` middleware event fires after any discovery call (`Lotus.list_schemas/2`, `list_tables/2`, `get_table_schema/3`, `list_relations/2`), alongside the kind-specific `:after_list_*` event. Payload is uniform: `%{kind:, source:, result:, scope:, context:}`. Lets a single middleware module handle every discovery kind by dispatching on `:kind` (#173)
+- `:scope` option on all discovery functions (`list_schemas/2`, `list_tables/2`, `get_table_schema/3`, `list_relations/2`, `get_table_stats/3`). Scope is an opaque term passed to the visibility resolver and hashed into the cache key, enabling context-aware visibility rules (e.g. per-role, per-tenant) with correct per-scope caching. When `nil` (the default), cache keys and behavior are identical to pre-scope versions. Discovery middleware payloads now include `:scope`
 
 ### Security
 
@@ -39,6 +43,9 @@
 - **PERF:** Cache validated `Lotus.Config` in `:persistent_term` to avoid repeated `NimbleOptions.validate/2` on every accessor call. Config is eagerly validated once at boot from `Lotus.Supervisor.init/1`; a new `Lotus.Config.reload!/0` refreshes the cached value when the application environment changes (e.g. in tests) (#154)
 - **DOCS:** Clarify in the installation and caching guides that Lotus's supervisor starts automatically with the `:lotus` OTP application — consumers do not need to add `Lotus` to their own supervision tree to enable caching
 - **DOCS:** Add `@spec` annotations to all public functions in `Lotus.Cache` (`get/1`, `put/4`, `get_or_store/4`, `delete/1`, `invalidate_tags/1`, `enabled?/0`) to improve discoverability and Dialyzer coverage (#161)
+- **FIX:** `guides/middleware.md` documented the `:after_get_table_schema` payload key as `:table_schema`, but `Lotus.Schema` actually sends `:columns` (plus the previously-undocumented `:table_name` and `:schema` keys). Middleware written to the documented contract would have raised `KeyError`. Doc now matches the code (#173)
+- **FIX:** Discovery middleware (`:after_list_*`) previously ran **inside** the schema cache callback, so context-sensitive filtering was cached by the first caller's context and served to later callers with different contexts. The middleware pipeline now runs outside the cache; only the raw, visibility-filtered adapter result is cached. Side-effecting middleware (e.g. audit logging) that previously undercounted by logging only on cache misses will now run on every call — adjust if this change in volume matters for your use case (#173)
+- **BEHAVIOR:** Discovery middleware that raises an exception now propagates the exception to the caller instead of being converted to `{:error, message}`. The previous conversion was an incidental side-effect of an adapter-level `try/rescue` that wrapped the middleware pipeline; after the cache refactor above, middleware runs outside that rescue. This matches the existing behavior of `:before_query` / `:after_query` middleware in `Lotus.Runner`. Middleware should return `{:halt, reason}` for error conditions, not raise (#173)
 
 ### Changed
 

@@ -59,6 +59,54 @@ defmodule Lotus.MiddlewareTest do
     defp table_name(name) when is_binary(name), do: name
   end
 
+  defmodule KindDispatchPlug do
+    def init(opts), do: opts
+
+    def call(%{kind: kind, result: result} = payload, _opts) do
+      send(self(), {:dispatched, kind, result})
+      {:cont, payload}
+    end
+  end
+
+  defmodule CountingPlug do
+    def init(opts), do: opts
+
+    def call(payload, _opts) do
+      send(self(), :middleware_ran)
+      {:cont, payload}
+    end
+  end
+
+  defmodule OrderingProbePlug do
+    def init(opts), do: opts
+
+    def call(payload, opts) do
+      send(self(), {:ordering_probe, Keyword.fetch!(opts, :tag)})
+      {:cont, payload}
+    end
+  end
+
+  defmodule DiscoverResultMutatorPlug do
+    def init(opts), do: opts
+
+    def call(%{kind: :list_tables, result: [_ | rest]} = payload, _opts) do
+      {:cont, %{payload | result: rest}}
+    end
+
+    def call(payload, _opts) do
+      {:cont, payload}
+    end
+  end
+
+  defmodule ScopeCapturePlug do
+    def init(opts), do: opts
+
+    def call(payload, _opts) do
+      send(self(), {:middleware_scope, payload[:scope]})
+      {:cont, payload}
+    end
+  end
+
   defp reset_middleware do
     :persistent_term.erase({Lotus.Middleware, :compiled})
     :ok
@@ -317,6 +365,194 @@ defmodule Lotus.MiddlewareTest do
       Lotus.list_schemas("postgres", context: %{user: "eve@example.com"})
 
       assert_received {:middleware_context, %{user: "eve@example.com"}}
+    end
+  end
+
+  describe "after_discover integration" do
+    test "fires for :list_schemas with kind and result in payload" do
+      Middleware.compile(%{
+        after_discover: [{KindDispatchPlug, []}]
+      })
+
+      assert {:ok, schemas} = Lotus.list_schemas("postgres")
+      assert_received {:dispatched, :list_schemas, ^schemas}
+    end
+
+    test "fires for :list_tables with kind and result in payload" do
+      Middleware.compile(%{
+        after_discover: [{KindDispatchPlug, []}]
+      })
+
+      assert {:ok, tables} = Lotus.list_tables("postgres")
+      assert_received {:dispatched, :list_tables, ^tables}
+    end
+
+    @tag :sqlite
+    test "fires for :get_table_schema with kind and result in payload" do
+      Middleware.compile(%{
+        after_discover: [{KindDispatchPlug, []}]
+      })
+
+      assert {:ok, columns} = Lotus.get_table_schema("sqlite", "products")
+      assert_received {:dispatched, :get_table_schema, ^columns}
+    end
+
+    test "fires for :list_relations with kind and result in payload" do
+      Middleware.compile(%{
+        after_discover: [{KindDispatchPlug, []}]
+      })
+
+      assert {:ok, relations} = Lotus.list_relations("postgres")
+      assert_received {:dispatched, :list_relations, ^relations}
+    end
+
+    test "context flows through to :after_discover" do
+      Middleware.compile(%{
+        after_discover: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.list_tables("postgres", context: %{user: "zoe@example.com"})
+
+      assert_received {:middleware_context, %{user: "zoe@example.com"}}
+    end
+
+    test "halt propagates as {:error, reason}" do
+      Middleware.compile(%{
+        after_discover: [{HaltPlug, [reason: "denied by discovery policy"]}]
+      })
+
+      assert {:error, "denied by discovery policy"} = Lotus.list_tables("postgres")
+    end
+
+    test "middleware can transform :result" do
+      Middleware.compile(%{})
+      {:ok, full_tables} = Lotus.list_tables("postgres")
+
+      Middleware.compile(%{
+        after_discover: [{DiscoverResultMutatorPlug, []}]
+      })
+
+      assert {:ok, mutated} = Lotus.list_tables("postgres")
+      assert length(mutated) == length(full_tables) - 1
+    end
+
+    test "kind-specific event runs before :after_discover" do
+      Middleware.compile(%{
+        after_list_tables: [{OrderingProbePlug, [tag: :specific]}],
+        after_discover: [{OrderingProbePlug, [tag: :unified]}]
+      })
+
+      Lotus.list_tables("postgres")
+
+      # Message mailbox is FIFO; selective receive with the same pattern
+      # pulls messages in send order.
+      assert_received {:ordering_probe, first}
+      assert_received {:ordering_probe, second}
+      assert first == :specific
+      assert second == :unified
+    end
+
+    test "halt in kind-specific event short-circuits :after_discover" do
+      Middleware.compile(%{
+        after_list_tables: [{HaltPlug, [reason: "specific halt"]}],
+        after_discover: [{CountingPlug, []}]
+      })
+
+      assert {:error, "specific halt"} = Lotus.list_tables("postgres")
+      refute_received :middleware_ran
+    end
+
+    test "registering only :after_discover works (no kind-specific event)" do
+      Middleware.compile(%{
+        after_discover: [{CountingPlug, []}]
+      })
+
+      assert {:ok, _} = Lotus.list_tables("postgres")
+      assert_received :middleware_ran
+    end
+
+    test "registering only kind-specific event works (no :after_discover)" do
+      Middleware.compile(%{
+        after_list_tables: [{CountingPlug, []}]
+      })
+
+      assert {:ok, _} = Lotus.list_tables("postgres")
+      assert_received :middleware_ran
+    end
+
+    test "middleware runs on every call, not only on first invocation" do
+      Middleware.compile(%{
+        after_discover: [{CountingPlug, []}]
+      })
+
+      {:ok, _} = Lotus.list_tables("postgres")
+      {:ok, _} = Lotus.list_tables("postgres")
+      {:ok, _} = Lotus.list_tables("postgres")
+
+      assert_received :middleware_ran
+      assert_received :middleware_ran
+      assert_received :middleware_ran
+    end
+
+    test "context-sensitive middleware sees each per-call context" do
+      Middleware.compile(%{
+        after_discover: [{ContextCapturePlug, []}]
+      })
+
+      Lotus.list_tables("postgres", context: %{tenant: "acme"})
+      Lotus.list_tables("postgres", context: %{tenant: "globex"})
+
+      assert_received {:middleware_context, %{tenant: "acme"}}
+      assert_received {:middleware_context, %{tenant: "globex"}}
+    end
+  end
+
+  describe "scope in discovery middleware payloads" do
+    test "scope flows through to kind-specific discovery events" do
+      Middleware.compile(%{
+        after_list_tables: [{ScopeCapturePlug, []}]
+      })
+
+      Lotus.list_tables("postgres", scope: %{role: :admin})
+      assert_received {:middleware_scope, %{role: :admin}}
+    end
+
+    test "scope flows through to :after_discover unified event" do
+      Middleware.compile(%{
+        after_discover: [{ScopeCapturePlug, []}]
+      })
+
+      Lotus.list_schemas("postgres", scope: {:tenant, "acme"})
+      assert_received {:middleware_scope, {:tenant, "acme"}}
+    end
+
+    test "scope is nil when not provided" do
+      Middleware.compile(%{
+        after_discover: [{ScopeCapturePlug, []}]
+      })
+
+      Lotus.list_tables("postgres")
+      assert_received {:middleware_scope, nil}
+    end
+  end
+
+  describe "scope-aware caching" do
+    test "different scopes produce independent discovery results" do
+      # Call with no scope — baseline
+      {:ok, tables_no_scope} = Lotus.list_tables("postgres")
+      refute tables_no_scope == []
+
+      # Call with scope A — same underlying data, but independently cached
+      {:ok, tables_scope_a} = Lotus.list_tables("postgres", scope: %{role: :admin})
+      assert tables_scope_a == tables_no_scope
+
+      # Call with scope B — also independently cached
+      {:ok, tables_scope_b} = Lotus.list_tables("postgres", scope: {:tenant, "acme"})
+      assert tables_scope_b == tables_no_scope
+
+      # Verify no scope is identical to nil scope (backward compat)
+      {:ok, tables_nil_scope} = Lotus.list_tables("postgres", scope: nil)
+      assert tables_nil_scope == tables_no_scope
     end
   end
 

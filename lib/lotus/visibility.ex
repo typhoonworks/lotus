@@ -202,9 +202,9 @@ defmodule Lotus.Visibility do
   - `true` if the schema is allowed
   - `false` if the schema is denied
   """
-  @spec allowed_schema?(String.t(), String.t() | nil) :: boolean()
-  def allowed_schema?(repo_name, schema) do
-    rules = visibility_resolver().schema_rules_for(repo_name)
+  @spec allowed_schema?(String.t(), String.t() | nil, term()) :: boolean()
+  def allowed_schema?(repo_name, schema, scope \\ nil) do
+    rules = visibility_resolver().schema_rules_for(repo_name, scope)
     builtin = builtin_schema_denies(repo_name)
 
     builtin_denied = schema_deny_hit?(builtin, schema)
@@ -223,10 +223,10 @@ defmodule Lotus.Visibility do
 
   This now checks schema visibility first, then table visibility.
   """
-  @spec allowed_relation?(String.t(), {String.t() | nil, String.t()}) :: boolean()
-  def allowed_relation?(repo_name, {schema, table}) do
-    if allowed_schema?(repo_name, schema) do
-      table_rules = visibility_resolver().table_rules_for(repo_name)
+  @spec allowed_relation?(String.t(), {String.t() | nil, String.t()}, term()) :: boolean()
+  def allowed_relation?(repo_name, {schema, table}, scope \\ nil) do
+    if allowed_schema?(repo_name, schema, scope) do
+      table_rules = visibility_resolver().table_rules_for(repo_name, scope)
       builtin = builtin_table_denies(repo_name)
 
       builtin_denied = deny_hit?(builtin, schema, table)
@@ -242,18 +242,18 @@ defmodule Lotus.Visibility do
   @doc """
   Filters a list of schemas to only those that are visible.
   """
-  @spec filter_schemas([String.t()], String.t()) :: [String.t()]
-  def filter_schemas(schemas, repo_name) do
-    Enum.filter(schemas, &allowed_schema?(repo_name, &1))
+  @spec filter_schemas([String.t()], String.t(), term()) :: [String.t()]
+  def filter_schemas(schemas, repo_name, scope \\ nil) do
+    Enum.filter(schemas, &allowed_schema?(repo_name, &1, scope))
   end
 
   @doc """
   Filters a list of relations to only those that are visible.
   """
-  @spec filter_relations([{String.t() | nil, String.t()}], String.t()) ::
+  @spec filter_relations([{String.t() | nil, String.t()}], String.t(), term()) ::
           [{String.t() | nil, String.t()}]
-  def filter_relations(relations, repo_name) do
-    Enum.filter(relations, &allowed_relation?(repo_name, &1))
+  def filter_relations(relations, repo_name, scope \\ nil) do
+    Enum.filter(relations, &allowed_relation?(repo_name, &1, scope))
   end
 
   @doc """
@@ -263,10 +263,10 @@ defmodule Lotus.Visibility do
   - `:ok` if all schemas are visible
   - `{:error, :schema_not_visible, denied: [schemas]}` if any are denied
   """
-  @spec validate_schemas([String.t()], String.t()) ::
+  @spec validate_schemas([String.t()], String.t(), term()) ::
           :ok | {:error, :schema_not_visible, denied: [String.t()]}
-  def validate_schemas(schemas, repo_name) do
-    denied = Enum.reject(schemas, &allowed_schema?(repo_name, &1))
+  def validate_schemas(schemas, repo_name, scope \\ nil) do
+    denied = Enum.reject(schemas, &allowed_schema?(repo_name, &1, scope))
 
     if denied == [] do
       :ok
@@ -383,10 +383,10 @@ defmodule Lotus.Visibility do
   Rules are taken from `Lotus.Config.column_rules_for_repo_name/1` and support patterns
   on schema, table, and column names. Returns a normalized policy map or nil.
   """
-  @spec column_policy_for(String.t(), [{String.t() | nil, String.t()}], String.t()) ::
+  @spec column_policy_for(String.t(), [{String.t() | nil, String.t()}], String.t(), term()) ::
           nil | %{action: atom(), mask: any(), show_in_schema?: boolean()}
-  def column_policy_for(repo_name, relations, result_column_name) do
-    rules = visibility_resolver().column_rules_for(repo_name)
+  def column_policy_for(repo_name, relations, result_column_name, scope \\ nil) do
+    rules = visibility_resolver().column_rules_for(repo_name, scope)
     rels = relations || []
 
     find_schema_table_column_match(rules, rels, result_column_name) ||

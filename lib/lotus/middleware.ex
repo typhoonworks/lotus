@@ -17,14 +17,30 @@ defmodule Lotus.Middleware do
 
   ## Pipeline Events
 
-  | Event | Triggered |
-  |-------|-----------|
-  | `:before_query` | After preflight visibility check, before SQL execution |
-  | `:after_query` | After execution, before result returned to caller |
-  | `:after_list_schemas` | After schema discovery and visibility filtering |
-  | `:after_list_tables` | After table discovery and visibility filtering |
-  | `:after_get_table_schema` | After table schema introspection and column visibility |
-  | `:after_list_relations` | After relation discovery and visibility filtering |
+  | Event | Triggered | Payload keys |
+  |-------|-----------|--------------|
+  | `:before_query` | After preflight visibility check, before SQL execution | `:sql`, `:params`, `:source`, `:context` |
+  | `:after_query` | After execution, before result returned to caller | `:result`, `:sql`, `:params`, `:source`, `:context` |
+  | `:after_list_schemas` | After schema discovery and visibility filtering | `:schemas`, `:source`, `:scope`, `:context` |
+  | `:after_list_tables` | After table discovery and visibility filtering | `:tables`, `:source`, `:scope`, `:context` |
+  | `:after_get_table_schema` | After table schema introspection and column visibility | `:columns`, `:table_name`, `:schema`, `:source`, `:scope`, `:context` |
+  | `:after_list_relations` | After relation discovery and visibility filtering | `:relations`, `:source`, `:scope`, `:context` |
+  | `:after_discover` | After any discovery call, following the kind-specific `:after_list_*` event | `:kind`, `:result`, `:source`, `:scope`, `:context` |
+
+  ### Discovery event ordering
+
+  Discovery calls (`Lotus.list_schemas/2`, `list_tables/2`, `get_table_schema/3`,
+  `list_relations/2`) fire two events each:
+
+  1. The kind-specific event (`:after_list_schemas`, `:after_list_tables`,
+     `:after_get_table_schema`, or `:after_list_relations`) — receives the
+     kind-specific payload with a key matching the returned value.
+  2. The unified `:after_discover` event — receives a uniform payload
+     `%{kind:, source:, result:, context:}` so a single middleware module can
+     handle every discovery kind by dispatching on `:kind`.
+
+  If any middleware in either phase halts, later middleware do not run and
+  the caller receives `{:error, reason}`.
 
   ## Configuration
 
@@ -57,6 +73,13 @@ defmodule Lotus.Middleware do
           | :after_list_tables
           | :after_get_table_schema
           | :after_list_relations
+          | :after_discover
+
+  @type discover_kind ::
+          :list_schemas
+          | :list_tables
+          | :get_table_schema
+          | :list_relations
   @type middleware_spec :: {module(), keyword()}
   @type compiled_entry :: {module(), term()}
   @type pipeline_result :: {:cont, map()} | {:halt, term()}

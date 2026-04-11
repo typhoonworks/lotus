@@ -3,6 +3,7 @@ defmodule Lotus.VisibilityTest do
   use Mimic
 
   alias Lotus.Visibility
+  alias Lotus.Visibility.Resolvers.Static
 
   setup do
     Mimic.copy(Lotus.Config)
@@ -454,5 +455,161 @@ defmodule Lotus.VisibilityTest do
       assert Visibility.allowed_schema?("sqlite", nil)
       assert Visibility.allowed_schema?("sqlite", "")
     end
+  end
+
+  describe "scope-aware visibility" do
+    test "default (no scope) produces identical behavior to explicit nil scope" do
+      assert Visibility.allowed_schema?("postgres", "public") ==
+               Visibility.allowed_schema?("postgres", "public", nil)
+
+      assert Visibility.allowed_relation?("postgres", {"public", "users"}) ==
+               Visibility.allowed_relation?("postgres", {"public", "users"}, nil)
+    end
+
+    test "Static resolver ignores scope and returns config-based rules" do
+      # The Static resolver accepts scope but ignores it
+      rules = Static.schema_rules_for("postgres", %{role: :admin})
+      rules_no_scope = Static.schema_rules_for("postgres", nil)
+      assert rules == rules_no_scope
+
+      table_rules = Static.table_rules_for("postgres", {:tenant, "a"})
+      table_rules_nil = Static.table_rules_for("postgres", nil)
+      assert table_rules == table_rules_nil
+
+      col_rules = Static.column_rules_for("postgres", "some_scope")
+      col_rules_nil = Static.column_rules_for("postgres", nil)
+      assert col_rules == col_rules_nil
+    end
+
+    test "scope is forwarded to visibility resolver for schema checks" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      scope = %{role: :admin, tenant: "acme"}
+      Visibility.allowed_schema?("postgres", "public", scope)
+
+      assert_received {:schema_rules_for, "postgres", ^scope}
+    end
+
+    test "scope is forwarded to visibility resolver for relation checks" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      scope = %{role: :viewer}
+      Visibility.allowed_relation?("postgres", {"public", "users"}, scope)
+
+      assert_received {:schema_rules_for, "postgres", ^scope}
+      assert_received {:table_rules_for, "postgres", ^scope}
+    end
+
+    test "scope is forwarded for column policy resolution" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      scope = {:tenant, "acme"}
+      Visibility.column_policy_for("postgres", [{"public", "users"}], "email", scope)
+
+      assert_received {:column_rules_for, "postgres", ^scope}
+    end
+
+    test "filter_schemas passes scope to resolver" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      scope = {:tenant, "acme"}
+      Visibility.filter_schemas(["public", "reporting"], "postgres", scope)
+
+      assert_received {:schema_rules_for, "postgres", ^scope}
+    end
+
+    test "validate_schemas passes scope to resolver" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      assert Visibility.validate_schemas(["public"], "postgres", nil) == :ok
+      assert_received {:schema_rules_for, "postgres", nil}
+
+      assert Visibility.validate_schemas(["public"], "postgres", %{role: :admin}) == :ok
+      assert_received {:schema_rules_for, "postgres", %{role: :admin}}
+    end
+
+    test "filter_relations passes scope to resolver" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopeCaptureResolver
+      end)
+
+      scope = %{role: :viewer}
+      Visibility.filter_relations([{"public", "users"}], "postgres", scope)
+
+      # filter_relations calls allowed_relation? which calls allowed_schema? then table_rules_for
+      assert_received {:schema_rules_for, "postgres", ^scope}
+      assert_received {:table_rules_for, "postgres", ^scope}
+    end
+
+    test "different scopes produce different access decisions" do
+      Lotus.Config
+      |> stub(:visibility_resolver, fn ->
+        Lotus.VisibilityTest.ScopedRulesResolver
+      end)
+
+      # Admin scope: "restricted" schema is allowed
+      assert Visibility.allowed_schema?("postgres", "restricted", %{role: :admin})
+      assert Visibility.allowed_relation?("postgres", {"restricted", "secrets"}, %{role: :admin})
+
+      # Viewer scope: "restricted" schema is denied
+      refute Visibility.allowed_schema?("postgres", "restricted", %{role: :viewer})
+      refute Visibility.allowed_relation?("postgres", {"restricted", "secrets"}, %{role: :viewer})
+
+      # Both scopes allow "public"
+      assert Visibility.allowed_schema?("postgres", "public", %{role: :admin})
+      assert Visibility.allowed_schema?("postgres", "public", %{role: :viewer})
+    end
+  end
+end
+
+defmodule Lotus.VisibilityTest.ScopedRulesResolver do
+  @behaviour Lotus.Visibility.Resolver
+
+  @impl true
+  def schema_rules_for(_source_name, %{role: :admin}), do: [allow: :all]
+  def schema_rules_for(_source_name, _scope), do: [allow: ["public"], deny: ["restricted"]]
+
+  @impl true
+  def table_rules_for(_source_name, _scope), do: []
+
+  @impl true
+  def column_rules_for(_source_name, _scope), do: []
+end
+
+defmodule Lotus.VisibilityTest.ScopeCaptureResolver do
+  @behaviour Lotus.Visibility.Resolver
+
+  @impl true
+  def schema_rules_for(source_name, scope) do
+    send(self(), {:schema_rules_for, source_name, scope})
+    []
+  end
+
+  @impl true
+  def table_rules_for(source_name, scope) do
+    send(self(), {:table_rules_for, source_name, scope})
+    []
+  end
+
+  @impl true
+  def column_rules_for(source_name, scope) do
+    send(self(), {:column_rules_for, source_name, scope})
+    []
   end
 end
