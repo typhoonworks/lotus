@@ -42,6 +42,73 @@ defmodule Lotus.TelemetryTest do
       :telemetry.detach("#{inspect(ref)}")
     end
 
+    test "includes context in start and stop metadata" do
+      ref = make_ref()
+      pid = self()
+      ctx = %{request_id: "req-123", controller: "ReportsController"}
+
+      :telemetry.attach_many(
+        "#{inspect(ref)}",
+        [[:lotus, :query, :start], [:lotus, :query, :stop]],
+        fn event, measurements, metadata, _ ->
+          send(pid, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num", [], context: ctx)
+
+      assert_received {:telemetry, [:lotus, :query, :start], _,
+                       %{repo: "postgres", context: ^ctx}}
+
+      assert_received {:telemetry, [:lotus, :query, :stop], _, %{repo: "postgres", context: ^ctx}}
+
+      :telemetry.detach("#{inspect(ref)}")
+    end
+
+    test "context defaults to nil when not provided" do
+      ref = make_ref()
+      pid = self()
+
+      :telemetry.attach_many(
+        "#{inspect(ref)}",
+        [[:lotus, :query, :start], [:lotus, :query, :stop]],
+        fn event, measurements, metadata, _ ->
+          send(pid, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      {:ok, _result} = Runner.run_sql(@pg_adapter, "SELECT 1 AS num")
+
+      assert_received {:telemetry, [:lotus, :query, :start], _, %{context: nil}}
+      assert_received {:telemetry, [:lotus, :query, :stop], _, %{context: nil}}
+
+      :telemetry.detach("#{inspect(ref)}")
+    end
+
+    test "includes context in exception metadata" do
+      ref = make_ref()
+      pid = self()
+      ctx = %{request_id: "req-456"}
+
+      :telemetry.attach_many(
+        "#{inspect(ref)}",
+        [[:lotus, :query, :exception]],
+        fn event, measurements, metadata, _ ->
+          send(pid, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      {:error, _} = Runner.run_sql(@pg_adapter, "DROP TABLE test_users", [], context: ctx)
+
+      assert_received {:telemetry, [:lotus, :query, :exception], _,
+                       %{kind: :error, context: ^ctx}}
+
+      :telemetry.detach("#{inspect(ref)}")
+    end
+
     test "emits start and exception events on failed query" do
       ref = make_ref()
       pid = self()

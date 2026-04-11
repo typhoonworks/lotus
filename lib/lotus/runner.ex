@@ -31,11 +31,10 @@ defmodule Lotus.Runner do
           {:ok, query_result()} | {:error, term()}
   def run_sql(%Adapter{} = adapter, sql, params \\ [], opts \\ [])
       when is_binary(sql) and is_list(params) do
-    telemetry_meta = %{repo: adapter.name, sql: sql, params: params}
+    context = Keyword.get(opts, :context)
+    telemetry_meta = %{repo: adapter.name, sql: sql, params: params, context: context}
     start_time = Telemetry.query_start(telemetry_meta)
     read_only = Keyword.get(opts, :read_only, true)
-
-    context = Keyword.get(opts, :context)
 
     result =
       with :ok <- assert_single_statement(sql),
