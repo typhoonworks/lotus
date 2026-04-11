@@ -21,6 +21,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   @behaviour Lotus.Source.Adapter
 
   alias Lotus.Source.Adapter
+  alias Lotus.SQL.Sanitizer
 
   @impls %{
     Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
@@ -256,9 +257,8 @@ defmodule Lotus.Source.Adapters.Ecto do
   def sanitize_query(_repo, query, opts) do
     read_only = Keyword.get(opts, :read_only, true)
 
-    with :ok <- assert_single_statement(query),
-         :ok <- assert_not_denied(query, read_only) do
-      :ok
+    with :ok <- assert_single_statement(query) do
+      assert_not_denied(query, read_only)
     end
   end
 
@@ -280,7 +280,7 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def apply_window(repo, query, params, window_opts) do
-    base_sql = Lotus.SQL.Sanitizer.strip_trailing_semicolon(query)
+    base_sql = Sanitizer.strip_trailing_semicolon(query)
     limit = Keyword.fetch!(window_opts, :limit)
     offset = Keyword.get(window_opts, :offset, 0)
     count_mode = Keyword.get(window_opts, :count, :none)
