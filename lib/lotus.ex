@@ -602,6 +602,14 @@ defmodule Lotus do
   For databases with schemas (PostgreSQL), returns {schema, table} tuples.
   For databases without schemas (SQLite), returns just table names as strings.
 
+  ## Options
+
+  - `:context` — opaque value threaded into the `:after_list_tables` and
+    `:after_discover` middleware events. See `Lotus.Middleware`.
+  - `:scope` — opaque value passed to the visibility resolver and hashed
+    into the cache key. Different scopes produce independent cached entries.
+    See `Lotus.Visibility.Resolver`.
+
   ## Examples
 
       {:ok, tables} = Lotus.list_tables("postgres")
@@ -612,6 +620,12 @@ defmodule Lotus do
 
       {:ok, tables} = Lotus.list_tables("sqlite")
       # Returns ["products", "orders", "order_items"]
+
+      {:ok, tables} = Lotus.list_tables("postgres", context: %{tenant: "acme"})
+      # Middleware sees `%{tenant: "acme"}` in the payload
+
+      {:ok, tables} = Lotus.list_tables("postgres", scope: %{role: :admin})
+      # Visibility resolver receives scope; result cached separately per scope
   """
   def list_tables(repo_or_name, opts \\ []), do: Schema.list_tables(repo_or_name, opts)
 
@@ -620,6 +634,13 @@ defmodule Lotus do
 
   Returns a list of schema names. For databases without schemas (like SQLite),
   returns an empty list.
+
+  ## Options
+
+  - `:context` — opaque value threaded into the `:after_list_schemas` and
+    `:after_discover` middleware events.
+  - `:scope` — opaque value passed to the visibility resolver and hashed
+    into the cache key. See `Lotus.Visibility.Resolver`.
 
   ## Examples
 
@@ -633,6 +654,13 @@ defmodule Lotus do
 
   @doc """
   Gets the schema for a specific table.
+
+  ## Options
+
+  - `:context` — opaque value threaded into the `:after_get_table_schema`
+    and `:after_discover` middleware events.
+  - `:scope` — opaque value passed to the visibility resolver and hashed
+    into the cache key. See `Lotus.Visibility.Resolver`.
 
   ## Examples
 
@@ -657,6 +685,13 @@ defmodule Lotus do
 
   @doc """
   Lists all relations (tables with schema information) in a data repository.
+
+  ## Options
+
+  - `:context` — opaque value threaded into the `:after_list_relations` and
+    `:after_discover` middleware events.
+  - `:scope` — opaque value passed to the visibility resolver and hashed
+    into the cache key. See `Lotus.Visibility.Resolver`.
 
   ## Examples
 

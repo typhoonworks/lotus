@@ -306,7 +306,7 @@ defmodule Lotus.Runner do
   end
 
   defp run_before_query(%Adapter{} = adapter, sql, params, context) do
-    payload = %{repo: adapter.name, sql: sql, params: params, context: context}
+    payload = %{source: adapter.name, sql: sql, params: params, context: context}
 
     case Middleware.run(:before_query, payload) do
       {:cont, _} -> :ok
@@ -315,7 +315,7 @@ defmodule Lotus.Runner do
   end
 
   defp run_after_query(%Adapter{} = adapter, sql, params, %Result{} = result, context) do
-    payload = %{repo: adapter.name, sql: sql, params: params, result: result, context: context}
+    payload = %{source: adapter.name, sql: sql, params: params, result: result, context: context}
 
     case Middleware.run(:after_query, payload) do
       {:cont, %{result: res}} -> {:ok, res}

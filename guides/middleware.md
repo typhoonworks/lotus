@@ -25,12 +25,38 @@ Each middleware receives a payload map whose contents depend on the pipeline eve
 
 | Event | Triggered | Payload keys |
 |-------|-----------|--------------|
-| `:before_query` | After preflight visibility check, before SQL execution | `:sql`, `:params`, `:repo`, `:context` |
-| `:after_query` | After execution, before result returned to caller | `:result`, `:sql`, `:params`, `:repo`, `:context` |
-| `:after_list_schemas` | After schema discovery and visibility filtering | `:schemas`, `:repo`, `:context` |
-| `:after_list_tables` | After table discovery and visibility filtering | `:tables`, `:repo`, `:context` |
-| `:after_get_table_schema` | After table schema introspection and column visibility | `:table_schema`, `:repo`, `:context` |
-| `:after_list_relations` | After relation discovery and visibility filtering | `:relations`, `:repo`, `:context` |
+| `:before_query` | After preflight visibility check, before SQL execution | `:sql`, `:params`, `:source`, `:context` |
+| `:after_query` | After execution, before result returned to caller | `:result`, `:sql`, `:params`, `:source`, `:context` |
+| `:after_list_schemas` | After schema discovery and visibility filtering | `:schemas`, `:source`, `:scope`, `:context` |
+| `:after_list_tables` | After table discovery and visibility filtering | `:tables`, `:source`, `:scope`, `:context` |
+| `:after_get_table_schema` | After table schema introspection and column visibility | `:columns`, `:table_name`, `:schema`, `:source`, `:scope`, `:context` |
+| `:after_list_relations` | After relation discovery and visibility filtering | `:relations`, `:source`, `:scope`, `:context` |
+| `:after_discover` | After any discovery call, following the kind-specific `:after_list_*` event | `:kind`, `:result`, `:source`, `:scope`, `:context` |
+
+### Discovery event ordering
+
+Discovery calls (`Lotus.list_schemas/2`, `list_tables/2`, `get_table_schema/3`, `list_relations/2`) fire **two** events per call:
+
+1. The **kind-specific event** (`:after_list_schemas`, `:after_list_tables`, `:after_get_table_schema`, or `:after_list_relations`). The payload uses a key that matches the returned value (e.g. `:tables`, `:columns`). Register this event when you want the full kind-specific payload.
+2. The **unified `:after_discover` event**. The payload is always `%{kind:, source:, result:, scope:, context:}`. Register this event when you want a single middleware module that handles every discovery kind by dispatching on `:kind`.
+
+If any middleware in either phase halts, later middleware do not run and the caller receives `{:error, reason}`. The kind-specific event always runs before `:after_discover`; halting in the kind-specific phase short-circuits `:after_discover`.
+
+The `:kind` value in the unified event is one of `:list_schemas`, `:list_tables`, `:get_table_schema`, or `:list_relations`. Pattern-match on it and mutate `:result` in-place:
+
+```elixir
+defmodule MyApp.DiscoveryAuditMiddleware do
+  require Logger
+
+  def init(opts), do: opts
+
+  def call(%{kind: kind, source: source, result: result, scope: _scope, context: ctx} = payload, _opts) do
+    user = Map.get(ctx || %{}, :user_id, "anonymous")
+    Logger.info("[Lotus] discover kind=#{kind} source=#{source} user=#{user} count=#{length(result)}")
+    {:cont, payload}
+  end
+end
+```
 
 ## Configuration
 
@@ -209,6 +235,14 @@ defmodule MyApp.TableFilterMiddleware do
   end
 end
 ```
+
+## Caching and Context
+
+Discovery middleware (`:after_list_*`, `:after_discover`) runs **outside** the schema cache callback. The adapter result with visibility filtering applied is cached; middleware re-runs on every call against that cached result.
+
+- **Context-sensitive middleware is safe.** Two callers with different `:context` values receive results filtered by their own middleware logic, not each other's cached output.
+- **Middleware runs on every call**, not only on cache misses. Side-effecting middleware (e.g. audit logging) should budget accordingly.
+- **Adapter calls are still cached.** The schema cache short-circuits the underlying `Adapter.list_tables/3` (etc.) on repeat calls — only the middleware pipeline re-runs.
 
 ## Halting the Pipeline
 
