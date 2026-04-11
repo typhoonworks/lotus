@@ -98,6 +98,14 @@ defmodule Lotus.MiddlewareTest do
     end
   end
 
+  defmodule RaisingPlug do
+    def init(opts), do: opts
+
+    def call(_payload, opts) do
+      raise Keyword.fetch!(opts, :message)
+    end
+  end
+
   defmodule ScopeCapturePlug do
     def init(opts), do: opts
 
@@ -195,6 +203,15 @@ defmodule Lotus.MiddlewareTest do
 
       assert_received {:middleware_context, :test_user}
     end
+
+    test "raised exception returns {:halt, exception}" do
+      Middleware.compile(%{
+        before_query: [{RaisingPlug, [message: "pipeline boom"]}]
+      })
+
+      assert {:halt, %RuntimeError{message: "pipeline boom"}} =
+               Middleware.run(:before_query, %{sql: "SELECT 1", context: nil})
+    end
   end
 
   describe "before_query integration" do
@@ -232,6 +249,17 @@ defmodule Lotus.MiddlewareTest do
       Runner.run_sql(@pg_adapter, "SELECT 1")
 
       assert_received {:middleware_context, nil}
+    end
+
+    test "halting before_query does not run after_query middleware" do
+      Middleware.compile(%{
+        before_query: [{HaltPlug, [reason: "denied"]}],
+        after_query: [{CountingPlug, []}]
+      })
+
+      assert {:error, "denied"} = Runner.run_sql(@pg_adapter, "SELECT 1")
+
+      refute_received :middleware_ran
     end
   end
 
@@ -504,6 +532,40 @@ defmodule Lotus.MiddlewareTest do
 
       assert_received {:middleware_context, %{tenant: "acme"}}
       assert_received {:middleware_context, %{tenant: "globex"}}
+    end
+  end
+
+  describe "exception inside middleware" do
+    test "raised exception in before_query middleware surfaces as {:error, _}" do
+      Middleware.compile(%{
+        before_query: [{RaisingPlug, [message: "boom"]}]
+      })
+
+      assert {:error, %RuntimeError{message: "boom"}} =
+               Runner.run_sql(@pg_adapter, "SELECT 1")
+    end
+
+    test "exception stops subsequent middleware from running" do
+      Middleware.compile(%{
+        before_query: [
+          {RaisingPlug, [message: "crash"]},
+          {ContextCapturePlug, []}
+        ]
+      })
+
+      assert {:error, %RuntimeError{message: "crash"}} =
+               Runner.run_sql(@pg_adapter, "SELECT 1")
+
+      refute_received {:middleware_context, _}
+    end
+
+    test "raised exception in after_query middleware surfaces as {:error, _}" do
+      Middleware.compile(%{
+        after_query: [{RaisingPlug, [message: "post-query crash"]}]
+      })
+
+      assert {:error, %RuntimeError{message: "post-query crash"}} =
+               Runner.run_sql(@pg_adapter, "SELECT 1")
     end
   end
 

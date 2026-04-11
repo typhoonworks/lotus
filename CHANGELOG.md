@@ -29,6 +29,7 @@
 - Per-scope cache invalidation via `Lotus.invalidate_scope/1` (delegates to `Lotus.Cache.invalidate_scope/1`). Selectively clears all cached discovery entries associated with a specific scope without flushing the entire cache. Uses tag-based invalidation — each scoped cache entry is automatically tagged with `"scope:<digest>"` (#195)
 - `Lotus.Cache.KeyBuilder` behaviour for pluggable cache key generation. Defines `discovery_key/2` and `result_key/3` callbacks plus a public `scope_digest/1` utility function. Configure via `cache: %{key_builder: MyApp.KeyBuilder}`. Default implementation (`Lotus.Cache.KeyBuilder.Default`) preserves existing key generation logic (#195)
 - `Lotus.Config.cache_key_builder/0` helper to retrieve the configured key builder module (defaults to `Lotus.Cache.KeyBuilder.Default`)
+- Middleware exception safety: raised exceptions inside middleware `call/2` are now caught and surfaced as `{:error, exception}` instead of propagating uncaught. The `rescue` is scoped to the individual `call/2` invocation so subsequent middleware never runs (#177)
 - `:context` metadata in query telemetry events (`[:lotus, :query, :start | :stop | :exception]`). The caller-supplied `:context` option is now included in event metadata, enabling per-endpoint attribution, distributed trace correlation, and request ID tagging without wrapping or forking `Runner` (#175)
 
 ### Security
