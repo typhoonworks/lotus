@@ -1,5 +1,6 @@
 defmodule Lotus.SchemaTest do
   use Lotus.Case
+  use Mimic
 
   alias Lotus.Schema
 
@@ -483,5 +484,90 @@ defmodule Lotus.SchemaTest do
         ('Test Product 2', 'SKU002', 'Description 2', 29.99, 50, '#{now}', '#{now}'),
         ('Test Product 3', 'SKU003', 'Description 3', 39.99, 25, '#{now}', '#{now}')
     """)
+  end
+
+  describe "adapter error propagation" do
+    setup do
+      Mimic.copy(Lotus.Sources)
+      Mimic.copy(Lotus.Source.Adapter)
+
+      adapter = %Lotus.Source.Adapter{
+        name: "postgres",
+        module: Lotus.Source.Adapters.Ecto,
+        state: Lotus.Test.Repo,
+        source_type: :postgres
+      }
+
+      Lotus.Sources
+      |> stub(:resolve!, fn _repo, _fallback -> adapter end)
+
+      Lotus.Source.Adapter
+      |> stub(:default_schemas, fn _adapter -> ["public"] end)
+
+      {:ok, adapter: adapter}
+    end
+
+    test "get_table_schema/3 propagates permission errors from resolve_table_schema" do
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:error, "permission denied for schema reporting"}
+      end)
+
+      assert {:error, "permission denied for schema reporting"} =
+               Schema.get_table_schema("postgres", "orders", schema: "reporting")
+    end
+
+    test "get_table_stats/3 propagates connection errors from resolve_table_schema" do
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:error, "connection refused"}
+      end)
+
+      assert {:error, "connection refused"} =
+               Schema.get_table_stats("postgres", "orders", schema: "reporting")
+    end
+
+    test "get_table_schema/3 propagates errors with schemas option" do
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:error, "permission denied"}
+      end)
+
+      assert {:error, "permission denied"} =
+               Schema.get_table_schema("postgres", "orders", schemas: ["reporting", "public"])
+    end
+
+    test "get_table_schema/3 propagates errors with search_path option" do
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:error, "permission denied"}
+      end)
+
+      assert {:error, "permission denied"} =
+               Schema.get_table_schema("postgres", "orders", search_path: "reporting, public")
+    end
+
+    test "adapter errors are not cached — retried on next call" do
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:error, "transient error"}
+      end)
+
+      assert {:error, "transient error"} =
+               Schema.get_table_schema("postgres", "orders", schema: "reporting")
+
+      Lotus.Source.Adapter
+      |> expect(:resolve_table_schema, fn _adapter, _table, _schemas ->
+        {:ok, "reporting"}
+      end)
+
+      Lotus.Source.Adapter
+      |> expect(:get_table_schema, fn _adapter, _schema, _table ->
+        {:ok, [%{name: "id", type: "integer", nullable: false, default: nil, primary_key: true}]}
+      end)
+
+      assert {:ok, [%{name: "id"}]} =
+               Schema.get_table_schema("postgres", "orders", schema: "reporting")
+    end
   end
 end
