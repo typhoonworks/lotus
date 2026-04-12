@@ -4,9 +4,9 @@
 
 Source adapters wrap data sources behind a uniform callback interface so that the Lotus execution pipeline does not depend on any particular database driver or connection strategy. Every data source -- whether it is an Ecto repo, a raw database connection, or an external API -- is represented as a `%Lotus.Source.Adapter{}` struct that the runner, preflight checks, and introspection modules all accept identically.
 
-`Lotus.Source` is a **facade module** (similar to `Lotus.Cache`). It provides convenience functions like `resolve!/2`, `source_type/1`, `supports_feature?/2`, and `hierarchy_label/1` that accept adapter structs, source name strings, or raw repo modules and resolve lazily as needed.
+`Lotus.Source` provides convenience functions (`resolve!/2`, `source_type/1`, `supports_feature?/2`, `hierarchy_label/1`) that accept adapter structs, source name strings, or repo modules and resolve lazily as needed.
 
-For SQL databases backed by Ecto, per-dialect adapter modules (`Lotus.Source.Adapters.Postgres`, `Lotus.Source.Adapters.MySQL`, `Lotus.Source.Adapters.SQLite3`) handle dialect-specific behaviour automatically. A pluggable registry (`source_adapters` config) lets you add custom adapters for databases or non-SQL data sources without forking Lotus.
+For SQL databases backed by Ecto, per-dialect adapter modules (`Lotus.Source.Adapters.Postgres`, `Lotus.Source.Adapters.MySQL`, `Lotus.Source.Adapters.SQLite3`) handle dialect-specific behaviour. External adapters for other databases or non-SQL data sources can be registered via the `source_adapters` config.
 
 ## How It Works
 
@@ -41,7 +41,7 @@ If you are using Ecto repos and static configuration, no changes are needed. The
 - SQLite repos (`Ecto.Adapters.SQLite3`) get `Lotus.Source.Adapters.SQLite3`
 - Unknown Ecto repos fall back to `Lotus.Source.Adapters.Ecto` with the `Default` dialect
 
-Your existing configuration continues to work as before:
+Standard Ecto configuration:
 
 ```elixir
 config :lotus,
@@ -103,7 +103,7 @@ defmodule MyApp.Dialects.MSSQL do
   def ecto_adapter, do: Ecto.Adapters.Tds
 
   @impl true
-  def query_language, do: "T-SQL"
+  def query_language, do: "sql:tsql"
 
   @impl true
   def limit_query(statement, limit), do: "SELECT TOP #{limit} * FROM (#{statement}) AS t"
