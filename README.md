@@ -63,8 +63,8 @@ end
 # config/config.exs
 config :lotus,
   ecto_repo: MyApp.Repo,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo
   }
 ```
@@ -145,22 +145,18 @@ Lotus works great as a standalone library without the web UI. Use it to run quer
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
 
 # Optional: Configure caching
 config :lotus,
-  cache: [
+  cache: %{
     adapter: Lotus.Cache.ETS,
-    profiles: %{
-      results: [ttl: 60_000],
-      schema: [ttl: 3_600_000],
-      options: [ttl: 300_000]
-    }
-  ]
+    namespace: "myapp"
+  }
 ```
 
 ### Creating and Running Queries

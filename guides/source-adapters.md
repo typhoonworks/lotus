@@ -168,6 +168,7 @@ Callbacks are organized by category. All required callbacks must be implemented.
 | `supports_feature?/1` | Identity | Returns `false` |
 | `hierarchy_label/0` | Identity | Returns `"Schema"` |
 | `example_query/2` | Identity | Returns a generic `SELECT *` query |
+| `editor_config/0` | Editor | Returns empty config (`%{language: "sql", keywords: [], ...}`) |
 | `extract_accessed_resources/4` | SQL analysis | Delegates to `EXPLAIN`-based extraction |
 | `transform_sql/1` | SQL transformation | Returns the SQL unchanged |
 | `db_type_to_lotus_type/1` | Type mapping | Maps common SQL types to Lotus types |
@@ -227,6 +228,37 @@ end
 ```
 
 Note that non-SQL adapters may return `:skip` from `extract_accessed_resources` and implement `sanitize_query` / `transform_query` differently than SQL adapters.
+
+## Editor Configuration
+
+The optional `editor_config/0` callback allows dialects to provide keywords, types, function completions, and context boundaries for the web UI's SQL editor. This enables dialect-specific syntax highlighting and autocomplete without hardcoding database knowledge in the frontend.
+
+```elixir
+@impl true
+def editor_config do
+  %{
+    language: "sql",
+    keywords: ~w(PREWHERE FINAL SAMPLE SETTINGS FORMAT ENGINE),
+    types: ~w(UInt8 UInt64 Float64 Array LowCardinality Nullable),
+    functions: [
+      %{name: "uniq", detail: "Approx distinct count", args: "(column)"},
+      %{name: "arrayJoin", detail: "Unpack array to rows", args: "(array)"},
+      %{name: "toDate", detail: "Convert to Date", args: "(value)"}
+    ],
+    context_boundaries: ~w(prewhere final sample settings format)
+  }
+end
+```
+
+**Fields:**
+
+- `language` — parser to use on the JS side (`"sql"` for all SQL dialects)
+- `keywords` — dialect-specific keywords for syntax highlighting (merged with standard SQL keywords by the frontend)
+- `types` — dialect-specific type names for syntax highlighting
+- `functions` — function completions with name, description, and argument template
+- `context_boundaries` — keywords that mark clause boundaries for context-aware completions (e.g., ClickHouse's `PREWHERE` is treated like `WHERE` for column suggestions)
+
+When not implemented, the frontend uses standard SQL defaults. For large function lists, consider extracting the data into a dedicated `EditorConfig` submodule (see `lotus_clickhouse` for an example with 300+ functions).
 
 ## Registration
 

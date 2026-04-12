@@ -28,9 +28,12 @@ defmodule Lotus.Supervisor do
 
   @spec start_link(keyword) :: Supervisor.on_start()
   def start_link(opts \\ []) do
-    case Keyword.get(opts, :supervisor_name) do
-      nil -> Supervisor.start_link(__MODULE__, opts)
-      sup_name -> Supervisor.start_link(__MODULE__, opts, name: sup_name)
+    name = Keyword.get(opts, :supervisor_name, Lotus.Supervisor)
+
+    case Supervisor.start_link(__MODULE__, opts, name: name) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+      error -> error
     end
   end
 
@@ -51,8 +54,15 @@ defmodule Lotus.Supervisor do
     instance_name = Keyword.get(opts, :name) || Keyword.get(opts, :supervisor_name, Lotus)
     task_sup_name = task_supervisor_name(instance_name)
 
+    # Always start ETS so cache tables exist regardless of boot order.
+    # Skip if the configured cache adapter already includes it.
+    ets_child =
+      if Enum.any?(cache_children, fn {mod, _} -> mod == Lotus.Cache.ETS end),
+        do: [],
+        else: [{Lotus.Cache.ETS, []}]
+
     children =
-      [{Task.Supervisor, name: task_sup_name} | cache_children]
+      [{Task.Supervisor, name: task_sup_name}] ++ ets_child ++ cache_children
 
     Supervisor.init(children, strategy: :one_for_one)
   end

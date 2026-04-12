@@ -44,6 +44,10 @@ config :lotus,
 
 Lotus is an OTP application: as long as `:lotus` is in your `mix.exs` dependencies, its supervisor starts automatically with your app and boots the cache backend declared under `config :lotus, :cache`. No supervision-tree wiring is required on your end.
 
+The `Lotus.Cache.ETS` GenServer is always started by the supervisor to ensure cache tables are available. If you configure a different cache adapter (e.g., `Lotus.Cache.Cachex`), it is started in addition to the ETS tables.
+
+> **Note:** If you accidentally include `Lotus` as a child in your own supervision tree, the double-start is handled gracefully — `Lotus.Supervisor` returns `{:ok, pid}` for an already-running instance.
+
 ### Using Cache in Queries
 
 Once configured and started, caching works automatically:
@@ -62,7 +66,7 @@ Once configured and started, caching works automatically:
 
 Currently, Lotus supports two cache adapters:
 
-1. `Lotus.Cache.ETS` - Local-only in-memory caching using ETS
+1. `Lotus.Cache.ETS` - Local-only in-memory caching using ETS, implemented as a GenServer with automatic expiration cleanup
 2. `Lotus.Cache.Cachex` - Distributed caching using [Cachex](https://hexdocs.pm/cachex)
 
 #### ETS Adapter
@@ -557,7 +561,7 @@ Lotus.invalidate_scope(%{tenant_id: tenant.id})
 3. **Verify identical queries**: Cache keys are generated from exact SQL + params
 4. **Check TTL**: Ensure cache hasn't expired between calls
 
-**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually mean the `:cache` adapter isn't configured (so no backend was started) or the `:lotus` application failed to boot.
+**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually mean the `:lotus` application failed to boot. Since the ETS cache GenServer is always started by the supervisor, cache tables should be available as long as `:lotus` is running.
 
 ### Memory Issues
 

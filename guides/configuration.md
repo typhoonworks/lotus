@@ -15,7 +15,7 @@ config :lotus,
     "analytics" => MyApp.AnalyticsRepo
   },
   cache: [                      # Optional caching configuration
-    adapter: Lotus.Cache.ETS,   # Cache adapter (currently only ETS supported)
+    adapter: Lotus.Cache.ETS,   # Cache adapter (ETS for local, Cachex for distributed)
     namespace: "myapp_cache"    # Cache namespace (optional)
   ]
 ```
