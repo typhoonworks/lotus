@@ -9,7 +9,6 @@ defmodule Lotus.Source do
 
   alias Lotus.Config
   alias Lotus.Source.Adapter
-  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
   # ---------------------------------------------------------------------------
   # Resolution
@@ -86,42 +85,23 @@ defmodule Lotus.Source do
           :postgres | :mysql | :sqlite | :other
   def source_type(%Adapter{source_type: st}), do: st
 
-  def source_type(repo_name) when is_binary(repo_name) do
-    repo = Config.get_data_source!(repo_name)
-    source_type(repo)
-  end
-
-  def source_type(repo) when is_atom(repo) do
-    EctoAdapter.detect_source_type(repo)
+  def source_type(repo_or_name) when is_binary(repo_or_name) or is_atom(repo_or_name) do
+    resolve!(repo_or_name, nil).source_type
   end
 
   @doc """
   Whether a source supports a specific feature.
 
-  Accepts an `%Adapter{}` struct (delegates to the adapter callback) or
-  a source type atom (uses hardcoded fallback for backward compatibility).
+  Accepts an `%Adapter{}` struct or a source name/repo module (resolved to adapter).
   """
-  @spec supports_feature?(Adapter.t() | atom(), atom()) :: boolean()
+  @spec supports_feature?(Adapter.t() | String.t() | module(), atom()) :: boolean()
   def supports_feature?(%Adapter{} = adapter, feature) do
     Adapter.supports_feature?(adapter, feature)
   end
 
-  def supports_feature?(:postgres, :schema_hierarchy), do: true
-  def supports_feature?(:postgres, :search_path), do: true
-  def supports_feature?(:postgres, :make_interval), do: true
-  def supports_feature?(:postgres, :arrays), do: true
-  def supports_feature?(:postgres, :json), do: true
-  def supports_feature?(:mysql, :schema_hierarchy), do: false
-  def supports_feature?(:mysql, :search_path), do: false
-  def supports_feature?(:mysql, :make_interval), do: false
-  def supports_feature?(:mysql, :arrays), do: false
-  def supports_feature?(:mysql, :json), do: true
-  def supports_feature?(:sqlite, :schema_hierarchy), do: false
-  def supports_feature?(:sqlite, :search_path), do: false
-  def supports_feature?(:sqlite, :make_interval), do: false
-  def supports_feature?(:sqlite, :arrays), do: false
-  def supports_feature?(:sqlite, :json), do: true
-  def supports_feature?(_, _), do: false
+  def supports_feature?(source, feature) when is_binary(source) or is_atom(source) do
+    resolve!(source, nil) |> Adapter.supports_feature?(feature)
+  end
 
   @doc """
   Return the human-readable label for the top-level hierarchy in a source.

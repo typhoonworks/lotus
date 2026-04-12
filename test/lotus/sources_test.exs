@@ -157,14 +157,16 @@ defmodule Lotus.SourcesTest do
       end
     end
 
-    test "returns :other for unknown adapter type" do
+    test "raises for unconfigured repo module" do
       defmodule CustomAdapterRepo do
         def __adapter__ do
           Module.concat(["UnknownAdapter"])
         end
       end
 
-      assert Source.source_type(CustomAdapterRepo) == :other
+      assert_raise ArgumentError, ~r/not configured/, fn ->
+        Source.source_type(CustomAdapterRepo)
+      end
     end
   end
 
@@ -207,45 +209,36 @@ defmodule Lotus.SourcesTest do
 
   describe "supports_feature?/2" do
     test "postgres features" do
-      assert Source.supports_feature?(:postgres, :search_path) == true
-      assert Source.supports_feature?(:postgres, :make_interval) == true
-      assert Source.supports_feature?(:postgres, :arrays) == true
-      assert Source.supports_feature?(:postgres, :json) == true
+      assert Source.supports_feature?("postgres", :search_path) == true
+      assert Source.supports_feature?("postgres", :make_interval) == true
+      assert Source.supports_feature?("postgres", :arrays) == true
+      assert Source.supports_feature?("postgres", :json) == true
     end
 
     test "mysql features" do
-      assert Source.supports_feature?(:mysql, :search_path) == false
-      assert Source.supports_feature?(:mysql, :make_interval) == false
-      assert Source.supports_feature?(:mysql, :arrays) == false
-      assert Source.supports_feature?(:mysql, :json) == true
+      assert Source.supports_feature?("mysql", :search_path) == false
+      assert Source.supports_feature?("mysql", :make_interval) == false
+      assert Source.supports_feature?("mysql", :arrays) == false
+      assert Source.supports_feature?("mysql", :json) == true
     end
 
     test "sqlite features" do
-      assert Source.supports_feature?(:sqlite, :search_path) == false
-      assert Source.supports_feature?(:sqlite, :make_interval) == false
-      assert Source.supports_feature?(:sqlite, :arrays) == false
-      assert Source.supports_feature?(:sqlite, :json) == true
-    end
-
-    test "unknown source type returns false for all features" do
-      assert Source.supports_feature?(:unknown, :search_path) == false
-      assert Source.supports_feature?(:unknown, :make_interval) == false
-      assert Source.supports_feature?(:unknown, :arrays) == false
-      assert Source.supports_feature?(:unknown, :json) == false
+      assert Source.supports_feature?("sqlite", :search_path) == false
+      assert Source.supports_feature?("sqlite", :make_interval) == false
+      assert Source.supports_feature?("sqlite", :arrays) == false
+      assert Source.supports_feature?("sqlite", :json) == true
     end
 
     test "unknown feature returns false for all source types" do
-      assert Source.supports_feature?(:postgres, :unknown_feature) == false
-      assert Source.supports_feature?(:mysql, :unknown_feature) == false
-      assert Source.supports_feature?(:sqlite, :unknown_feature) == false
-      assert Source.supports_feature?(:other, :unknown_feature) == false
+      assert Source.supports_feature?("postgres", :unknown_feature) == false
+      assert Source.supports_feature?("mysql", :unknown_feature) == false
+      assert Source.supports_feature?("sqlite", :unknown_feature) == false
     end
 
     test "schema_hierarchy feature" do
-      assert Source.supports_feature?(:postgres, :schema_hierarchy) == true
-      assert Source.supports_feature?(:mysql, :schema_hierarchy) == false
-      assert Source.supports_feature?(:sqlite, :schema_hierarchy) == false
-      assert Source.supports_feature?(:other, :schema_hierarchy) == false
+      assert Source.supports_feature?("postgres", :schema_hierarchy) == true
+      assert Source.supports_feature?("mysql", :schema_hierarchy) == false
+      assert Source.supports_feature?("sqlite", :schema_hierarchy) == false
     end
   end
 
