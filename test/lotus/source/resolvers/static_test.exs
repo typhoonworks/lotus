@@ -1,20 +1,22 @@
 defmodule Lotus.Source.Resolvers.StaticTest do
   use Lotus.Case, async: true
 
-  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
   alias Lotus.Source.Resolvers.Static
 
   describe "resolve/2" do
     test "repo_opt as string finds adapter by name" do
       assert {:ok, adapter} = Static.resolve("postgres", nil)
-      assert adapter == EctoAdapter.wrap("postgres", Lotus.Test.Repo)
       assert adapter.name == "postgres"
+      assert adapter.module == Lotus.Source.Adapters.Postgres
       assert adapter.state == Lotus.Test.Repo
+      assert adapter.source_type == :postgres
     end
 
     test "repo_opt as string finds another adapter by name" do
       assert {:ok, adapter} = Static.resolve("sqlite", nil)
-      assert adapter == EctoAdapter.wrap("sqlite", Lotus.Test.SqliteRepo)
+      assert adapter.name == "sqlite"
+      assert adapter.module == Lotus.Source.Adapters.SQLite3
+      assert adapter.state == Lotus.Test.SqliteRepo
     end
 
     test "repo_opt as module finds adapter by reverse lookup" do
@@ -100,7 +102,12 @@ defmodule Lotus.Source.Resolvers.StaticTest do
 
       Enum.each(adapters, fn adapter ->
         assert %Lotus.Source.Adapter{} = adapter
-        assert adapter.module == EctoAdapter
+
+        assert adapter.module in [
+                 Lotus.Source.Adapters.Postgres,
+                 Lotus.Source.Adapters.MySQL,
+                 Lotus.Source.Adapters.SQLite3
+               ]
       end)
     end
   end

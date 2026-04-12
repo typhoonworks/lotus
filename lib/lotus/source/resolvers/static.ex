@@ -15,7 +15,14 @@ defmodule Lotus.Source.Resolvers.Static do
   @behaviour Lotus.Source.Resolver
 
   alias Lotus.Config
+  alias Lotus.Source.Adapters
   alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
+
+  @builtin_adapters [
+    Adapters.Postgres,
+    Adapters.MySQL,
+    Adapters.SQLite3
+  ]
 
   # ---------------------------------------------------------------------------
   # Callbacks
@@ -90,7 +97,9 @@ defmodule Lotus.Source.Resolvers.Static do
   end
 
   defp find_adapter(entry) do
-    case Enum.find(Config.source_adapters(), & &1.can_handle?(entry)) do
+    all_adapters = Config.source_adapters() ++ @builtin_adapters
+
+    case Enum.find(all_adapters, & &1.can_handle?(entry)) do
       nil -> :none
       mod -> {:ok, mod}
     end
