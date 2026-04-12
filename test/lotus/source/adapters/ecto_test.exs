@@ -11,7 +11,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
 
       assert %Adapter{} = adapter
       assert adapter.name == "main"
-      assert adapter.module == EctoAdapter
+      assert adapter.module == Lotus.Source.Adapters.Postgres
       assert adapter.state == Repo
       assert adapter.source_type == :postgres
     end

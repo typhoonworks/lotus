@@ -292,6 +292,66 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
+  @impl true
+  def extract_accessed_resources(repo, sql, params, opts) do
+    search_path = Keyword.get(opts, :search_path)
+    explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
+
+    result =
+      repo.transaction(fn ->
+        repo.query!("SET LOCAL transaction_read_only = on")
+
+        if search_path do
+          Identifier.validate_search_path!(search_path)
+          repo.query!("SET LOCAL search_path = #{search_path}")
+        end
+
+        case repo.query(explain, params) do
+          {:ok, %{rows: [[json]]}} ->
+            json
+            |> parse_explain_plan()
+            |> collect_relations(MapSet.new())
+
+          {:error, err} ->
+            repo.rollback(format_error(err))
+        end
+      end)
+
+    case result do
+      {:ok, relations} -> {:ok, relations}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp parse_explain_plan(json) do
+    plan_data =
+      case json do
+        binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
+        data when is_list(data) or is_map(data) -> data
+      end
+
+    case plan_data do
+      [first | _] -> Map.fetch!(first, "Plan")
+      %{"Plan" => plan} -> plan
+    end
+  end
+
+  defp collect_relations(%{"Plans" => plans} = node, acc) do
+    Enum.reduce(plans, collect_relation(node, acc), &collect_relations/2)
+  end
+
+  defp collect_relations(node, acc), do: collect_relation(node, acc)
+
+  defp collect_relation(node, acc) do
+    case {node["Schema"], node["Relation Name"]} do
+      {schema, rel} when is_binary(schema) and is_binary(rel) ->
+        MapSet.put(acc, {schema, rel})
+
+      _ ->
+        acc
+    end
+  end
+
   defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),
     do: "varchar(#{char_len})"
 

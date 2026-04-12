@@ -96,9 +96,31 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   @callback hierarchy_label() :: String.t()
   @callback example_query(table :: String.t(), schema :: String.t() | nil) :: String.t()
 
+  # ---------------------------------------------------------------------------
+  # Optional callbacks — Resource extraction
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Extract the set of tables/relations a query will access.
+
+  Used by `Lotus.Preflight` to check visibility rules before execution.
+  Return `{:ok, MapSet}` with `{schema, table}` tuples, `{:error, reason}`,
+  or `:skip` to allow the query without checking.
+
+  Default (when not implemented): `:skip`.
+  """
+  @callback extract_accessed_resources(
+              repo,
+              query :: String.t(),
+              params :: list(),
+              opts :: keyword()
+            ) ::
+              {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
+
   @optional_callbacks [
     supports_feature?: 1,
     hierarchy_label: 0,
-    example_query: 2
+    example_query: 2,
+    extract_accessed_resources: 4
   ]
 end

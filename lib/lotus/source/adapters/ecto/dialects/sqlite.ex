@@ -225,4 +225,65 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   def apply_sorts(sql, sorts) do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
+
+  alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
+
+  @impl true
+  def extract_accessed_resources(repo, sql, params, _opts) do
+    alias_map = EctoHelpers.parse_alias_map(sql)
+    explain = "EXPLAIN QUERY PLAN " <> sql
+
+    result =
+      repo.transaction(fn ->
+        case repo.query(explain, params) do
+          {:ok, %{rows: rows}} -> parse_explain_rows(rows, alias_map)
+          {:error, err} -> repo.rollback(format_error(err))
+        end
+      end)
+
+    case result do
+      {:ok, relations} -> {:ok, relations}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp parse_explain_rows(rows, alias_map) do
+    rows
+    |> Enum.map(fn row -> Enum.join(row, " ") end)
+    |> Enum.flat_map(&extract_relations_from_text/1)
+    |> Enum.map(&EctoHelpers.resolve_alias(&1, alias_map))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&{nil, &1})
+    |> MapSet.new()
+  end
+
+  defp extract_relations_from_text(text) do
+    cond do
+      Regex.match?(
+        ~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)\s+AS\s+("[^"]+"|[A-Za-z0-9_]+)/,
+        text
+      ) ->
+        for [_, base, _alias] <-
+              Regex.scan(
+                ~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)\s+AS\s+("[^"]+"|[A-Za-z0-9_]+)/,
+                text
+              ) do
+          EctoHelpers.normalize_ident(base)
+        end
+
+      Regex.match?(~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)/, text) ->
+        for [_, base] <-
+              Regex.scan(~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)/, text) do
+          EctoHelpers.normalize_ident(base)
+        end
+
+      Regex.match?(~r/\b(?:SCAN|SEARCH)\s+("[^"]+"|[A-Za-z0-9_]+)/, text) ->
+        for [_, name] <- Regex.scan(~r/\b(?:SCAN|SEARCH)\s+("[^"]+"|[A-Za-z0-9_]+)/, text) do
+          EctoHelpers.normalize_ident(name)
+        end
+
+      true ->
+        []
+    end
+  end
 end

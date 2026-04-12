@@ -356,6 +356,104 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
+  alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
+
+  @impl true
+  def extract_accessed_resources(repo, sql, params, _opts) do
+    alias_map = EctoHelpers.parse_alias_map(sql)
+    explain = "EXPLAIN FORMAT=JSON " <> sql
+
+    case repo.query(explain, params) do
+      {:ok, %{rows: [[json]]}} ->
+        explain_rels =
+          json
+          |> Lotus.JSON.decode!()
+          |> collect_mysql_relations(MapSet.new())
+          |> MapSet.to_list()
+          |> Enum.map(fn {schema, table_name} ->
+            {schema, EctoHelpers.resolve_alias(table_name, alias_map)}
+          end)
+          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
+
+        sql_rels = extract_tables_from_sql(sql)
+        relations = choose_relations(explain_rels, sql_rels, sql) |> MapSet.new()
+
+        {:ok, relations}
+
+      {:error, e} ->
+        {:error, format_error(e)}
+    end
+  end
+
+  defp collect_mysql_relations(%{"query_block" => query_block}, acc) do
+    collect_query_block(query_block, acc)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_list(data) do
+    Enum.reduce(data, acc, &collect_mysql_relations/2)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_map(data) do
+    case Map.get(data, "query_block") do
+      nil -> acc
+      query_block -> collect_query_block(query_block, acc)
+    end
+  end
+
+  defp collect_mysql_relations(_, acc), do: acc
+
+  defp collect_query_block(%{"table" => table_info}, acc) when is_map(table_info) do
+    case Map.get(table_info, "table_name") do
+      table_name when is_binary(table_name) ->
+        schema = Map.get(table_info, "schema")
+        MapSet.put(acc, {schema, table_name})
+
+      _ ->
+        acc
+    end
+  end
+
+  defp collect_query_block(%{"nested_loop" => nested_loop}, acc) when is_list(nested_loop) do
+    Enum.reduce(nested_loop, acc, fn item, acc_inner ->
+      collect_query_block(item, acc_inner)
+    end)
+  end
+
+  defp collect_query_block(data, acc) when is_map(data) do
+    Enum.reduce(data, acc, fn {_key, value}, acc_inner ->
+      collect_mysql_relations(value, acc_inner)
+    end)
+  end
+
+  defp collect_query_block(_, acc), do: acc
+
+  defp extract_tables_from_sql(sql) do
+    table_regex =
+      ~r/(?:FROM|JOIN)\s+(?:(`?)([a-zA-Z_][a-zA-Z0-9_]*)\1\.)?(`?)([a-zA-Z_][a-zA-Z0-9_]*)\3(?:\s+(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)?/i
+
+    Regex.scan(table_regex, sql)
+    |> Enum.map(fn
+      [_, _, schema, _, table] when schema != "" -> {schema, table}
+      [_, "", "", _, table] -> {nil, table}
+    end)
+    |> Enum.uniq()
+  end
+
+  defp choose_relations(explain_rels, sql_rels, sql) do
+    if should_use_sql_relations?(explain_rels, sql),
+      do: sql_rels,
+      else: explain_rels
+  end
+
+  defp should_use_sql_relations?(explain_rels, sql) do
+    Enum.empty?(explain_rels) or
+      Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
+      String.contains?(sql, "information_schema") or
+      String.contains?(sql, "performance_schema") or
+      String.contains?(sql, "mysql.") or
+      String.contains?(sql, "sys.")
+  end
+
   defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
     do: "varchar(#{char_len})"
 

@@ -38,13 +38,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   alias Lotus.Source.Adapters.Ecto.Dialects
   alias Lotus.SQL.Sanitizer
 
-  @dialects [
-    Dialects.Postgres,
-    Dialects.MySQL,
-    Dialects.SQLite3
-  ]
-
-  @impls Map.new(@dialects, &{&1.ecto_adapter(), &1})
+  @default_dialect Dialects.Default
 
   # ---------------------------------------------------------------------------
   # __using__ macro for external Ecto-backed adapters
@@ -249,15 +243,27 @@ defmodule Lotus.Source.Adapters.Ecto do
       iex> adapter = Lotus.Source.Adapters.Ecto.wrap("main", MyApp.Repo)
       %Lotus.Source.Adapter{name: "main", module: Lotus.Source.Adapters.Ecto, ...}
   """
+  @builtin_adapters [
+    Lotus.Source.Adapters.Postgres,
+    Lotus.Source.Adapters.MySQL,
+    Lotus.Source.Adapters.SQLite3
+  ]
+
   @impl true
   @spec wrap(String.t(), module()) :: Adapter.t()
   def wrap(name, repo_module) when is_binary(name) and is_atom(repo_module) do
-    %Adapter{
-      name: name,
-      module: __MODULE__,
-      state: repo_module,
-      source_type: detect_source_type(repo_module)
-    }
+    case Enum.find(@builtin_adapters, & &1.can_handle?(repo_module)) do
+      nil ->
+        %Adapter{
+          name: name,
+          module: __MODULE__,
+          state: repo_module,
+          source_type: detect_source_type(repo_module)
+        }
+
+      adapter_mod ->
+        adapter_mod.wrap(name, repo_module)
+    end
   end
 
   @doc """
@@ -269,8 +275,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   @impl true
   @spec can_handle?(term()) :: boolean()
   def can_handle?(repo) when is_atom(repo) do
-    function_exported?(repo, :__adapter__, 0) and
-      Map.has_key?(@impls, repo.__adapter__())
+    function_exported?(repo, :__adapter__, 0)
   end
 
   def can_handle?(_), do: false
@@ -299,12 +304,12 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def execute_query(repo, sql, params, opts) do
-    do_execute_query(impl_for(repo), repo, sql, params, opts)
+    do_execute_query(@default_dialect, repo, sql, params, opts)
   end
 
   @impl true
   def transaction(repo, fun, opts) do
-    impl_for(repo).execute_in_transaction(repo, fn -> fun.(repo) end, opts)
+    @default_dialect.execute_in_transaction(repo, fn -> fun.(repo) end, opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -313,7 +318,7 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def list_schemas(repo) do
-    {:ok, impl_for(repo).list_schemas(repo)}
+    {:ok, @default_dialect.list_schemas(repo)}
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -321,21 +326,21 @@ defmodule Lotus.Source.Adapters.Ecto do
   @impl true
   def list_tables(repo, schemas, opts) do
     include_views? = Keyword.get(opts, :include_views, false)
-    {:ok, impl_for(repo).list_tables(repo, schemas, include_views?)}
+    {:ok, @default_dialect.list_tables(repo, schemas, include_views?)}
   rescue
     e -> {:error, Exception.message(e)}
   end
 
   @impl true
   def get_table_schema(repo, schema, table) do
-    {:ok, impl_for(repo).get_table_schema(repo, schema, table)}
+    {:ok, @default_dialect.get_table_schema(repo, schema, table)}
   rescue
     e -> {:error, Exception.message(e)}
   end
 
   @impl true
   def resolve_table_schema(repo, table, schemas) do
-    {:ok, impl_for(repo).resolve_table_schema(repo, table, schemas)}
+    {:ok, @default_dialect.resolve_table_schema(repo, table, schemas)}
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -345,33 +350,33 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def quote_identifier(repo, identifier) do
-    impl_for(repo).quote_identifier(identifier)
+  def quote_identifier(_repo, identifier) do
+    @default_dialect.quote_identifier(identifier)
   end
 
   @impl true
-  def param_placeholder(repo, index, var, type) do
-    impl_for(repo).param_placeholder(index, var, type)
+  def param_placeholder(_repo, index, var, type) do
+    @default_dialect.param_placeholder(index, var, type)
   end
 
   @impl true
-  def limit_offset_placeholders(repo, limit_index, offset_index) do
-    impl_for(repo).limit_offset_placeholders(limit_index, offset_index)
+  def limit_offset_placeholders(_repo, limit_index, offset_index) do
+    @default_dialect.limit_offset_placeholders(limit_index, offset_index)
   end
 
   @impl true
-  def apply_filters(repo, sql, params, filters) do
-    impl_for(repo).apply_filters(sql, params, filters)
+  def apply_filters(_repo, sql, params, filters) do
+    @default_dialect.apply_filters(sql, params, filters)
   end
 
   @impl true
-  def apply_sorts(repo, sql, sorts) do
-    impl_for(repo).apply_sorts(sql, sorts)
+  def apply_sorts(_repo, sql, sorts) do
+    @default_dialect.apply_sorts(sql, sorts)
   end
 
   @impl true
   def explain_plan(repo, sql, params, opts) do
-    impl_for(repo).explain_plan(repo, sql, params, opts)
+    @default_dialect.explain_plan(repo, sql, params, opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -380,17 +385,17 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def builtin_denies(repo) do
-    impl_for(repo).builtin_denies(repo)
+    @default_dialect.builtin_denies(repo)
   end
 
   @impl true
   def builtin_schema_denies(repo) do
-    impl_for(repo).builtin_schema_denies(repo)
+    @default_dialect.builtin_schema_denies(repo)
   end
 
   @impl true
   def default_schemas(repo) do
-    impl_for(repo).default_schemas(repo)
+    @default_dialect.default_schemas(repo)
   end
 
   # ---------------------------------------------------------------------------
@@ -412,12 +417,12 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def format_error(_repo, error) do
-    impl_for_error(error).format_error(error)
+    @default_dialect.format_error(error)
   end
 
   @impl true
-  def handled_errors(repo) do
-    impl_for(repo).handled_errors()
+  def handled_errors(_repo) do
+    @default_dialect.handled_errors()
   end
 
   # ---------------------------------------------------------------------------
@@ -436,12 +441,12 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def extract_accessed_resources(repo, query, params, opts) do
-    do_extract_accessed_resources(__MODULE__, impl_for(repo), repo, query, params, opts)
+    do_extract_accessed_resources(__MODULE__, @default_dialect, repo, query, params, opts)
   end
 
   @impl true
   def apply_window(repo, query, params, window_opts) do
-    do_apply_window(__MODULE__, impl_for(repo), repo, query, params, window_opts)
+    do_apply_window(__MODULE__, @default_dialect, repo, query, params, window_opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -452,35 +457,29 @@ defmodule Lotus.Source.Adapters.Ecto do
   def source_type(repo), do: detect_source_type(repo)
 
   @impl true
-  def supports_feature?(repo, feature) do
-    impl = impl_for(repo)
-
-    if function_exported?(impl, :supports_feature?, 1),
-      do: impl.supports_feature?(feature),
+  def supports_feature?(_repo, feature) do
+    if function_exported?(@default_dialect, :supports_feature?, 1),
+      do: @default_dialect.supports_feature?(feature),
       else: false
   end
 
   @impl true
-  def query_language(repo), do: impl_for(repo).query_language()
+  def query_language(_repo), do: @default_dialect.query_language()
 
   @impl true
-  def limit_query(repo, statement, limit), do: impl_for(repo).limit_query(statement, limit)
+  def limit_query(_repo, statement, limit), do: @default_dialect.limit_query(statement, limit)
 
   @impl true
-  def hierarchy_label(repo) do
-    impl = impl_for(repo)
-
-    if function_exported?(impl, :hierarchy_label, 0),
-      do: impl.hierarchy_label(),
+  def hierarchy_label(_repo) do
+    if function_exported?(@default_dialect, :hierarchy_label, 0),
+      do: @default_dialect.hierarchy_label(),
       else: "Tables"
   end
 
   @impl true
-  def example_query(repo, table, schema) do
-    impl = impl_for(repo)
-
-    if function_exported?(impl, :example_query, 2),
-      do: impl.example_query(table, schema),
+  def example_query(_repo, table, schema) do
+    if function_exported?(@default_dialect, :example_query, 2),
+      do: @default_dialect.example_query(table, schema),
       else: "SELECT value_column FROM #{table}"
   end
 
@@ -504,13 +503,10 @@ defmodule Lotus.Source.Adapters.Ecto do
           {:ok, %{columns: cols, rows: rows} = raw} ->
             num_rows = Map.get(raw, :num_rows, length(rows || []))
 
-            result =
-              %{columns: cols, rows: rows, num_rows: num_rows}
-              |> maybe_put(:command, Map.get(raw, :command))
-              |> maybe_put(:connection_id, Map.get(raw, :connection_id))
-              |> maybe_put(:messages, Map.get(raw, :messages))
-
-            result
+            %{columns: cols, rows: rows, num_rows: num_rows}
+            |> maybe_put(:command, Map.get(raw, :command))
+            |> maybe_put(:connection_id, Map.get(raw, :connection_id))
+            |> maybe_put(:messages, Map.get(raw, :messages))
 
           {:error, err} ->
             repo.rollback(dialect.format_error(err))
@@ -546,16 +542,10 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @doc false
-  def do_extract_accessed_resources(adapter_mod, dialect, repo, query, params, opts) do
-    source_type = dialect.source_type()
-    search_path = Keyword.get(opts, :search_path)
-
-    case source_type do
-      :postgres -> extract_pg_resources(adapter_mod, repo, query, params, search_path)
-      :sqlite -> extract_sqlite_resources(adapter_mod, repo, query, params)
-      :mysql -> extract_mysql_resources(adapter_mod, repo, query, params)
-      _ -> :skip
-    end
+  def do_extract_accessed_resources(_adapter_mod, dialect, repo, query, params, opts) do
+    if function_exported?(dialect, :extract_accessed_resources, 4),
+      do: dialect.extract_accessed_resources(repo, query, params, opts),
+      else: :skip
   end
 
   @doc false
@@ -602,23 +592,6 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
-
-  defp impl_for(repo) do
-    source_mod = repo.__adapter__()
-    Map.get(@impls, source_mod, Dialects.Default)
-  end
-
-  defp impl_for_error(%{__exception__: true, __struct__: exc_mod}) do
-    Enum.find_value(
-      Map.values(@impls) ++ [Dialects.Default],
-      Dialects.Default,
-      fn impl ->
-        if exc_mod in impl.handled_errors(), do: impl, else: false
-      end
-    )
-  end
-
-  defp impl_for_error(_), do: Dialects.Default
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
@@ -729,180 +702,11 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   # ---------------------------------------------------------------------------
-  # Resource extraction helpers
+  # SQL parsing utilities (shared by dialect extract_accessed_resources impls)
   # ---------------------------------------------------------------------------
 
-  defp extract_pg_resources(adapter_mod, repo, sql, params, search_path) do
-    explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
-    opts = if search_path, do: [search_path: search_path], else: []
-
-    case adapter_mod.execute_query(repo, explain, params, opts) do
-      {:ok, %{rows: [[json]]}} ->
-        relations =
-          json
-          |> parse_pg_explain_plan()
-          |> collect_pg_relations(MapSet.new())
-
-        {:ok, relations}
-
-      {:error, e} ->
-        {:error, e}
-    end
-  end
-
-  defp parse_pg_explain_plan(json) do
-    plan_data =
-      case json do
-        binary when is_binary(binary) -> Lotus.JSON.decode!(binary)
-        data when is_list(data) or is_map(data) -> data
-      end
-
-    case plan_data do
-      [first | _] -> Map.fetch!(first, "Plan")
-      %{"Plan" => plan} -> plan
-    end
-  end
-
-  defp collect_pg_relations(%{"Plans" => plans} = node, acc) do
-    Enum.reduce(plans, collect_pg_here(node, acc), &collect_pg_relations/2)
-  end
-
-  defp collect_pg_relations(node, acc), do: collect_pg_here(node, acc)
-
-  defp collect_pg_here(node, acc) do
-    case {node["Schema"], node["Relation Name"]} do
-      {schema, rel} when is_binary(schema) and is_binary(rel) ->
-        MapSet.put(acc, {schema, rel})
-
-      _ ->
-        acc
-    end
-  end
-
-  defp extract_sqlite_resources(adapter_mod, repo, sql, params) do
-    alias_map = parse_alias_map(sql)
-
-    explain = "EXPLAIN QUERY PLAN " <> sql
-
-    case adapter_mod.execute_query(repo, explain, params, []) do
-      {:ok, %{rows: rows}} ->
-        relations =
-          rows
-          |> Enum.map(fn row -> Enum.join(row, " ") end)
-          |> Enum.flat_map(&extract_sqlite_relations/1)
-          |> Enum.map(&resolve_alias(&1, alias_map))
-          |> Enum.reject(&is_nil/1)
-          |> Enum.map(&{nil, &1})
-          |> MapSet.new()
-
-        {:ok, relations}
-
-      {:error, e} ->
-        {:error, e}
-    end
-  end
-
-  defp extract_mysql_resources(adapter_mod, repo, sql, params) do
-    alias_map = parse_alias_map(sql)
-
-    explain = "EXPLAIN FORMAT=JSON " <> sql
-
-    case adapter_mod.execute_query(repo, explain, params, []) do
-      {:ok, %{rows: [[json]]}} ->
-        explain_rels =
-          json
-          |> Lotus.JSON.decode!()
-          |> collect_mysql_relations(MapSet.new())
-          |> MapSet.to_list()
-          |> Enum.map(fn {schema, table_name} ->
-            {schema, resolve_alias(table_name, alias_map)}
-          end)
-          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
-
-        sql_rels = extract_mysql_tables_from_sql(sql)
-        relations = choose_mysql_relations(explain_rels, sql_rels, sql) |> MapSet.new()
-
-        {:ok, relations}
-
-      {:error, e} ->
-        {:error, e}
-    end
-  end
-
-  defp collect_mysql_relations(%{"query_block" => query_block}, acc) do
-    collect_mysql_query_block(query_block, acc)
-  end
-
-  defp collect_mysql_relations(data, acc) when is_list(data) do
-    Enum.reduce(data, acc, &collect_mysql_relations/2)
-  end
-
-  defp collect_mysql_relations(data, acc) when is_map(data) do
-    case Map.get(data, "query_block") do
-      nil -> acc
-      query_block -> collect_mysql_query_block(query_block, acc)
-    end
-  end
-
-  defp collect_mysql_relations(_, acc), do: acc
-
-  defp collect_mysql_query_block(%{"table" => table_info}, acc) when is_map(table_info) do
-    case Map.get(table_info, "table_name") do
-      table_name when is_binary(table_name) ->
-        schema = Map.get(table_info, "schema")
-        MapSet.put(acc, {schema, table_name})
-
-      _ ->
-        acc
-    end
-  end
-
-  defp collect_mysql_query_block(%{"nested_loop" => nested_loop}, acc)
-       when is_list(nested_loop) do
-    Enum.reduce(nested_loop, acc, fn item, acc_inner ->
-      collect_mysql_query_block(item, acc_inner)
-    end)
-  end
-
-  defp collect_mysql_query_block(data, acc) when is_map(data) do
-    data
-    |> Enum.reduce(acc, fn {_key, value}, acc_inner ->
-      collect_mysql_relations(value, acc_inner)
-    end)
-  end
-
-  defp collect_mysql_query_block(_, acc), do: acc
-
-  defp extract_mysql_tables_from_sql(sql) do
-    table_regex =
-      ~r/(?:FROM|JOIN)\s+(?:(`?)([a-zA-Z_][a-zA-Z0-9_]*)\1\.)?(`?)([a-zA-Z_][a-zA-Z0-9_]*)\3(?:\s+(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)?/i
-
-    Regex.scan(table_regex, sql)
-    |> Enum.map(fn
-      [_, _, schema, _, table] when schema != "" -> {schema, table}
-      [_, "", "", _, table] -> {nil, table}
-    end)
-    |> Enum.uniq()
-  end
-
-  defp choose_mysql_relations(explain_rels, sql_rels, sql) do
-    if should_use_sql_relations?(explain_rels, sql) do
-      sql_rels
-    else
-      explain_rels
-    end
-  end
-
-  defp should_use_sql_relations?(explain_rels, sql) do
-    Enum.empty?(explain_rels) or
-      Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
-      String.contains?(sql, "information_schema") or
-      String.contains?(sql, "performance_schema") or
-      String.contains?(sql, "mysql.") or
-      String.contains?(sql, "sys.")
-  end
-
-  defp parse_alias_map(sql) do
+  @doc false
+  def parse_alias_map(sql) do
     s = strip_sql_comments(sql)
 
     rx_from = ~r/\bFROM\s+("?[A-Za-z0-9_]+"?)\s+(?:AS\s+)?("?[A-Za-z0-9_]+"?)/i
@@ -921,46 +725,20 @@ defmodule Lotus.Source.Adapters.Ecto do
     end)
   end
 
-  defp strip_sql_comments(s) do
+  @doc false
+  def strip_sql_comments(s) do
     s
     |> String.replace(~r/--.*$/m, "")
     |> String.replace(~r/\/\*[\s\S]*?\*\//, "")
   end
 
-  defp normalize_ident(<<"\"", rest::binary>>) do
+  @doc false
+  def normalize_ident(<<"\"", rest::binary>>) do
     rest |> String.trim_trailing(~s|"|) |> String.replace(~s|""|, ~s|"|)
   end
 
-  defp normalize_ident(s), do: s
+  def normalize_ident(s), do: s
 
-  defp resolve_alias(name, alias_map), do: Map.get(alias_map, name, name)
-
-  defp extract_sqlite_relations(text) do
-    cond do
-      Regex.match?(
-        ~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)\s+AS\s+("[^"]+"|[A-Za-z0-9_]+)/,
-        text
-      ) ->
-        for [_, base, _alias] <-
-              Regex.scan(
-                ~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)\s+AS\s+("[^"]+"|[A-Za-z0-9_]+)/,
-                text
-              ) do
-          normalize_ident(base)
-        end
-
-      Regex.match?(~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)/, text) ->
-        for [_, base] <- Regex.scan(~r/\b(?:SCAN|SEARCH)\s+TABLE\s+("[^"]+"|[A-Za-z0-9_]+)/, text) do
-          normalize_ident(base)
-        end
-
-      Regex.match?(~r/\b(?:SCAN|SEARCH)\s+("[^"]+"|[A-Za-z0-9_]+)/, text) ->
-        for [_, name] <- Regex.scan(~r/\b(?:SCAN|SEARCH)\s+("[^"]+"|[A-Za-z0-9_]+)/, text) do
-          normalize_ident(name)
-        end
-
-      true ->
-        []
-    end
-  end
+  @doc false
+  def resolve_alias(name, alias_map), do: Map.get(alias_map, name, name)
 end
