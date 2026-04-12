@@ -468,4 +468,73 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
     do: "decimal(#{num_prec})"
 
   defp format_mysql_type(type, _, _, _), do: type
+
+  @impl true
+  def transform_sql(sql) do
+    Lotus.SQL.Transformer.transform(sql, :mysql)
+  end
+
+  @impl true
+  def db_type_to_lotus_type(db_type) do
+    case String.downcase(db_type) do
+      # UUID storage formats in MySQL
+      "char(36)" ->
+        :uuid
+
+      "char(32)" ->
+        :uuid
+
+      "binary(16)" ->
+        :uuid
+
+      # Integer types
+      "int" <> _ ->
+        :integer
+
+      "bigint" <> _ ->
+        :integer
+
+      "smallint" <> _ ->
+        :integer
+
+      # MySQL boolean is tinyint(1)
+      "tinyint(1)" ->
+        :boolean
+
+      "tinyint" <> _ ->
+        :integer
+
+      # Decimal/numeric types
+      "decimal" <> _ ->
+        :decimal
+
+      "numeric" <> _ ->
+        :decimal
+
+      # Float types
+      "float" <> _ ->
+        :float
+
+      "double" <> _ ->
+        :float
+
+      # Date/time types
+      "date" ->
+        :date
+
+      "datetime" <> _ ->
+        :datetime
+
+      "timestamp" <> _ ->
+        :datetime
+
+      # JSON
+      "json" ->
+        :json
+
+      # Default to text
+      _ ->
+        :text
+    end
+  end
 end

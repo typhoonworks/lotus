@@ -219,6 +219,22 @@ defmodule Lotus.Source.Adapters.Ecto do
           else: "SELECT value_column FROM #{table}"
       end
 
+      # -- SQL Transformation & Type Mapping --
+
+      @impl true
+      def transform_sql(_repo, sql) do
+        if function_exported?(@dialect, :transform_sql, 1),
+          do: @dialect.transform_sql(sql),
+          else: sql
+      end
+
+      @impl true
+      def db_type_to_lotus_type(_repo, db_type) do
+        if function_exported?(@dialect, :db_type_to_lotus_type, 1),
+          do: @dialect.db_type_to_lotus_type(db_type),
+          else: :text
+      end
+
       defoverridable Lotus.Source.Adapter
     end
   end

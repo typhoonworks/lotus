@@ -369,4 +369,94 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
     do: "numeric(#{num_prec})"
 
   defp format_postgres_type(type, _, _, _), do: type
+
+  @impl true
+  def transform_sql(sql) do
+    Lotus.SQL.Transformer.transform(sql, :postgres)
+  end
+
+  @impl true
+  def db_type_to_lotus_type(db_type) when is_binary(db_type) do
+    lowercased = String.downcase(db_type)
+
+    cond do
+      # Array types end with []
+      String.ends_with?(lowercased, "[]") ->
+        base_type = String.replace_suffix(lowercased, "[]", "")
+        {:array, db_type_to_lotus_type(base_type)}
+
+      # USER-DEFINED types (enums)
+      lowercased == "user-defined" ->
+        :enum
+
+      # Standard types
+      true ->
+        case lowercased do
+          "uuid" ->
+            :uuid
+
+          # Integer types
+          "integer" ->
+            :integer
+
+          "bigint" ->
+            :integer
+
+          "smallint" ->
+            :integer
+
+          "serial" ->
+            :integer
+
+          "bigserial" ->
+            :integer
+
+          # Decimal/numeric types
+          "numeric" <> _ ->
+            :decimal
+
+          "decimal" <> _ ->
+            :decimal
+
+          # Float types
+          "real" ->
+            :float
+
+          "double precision" ->
+            :float
+
+          # Boolean
+          "boolean" ->
+            :boolean
+
+          # Date/time types
+          "date" ->
+            :date
+
+          "timestamp" <> _ ->
+            :datetime
+
+          "timestamptz" <> _ ->
+            :datetime
+
+          "time" <> _ ->
+            :time
+
+          # JSON types
+          "json" ->
+            :json
+
+          "jsonb" ->
+            :json
+
+          # Binary
+          "bytea" ->
+            :binary
+
+          # Default to text
+          _ ->
+            :text
+        end
+    end
+  end
 end

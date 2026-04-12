@@ -286,4 +286,37 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
         []
     end
   end
+
+  @impl true
+  def transform_sql(sql) do
+    Lotus.SQL.Transformer.transform(sql, :sqlite)
+  end
+
+  @impl true
+  def db_type_to_lotus_type(db_type) do
+    # SQLite has dynamic typing but uses "type affinity"
+    case String.upcase(db_type) do
+      "INTEGER" ->
+        :integer
+
+      "REAL" ->
+        :float
+
+      "NUMERIC" ->
+        :decimal
+
+      "DATE" ->
+        :date
+
+      "DATETIME" ->
+        :datetime
+
+      "BLOB" ->
+        :binary
+
+      # SQLite stores UUIDs as TEXT (no native UUID type)
+      _ ->
+        :text
+    end
+  end
 end

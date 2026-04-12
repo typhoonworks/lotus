@@ -261,6 +261,16 @@ defmodule Lotus.Source.Adapter do
   @doc "Wrap a raw data source entry into an `%Adapter{}` struct."
   @callback wrap(name :: String.t(), term()) :: t()
 
+  # ---------------------------------------------------------------------------
+  # Callbacks — SQL Transformation & Type Mapping
+  # ---------------------------------------------------------------------------
+
+  @doc "Transform SQL for dialect-specific syntax before variable substitution."
+  @callback transform_sql(state :: term(), sql :: String.t()) :: String.t()
+
+  @doc "Map a database column type string to a Lotus internal type atom."
+  @callback db_type_to_lotus_type(state :: term(), db_type :: String.t()) :: atom()
+
   @optional_callbacks [
     sanitize_query: 3,
     transform_query: 4,
@@ -271,7 +281,9 @@ defmodule Lotus.Source.Adapter do
     hierarchy_label: 1,
     example_query: 3,
     can_handle?: 1,
-    wrap: 2
+    wrap: 2,
+    transform_sql: 2,
+    db_type_to_lotus_type: 2
   ]
 
   # ---------------------------------------------------------------------------
@@ -480,5 +492,21 @@ defmodule Lotus.Source.Adapter do
     if function_exported?(mod, :example_query, 3),
       do: mod.example_query(state, table, schema),
       else: "SELECT value_column FROM #{table}"
+  end
+
+  @doc "Transform SQL for dialect-specific syntax via the adapter. Returns SQL unchanged if not implemented."
+  @spec transform_sql(t(), String.t()) :: String.t()
+  def transform_sql(%__MODULE__{module: mod, state: state}, sql) do
+    if function_exported?(mod, :transform_sql, 2),
+      do: mod.transform_sql(state, sql),
+      else: sql
+  end
+
+  @doc "Map a database type to a Lotus type via the adapter. Returns `:text` if not implemented."
+  @spec db_type_to_lotus_type(t(), String.t()) :: atom()
+  def db_type_to_lotus_type(%__MODULE__{module: mod, state: state}, db_type) do
+    if function_exported?(mod, :db_type_to_lotus_type, 2),
+      do: mod.db_type_to_lotus_type(state, db_type),
+      else: :text
   end
 end

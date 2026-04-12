@@ -117,10 +117,36 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
             ) ::
               {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
 
+  # ---------------------------------------------------------------------------
+  # Optional callbacks — SQL transformation & type mapping
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Transform SQL query for dialect-specific syntax before variable substitution.
+
+  Used for dialect-specific rewrites like INTERVAL syntax, CONCAT vs ||, etc.
+  Return the transformed SQL string.
+
+  Default (when not implemented): returns SQL unchanged.
+  """
+  @callback transform_sql(sql :: String.t()) :: String.t()
+
+  @doc """
+  Map a database-specific column type string to a Lotus internal type atom.
+
+  Each dialect knows its own type system (e.g. Postgres `uuid`, MySQL `char(36)`,
+  SQLite `INTEGER`).
+
+  Default (when not implemented): `:text`.
+  """
+  @callback db_type_to_lotus_type(db_type :: String.t()) :: atom()
+
   @optional_callbacks [
     supports_feature?: 1,
     hierarchy_label: 0,
     example_query: 2,
-    extract_accessed_resources: 4
+    extract_accessed_resources: 4,
+    transform_sql: 1,
+    db_type_to_lotus_type: 1
   ]
 end
