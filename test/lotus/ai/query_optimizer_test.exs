@@ -10,7 +10,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
       Mimic.copy(Lotus.Source)
       Mimic.copy(Lotus.Config)
 
-      stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
+      stub(Lotus.Source, :source_type, fn _ -> :postgres end)
 
       stub(Lotus.Config, :get_data_source!, fn "postgres" -> Lotus.Test.Repo end)
 

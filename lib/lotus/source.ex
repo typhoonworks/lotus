@@ -1,500 +1,236 @@
 defmodule Lotus.Source do
   @moduledoc """
-  Source behavior for database-specific operations.
+  Public facade for data sources in Lotus.
 
-  Defines the interface that each database source adapter's operations module must implement.
+  Provides convenience functions for resolving, listing, and querying data
+  sources. All functions accept `%Adapter{}` structs, source name strings,
+  or raw repo modules, resolving lazily as needed.
   """
 
+  alias Lotus.Config
   alias Lotus.Source.Adapter
+  alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
-  @type source_module :: Ecto.Repo.t()
-
-  @typep repo :: source_module()
-
-  @callback execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
-  @callback set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
-  @callback set_search_path(repo, String.t()) :: :ok | no_return()
-  @callback format_error(any()) :: String.t()
+  # ---------------------------------------------------------------------------
+  # Resolution
+  # ---------------------------------------------------------------------------
 
   @doc """
-  Quotes an identifier (column name, table name) using source-specific syntax.
+  Resolve to an `%Adapter{}` struct.
 
-  Examples:
-    * PostgreSQL → `"column_name"`
-    * MySQL      → `` `column_name` ``
-    * SQLite     → `"column_name"`
+  Accepts:
+    * `source_opt` — configured name (string) or source module (atom) or nil
+    * `q_source`   — query's stored source (string or module) or nil
+
+  Falls back to the default source. Raises on resolution failure.
   """
-  @callback quote_identifier(String.t()) :: String.t()
+  @spec resolve!(nil | String.t() | module(), nil | String.t() | module()) :: Adapter.t()
+  def resolve!(source_opt, q_source) do
+    case resolver().resolve(source_opt, q_source) do
+      {:ok, %Adapter{} = adapter} ->
+        adapter
 
-  @doc """
-  Applies a list of filters to an existing query using parameterized queries.
+      {:error, :not_found} ->
+        available = resolver().list_source_names()
+        label = source_opt || q_source
 
-  For SQL sources, this typically wraps the original query in a CTE and appends
-  WHERE clauses with parameter placeholders. Non-SQL sources may implement
-  entirely different strategies.
-
-  Returns `{sql, params}` unchanged when filters is empty.
-  """
-  @callback apply_filters(
-              sql :: String.t(),
-              params :: list(),
-              filters :: [Lotus.Query.Filter.t()]
-            ) ::
-              {String.t(), list()}
-
-  @doc """
-  Applies a list of sorts to an existing query, returning a new query string.
-
-  For SQL sources, this appends an ORDER BY clause. Applied after filters
-  so the ORDER BY operates on the filtered result set.
-
-  Returns the original query unchanged when sorts is empty.
-  """
-  @callback apply_sorts(sql :: String.t(), sorts :: [Lotus.Query.Sort.t()]) :: String.t()
-
-  @doc """
-  Return the list of built-in deny rules for system tables and metadata relations
-  that should be hidden from the schema browser for this source.
-
-  Each rule is a `{schema_pattern, table_pattern}` tuple where patterns can be
-  exact strings or regexes. Example rules:
-
-    * `{"pg_catalog", ~r/.*/}` → deny all tables in Postgres `pg_catalog`
-    * `{nil, ~r/^sqlite_/}`   → deny all tables starting with `sqlite_` in SQLite
-    * `{"public", "schema_migrations"}` → deny migrations table in Postgres
-  """
-  @callback builtin_denies(repo) ::
-              [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
-
-  @doc """
-  Return the list of built-in schema denies that should be hidden from schema listing.
-
-  Returns a list of schema patterns (strings or regexes) that should be denied.
-
-  Examples:
-    * PostgreSQL: `["pg_catalog", "information_schema", ~r/^pg_temp/]`
-    * MySQL: `["mysql", "information_schema", "performance_schema", "sys"]`
-    * SQLite: `[]` (no schemas)
-  """
-  @callback builtin_schema_denies(repo) :: [String.t() | Regex.t()]
-
-  @doc """
-  Return the default schemas for this source when no schema options are provided.
-
-  Each database source defines its own appropriate default:
-    * PostgreSQL → `["public"]`
-    * MySQL      → `[database_name]` (uses database name as schema)
-    * SQLite     → `[]` (schema-less)
-  """
-  @callback default_schemas(repo) :: [String.t()]
-
-  @doc """
-  Return the SQL parameter placeholder string for a variable at a given index.
-
-  The placeholder may include database-specific type casting based on the variable type.
-
-  Examples of source-specific output:
-    * Postgres → `"$1"` (untyped), `"$1::integer"` (typed)
-    * MySQL    → `"?"` (untyped), `"CAST(? AS SIGNED)"` (typed)
-    * SQLite   → `"?"` (always untyped)
-
-  Supported types for casting: `:date`, `:datetime`, `:time`, `:number`, `:integer`, `:boolean`, `:json`
-  """
-  @callback param_placeholder(index :: pos_integer(), var :: String.t(), type :: atom() | nil) ::
-              String.t()
-
-  @doc """
-  Return the SQL parameter placeholders for LIMIT and OFFSET clauses.
-
-  Some databases (like MySQL) don't support typed placeholders for LIMIT/OFFSET,
-  while others (like PostgreSQL) do.
-
-  Returns a tuple of {limit_placeholder, offset_placeholder}.
-
-  Examples:
-    * Postgres → `{"$1", "$2"}`
-    * MySQL    → `{"?", "?"}`
-    * SQLite   → `{"?", "?"}`
-  """
-  @callback limit_offset_placeholders(
-              limit_index :: pos_integer(),
-              offset_index :: pos_integer()
-            ) ::
-              {limit_placeholder :: String.t(), offset_placeholder :: String.t()}
-
-  @doc """
-  Retrieve the execution plan for a SQL query.
-
-  Uses the database-specific EXPLAIN syntax to return the query plan
-  as a string suitable for analysis.
-
-  Examples of source-specific behavior:
-    * Postgres → `EXPLAIN (FORMAT JSON) <sql>`
-    * MySQL    → `EXPLAIN FORMAT=JSON <sql>`
-    * SQLite   → `EXPLAIN QUERY PLAN <sql>`
-
-  Options:
-    * `:search_path` — PostgreSQL search path (optional)
-  """
-  @callback explain_plan(repo, sql :: String.t(), params :: list(), opts :: keyword()) ::
-              {:ok, String.t()} | {:error, term()}
-
-  @doc """
-  List the exception modules that this source formats specially in `format_error/1`.
-  """
-  @callback handled_errors() :: [module()]
-
-  @doc """
-  Return the query language identifier for this source.
-
-  Examples:
-    * PostgreSQL → `"sql:postgres"`
-    * MySQL      → `"sql:mysql"`
-    * SQLite     → `"sql:sqlite"`
-  """
-  @callback query_language() :: String.t()
-
-  @doc """
-  Wrap a statement with a limit clause using source-specific syntax.
-
-  Used for preview queries where only a limited result set is needed.
-  """
-  @callback limit_query(statement :: String.t(), limit :: pos_integer()) :: String.t()
-
-  @doc """
-  Whether this source supports a given feature.
-
-  Examples of features: `:schema_hierarchy`, `:search_path`, `:arrays`, `:json`.
-  """
-  @callback supports_feature?(feature :: atom()) :: boolean()
-
-  @doc """
-  Return the human-readable label for the top-level hierarchy in this source.
-
-  Examples:
-    * PostgreSQL/MySQL → `"Tables"`
-    * Elasticsearch    → `"Indices"`
-    * MongoDB          → `"Collections"`
-  """
-  @callback hierarchy_label() :: String.t()
-
-  @doc """
-  Return an example query string suitable for placeholder text in the query editor.
-
-  The example should demonstrate the basic query syntax for this source.
-
-  ## Parameters
-    * `table` — an example table name to use in the query
-    * `schema` — an optional schema name (nil for schema-less sources)
-  """
-  @callback example_query(table :: String.t(), schema :: String.t() | nil) :: String.t()
-
-  @doc """
-  Lists all schemas in the given repository.
-
-  Returns a list of schema names. For databases without schema support
-  (like SQLite), returns an empty list.
-
-  ## Return format
-  - PostgreSQL/MySQL: `["public", "reporting", "analytics", ...]`
-  - SQLite: `[]`
-  """
-  @callback list_schemas(repo) :: [String.t()]
-
-  @doc """
-  Lists all tables in the given repository for the specified schemas.
-
-  Returns a list of {schema, table} tuples. For databases without schema support
-  (like SQLite), schema will always be nil.
-
-  ## Return format
-  - PostgreSQL/MySQL: `[{"public", "users"}, {"reporting", "orders"}, ...]`
-  - SQLite: `[{nil, "users"}, {nil, "orders"}, ...]`
-
-  Options:
-  - `:include_views` - Include views in results (default: false)
-  """
-  @callback list_tables(repo, schemas :: [String.t()], include_views? :: boolean()) ::
-              [{schema :: String.t() | nil, table :: String.t()}]
-
-  @doc """
-  Gets the schema information for a specific table.
-
-  Returns a list of column definitions. Each column is a map with exactly these keys:
-  - `:name` - Column name (String.t())
-  - `:type` - SQL type as string (e.g., "varchar(255)", "integer", "text")
-  - `:nullable` - Whether column allows NULL (boolean)
-  - `:default` - Default value as string or nil
-  - `:primary_key` - Whether column is part of primary key (boolean)
-
-  ## Example return value
-  ```elixir
-  [
-    %{
-      name: "id",
-      type: "integer",
-      nullable: false,
-      default: nil,
-      primary_key: true
-    },
-    %{
-      name: "email",
-      type: "varchar(255)",
-      nullable: false,
-      default: nil,
-      primary_key: false
-    }
-  ]
-  ```
-  """
-  @callback get_table_schema(repo, schema :: String.t() | nil, table :: String.t()) ::
-              [
-                %{
-                  name: String.t(),
-                  type: String.t(),
-                  nullable: boolean(),
-                  default: String.t() | nil,
-                  primary_key: boolean()
-                }
-              ]
-
-  @doc """
-  Resolves which schema contains a table given a list of schemas to search.
-
-  Returns the schema name if found, nil otherwise. For databases without schema
-  support (SQLite), this should always return nil.
-
-  The search should respect the order of schemas provided (first match wins).
-  """
-  @callback resolve_table_schema(repo, table :: String.t(), schemas :: [String.t()]) ::
-              String.t() | nil
-
-  @optional_callbacks [
-    supports_feature?: 1,
-    hierarchy_label: 0,
-    example_query: 2
-  ]
-
-  @impls %{
-    Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
-    Ecto.Adapters.SQLite3 => Lotus.Sources.SQLite3,
-    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL
-  }
-
-  @doc """
-  Executes a function within a transaction with source-specific session management.
-
-  The source handles:
-  - Starting a transaction with appropriate timeout
-  - Setting read-only mode, statement timeout, and search path if specified in opts
-  - Running the provided function
-  - Properly cleaning up session state (important for MySQL/SQLite session persistence)
-
-  Options:
-  - `:read_only` - whether to run in read-only mode (default: true)
-  - `:statement_timeout_ms` - statement timeout in milliseconds (default: 5000)
-  - `:timeout` - transaction timeout in milliseconds (default: 15000)
-  - `:search_path` - PostgreSQL search path (optional)
-  """
-  @spec execute_in_transaction(repo, (-> any()), keyword()) :: {:ok, any()} | {:error, any()}
-  def execute_in_transaction(repo, fun, opts \\ []) do
-    impl_for(repo).execute_in_transaction(repo, fun, opts)
+        raise ArgumentError,
+              "Data source '#{label}' not configured. " <>
+                "Available sources: #{inspect(available)}"
+    end
   end
 
   @doc """
-  Sets the **statement timeout** (in milliseconds) for the given repository,
-  if supported by the underlying source.
+  Lists all configured source adapters.
   """
-  @spec set_statement_timeout(repo, non_neg_integer()) :: :ok | no_return()
-  def set_statement_timeout(repo, ms), do: impl_for(repo).set_statement_timeout(repo, ms)
+  @spec list_sources() :: [Adapter.t()]
+  def list_sources, do: resolver().list_sources()
 
   @doc """
-  Sets the **search path** (schema list) for the given repository,
-  if supported by the underlying source.
-
-  On unsupported sources this is a no-op.
+  Gets a source adapter by name. Raises if not found.
   """
-  @spec set_search_path(repo, String.t()) :: :ok | no_return()
+  @spec get_source!(String.t()) :: Adapter.t()
+  def get_source!(name), do: resolver().get_source!(name)
+
+  @doc """
+  Returns the default source as an `%Adapter{}` struct.
+  """
+  @spec default_source() :: Adapter.t()
+  def default_source do
+    {_name, adapter} = resolver().default_source()
+    adapter
+  end
+
+  @doc false
+  @spec name_from_module!(module()) :: String.t()
+  def name_from_module!(mod) do
+    case Enum.find(Config.data_sources(), fn {_name, m} -> m == mod end) do
+      {name, _} ->
+        name
+
+      nil ->
+        raise ArgumentError,
+              "Source module #{inspect(mod)} isn't in :lotus, :data_sources. " <>
+                "Configured names: #{inspect(Map.keys(Config.data_sources()))}"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Source identity
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Detect the source type from an adapter, repository module, or name.
+  """
+  @spec source_type(Adapter.t() | module() | String.t()) ::
+          :postgres | :mysql | :sqlite | :other
+  def source_type(%Adapter{source_type: st}), do: st
+
+  def source_type(repo_name) when is_binary(repo_name) do
+    repo = Config.get_data_source!(repo_name)
+    source_type(repo)
+  end
+
+  def source_type(repo) when is_atom(repo) do
+    EctoAdapter.detect_source_type(repo)
+  end
+
+  @doc """
+  Whether a source supports a specific feature.
+
+  Accepts an `%Adapter{}` struct (delegates to the adapter callback) or
+  a source type atom (uses hardcoded fallback for backward compatibility).
+  """
+  @spec supports_feature?(Adapter.t() | atom(), atom()) :: boolean()
+  def supports_feature?(%Adapter{} = adapter, feature) do
+    Adapter.supports_feature?(adapter, feature)
+  end
+
+  def supports_feature?(:postgres, :schema_hierarchy), do: true
+  def supports_feature?(:postgres, :search_path), do: true
+  def supports_feature?(:postgres, :make_interval), do: true
+  def supports_feature?(:postgres, :arrays), do: true
+  def supports_feature?(:postgres, :json), do: true
+  def supports_feature?(:mysql, :schema_hierarchy), do: false
+  def supports_feature?(:mysql, :search_path), do: false
+  def supports_feature?(:mysql, :make_interval), do: false
+  def supports_feature?(:mysql, :arrays), do: false
+  def supports_feature?(:mysql, :json), do: true
+  def supports_feature?(:sqlite, :schema_hierarchy), do: false
+  def supports_feature?(:sqlite, :search_path), do: false
+  def supports_feature?(:sqlite, :make_interval), do: false
+  def supports_feature?(:sqlite, :arrays), do: false
+  def supports_feature?(:sqlite, :json), do: true
+  def supports_feature?(_, _), do: false
+
+  @doc """
+  Return the human-readable label for the top-level hierarchy in a source.
+  """
+  @spec hierarchy_label(Adapter.t() | String.t()) :: String.t()
+  def hierarchy_label(%Adapter{} = adapter), do: Adapter.hierarchy_label(adapter)
+
+  def hierarchy_label(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.hierarchy_label()
+  end
+
+  @doc """
+  Return an example query string suitable for placeholder text.
+  """
+  @spec example_query(Adapter.t() | String.t(), String.t(), String.t() | nil) :: String.t()
+  def example_query(%Adapter{} = adapter, table, schema),
+    do: Adapter.example_query(adapter, table, schema)
+
+  def example_query(source_name, table, schema) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.example_query(table, schema)
+  end
+
+  @doc """
+  Return the query language identifier for a source.
+  """
+  @spec query_language(Adapter.t() | String.t()) :: String.t()
+  def query_language(%Adapter{} = adapter), do: Adapter.query_language(adapter)
+
+  def query_language(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.query_language()
+  end
+
+  @doc """
+  Wrap a statement with a limit clause using the source's syntax.
+  """
+  @spec limit_query(Adapter.t() | String.t(), String.t(), pos_integer()) :: String.t()
+  def limit_query(%Adapter{} = adapter, statement, limit),
+    do: Adapter.limit_query(adapter, statement, limit)
+
+  def limit_query(source_name, statement, limit) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.limit_query(statement, limit)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Deprecated dispatch functions (to be removed once all callers migrate)
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  def execute_in_transaction(repo, fun, opts \\ []) do
+    dialect_for(repo).execute_in_transaction(repo, fun, opts)
+  end
+
+  @doc false
+  def set_statement_timeout(repo, ms), do: dialect_for(repo).set_statement_timeout(repo, ms)
+
+  @doc false
   def set_search_path(repo, path) when is_binary(path),
-    do: impl_for(repo).set_search_path(repo, path)
+    do: dialect_for(repo).set_search_path(repo, path)
 
   def set_search_path(_, _), do: :ok
 
-  @doc """
-  Returns the list of built-in deny rules for system tables and metadata relations.
+  @doc false
+  def builtin_denies(repo), do: dialect_for(repo).builtin_denies(repo)
 
-  These rules are used by the visibility module to filter out system tables.
-  """
-  @spec builtin_denies(repo) :: [{String.t() | nil | Regex.t(), String.t() | Regex.t()}]
-  def builtin_denies(repo), do: impl_for(repo).builtin_denies(repo)
+  @doc false
+  def builtin_schema_denies(repo), do: dialect_for(repo).builtin_schema_denies(repo)
 
-  @doc """
-  Returns the list of built-in schema denies that should be hidden from schema listing.
+  @doc false
+  def default_schemas(repo), do: dialect_for(repo).default_schemas(repo)
 
-  These rules are used by the visibility module to filter out system schemas.
-  """
-  @spec builtin_schema_denies(repo) :: [String.t() | Regex.t()]
-  def builtin_schema_denies(repo), do: impl_for(repo).builtin_schema_denies(repo)
+  @doc false
+  def format_error(error), do: dialect_for_error(error).format_error(error)
 
-  @doc """
-  Returns the default schemas for the given repository's source.
-
-  Each database source defines its own appropriate default:
-    * PostgreSQL → `["public"]`
-    * MySQL      → `[database_name]` (uses database name as schema)
-    * SQLite     → `[]` (schema-less)
-  """
-  def default_schemas(repo), do: impl_for(repo).default_schemas(repo)
-
-  @doc """
-  Formats a database error into a consistent, human-readable string.
-
-  Dispatches to the correct source if the error type is recognized,
-  otherwise falls back to the default implementation.
-  """
-  @spec format_error(any()) :: String.t()
-  def format_error(error), do: impl_for_error(error).format_error(error)
-
-  @doc """
-  Returns the source-specific **SQL parameter placeholder** to substitute
-  for `{{var}}` occurrences.
-
-  - `repo_or_name` can be the Repo module or a data-repo name string.
-  - `index` is 1-based (for drivers like Postgres that need `$1`, `$2`, …).
-  - `var` and `type` are available to sources if they need special handling.
-
-  Falls back to the configured default data repo when `nil` is given.
-  """
-  @spec param_placeholder(repo | String.t() | nil, pos_integer(), String.t(), atom() | nil) ::
-          String.t()
+  @doc false
   def param_placeholder(repo_or_name, index, var, type) when is_integer(index) and index > 0 do
-    impl_for(resolve_source!(repo_or_name)).param_placeholder(index, var, type)
+    dialect_for(resolve_repo!(repo_or_name)).param_placeholder(index, var, type)
   end
 
-  @doc """
-  Returns the source-specific SQL parameter placeholders for LIMIT and OFFSET clauses.
-
-  - `repo_or_name` can be the Repo module or a data-repo name string.
-  - `limit_index` and `offset_index` are 1-based indexes for the parameters.
-
-  Falls back to the configured default data repo when `nil` is given.
-  """
-  @spec limit_offset_placeholders(repo | String.t() | nil, pos_integer(), pos_integer()) ::
-          {String.t(), String.t()}
+  @doc false
   def limit_offset_placeholders(repo_or_name, limit_index, offset_index)
       when is_integer(limit_index) and limit_index > 0 and is_integer(offset_index) and
              offset_index > 0 do
-    impl_for(resolve_source!(repo_or_name)).limit_offset_placeholders(limit_index, offset_index)
+    dialect_for(resolve_repo!(repo_or_name)).limit_offset_placeholders(limit_index, offset_index)
   end
 
-  defp resolve_source!(source) when is_atom(source) and not is_nil(source), do: source
+  @doc false
+  def list_schemas(repo), do: dialect_for(repo).list_schemas(repo)
 
-  defp resolve_source!(source_name) when is_binary(source_name) do
-    Lotus.Config.get_data_source!(source_name)
-  end
+  @doc false
+  def list_tables(repo, schemas, include_views? \\ false),
+    do: dialect_for(repo).list_tables(repo, schemas, include_views?)
 
-  defp resolve_source!(nil) do
-    {_name, mod} = Lotus.Config.default_data_source()
-    mod
-  end
+  @doc false
+  def get_table_schema(repo, schema, table),
+    do: dialect_for(repo).get_table_schema(repo, schema, table)
 
-  defp impl_for(repo) do
-    source_mod = repo.__adapter__()
-    Map.get(@impls, source_mod, Lotus.Sources.Default)
-  end
+  @doc false
+  def resolve_table_schema(repo, table, schemas),
+    do: dialect_for(repo).resolve_table_schema(repo, table, schemas)
 
-  defp impl_for_error(%{__exception__: true, __struct__: exc_mod}) do
-    Enum.find_value(
-      Map.values(@impls) ++ [Lotus.Sources.Default],
-      Lotus.Sources.Default,
-      fn impl ->
-        if exc_mod in impl.handled_errors(), do: impl, else: false
-      end
-    )
-  end
+  @doc false
+  def explain_plan(repo, sql, params \\ [], opts \\ []),
+    do: dialect_for(repo).explain_plan(repo, sql, params, opts)
 
-  defp impl_for_error(_), do: Lotus.Sources.Default
+  @doc false
+  def quote_identifier(repo_or_name, identifier),
+    do: dialect_for(resolve_repo!(repo_or_name)).quote_identifier(identifier)
 
-  @doc """
-  Lists all schemas in the given repository.
-
-  Dispatches to the source-specific implementation based on the repo's adapter.
-  """
-  @spec list_schemas(repo) :: [String.t()]
-  def list_schemas(repo) do
-    impl_for(repo).list_schemas(repo)
-  end
-
-  @doc """
-  Lists all tables in the given repository for the specified schemas.
-
-  Dispatches to the source-specific implementation based on the repo's adapter.
-  """
-  @spec list_tables(repo, [String.t()], boolean()) ::
-          [{String.t() | nil, String.t()}]
-  def list_tables(repo, schemas, include_views? \\ false) do
-    impl_for(repo).list_tables(repo, schemas, include_views?)
-  end
-
-  @doc """
-  Gets the schema information for a specific table.
-
-  Dispatches to the source-specific implementation based on the repo's adapter.
-  """
-  @spec get_table_schema(repo, String.t() | nil, String.t()) ::
-          [
-            %{
-              name: String.t(),
-              type: String.t(),
-              nullable: boolean(),
-              default: String.t() | nil,
-              primary_key: boolean()
-            }
-          ]
-  def get_table_schema(repo, schema, table) do
-    impl_for(repo).get_table_schema(repo, schema, table)
-  end
-
-  @doc """
-  Resolves which schema contains a table given a list of schemas to search.
-
-  Dispatches to the source-specific implementation based on the repo's adapter.
-  """
-  @spec resolve_table_schema(repo, String.t(), [String.t()]) ::
-          String.t() | nil
-  def resolve_table_schema(repo, table, schemas) do
-    impl_for(repo).resolve_table_schema(repo, table, schemas)
-  end
-
-  @doc """
-  Retrieves the execution plan for a SQL query.
-
-  Dispatches to the source-specific implementation based on the repo's adapter.
-  Returns the plan as a string suitable for AI analysis.
-
-  Options:
-  - `:search_path` - PostgreSQL search path (optional)
-  """
-  @spec explain_plan(repo, String.t(), list(), keyword()) ::
-          {:ok, String.t()} | {:error, term()}
-  def explain_plan(repo, sql, params \\ [], opts \\ []) do
-    impl_for(repo).explain_plan(repo, sql, params, opts)
-  end
-
-  @doc """
-  Quotes an identifier (column name, table name) using source-specific syntax.
-  """
-  @spec quote_identifier(repo | String.t() | nil, String.t()) :: String.t()
-  def quote_identifier(repo_or_name, identifier) do
-    impl_for(resolve_source!(repo_or_name)).quote_identifier(identifier)
-  end
-
-  @doc """
-  Applies filters to a query using the source-specific implementation.
-
-  Returns `{sql, params}` unchanged when filters is empty.
-  Accepts an adapter struct, repo module, repo name string, or nil.
-  """
+  @doc false
   def apply_filters(_repo_or_adapter, sql, params, []), do: {sql, params}
 
   def apply_filters(%Adapter{} = adapter, sql, params, filters) do
@@ -502,15 +238,10 @@ defmodule Lotus.Source do
   end
 
   def apply_filters(repo_or_name, sql, params, filters) do
-    impl_for(resolve_source!(repo_or_name)).apply_filters(sql, params, filters)
+    dialect_for(resolve_repo!(repo_or_name)).apply_filters(sql, params, filters)
   end
 
-  @doc """
-  Applies sorts to a query using the source-specific implementation.
-
-  Returns the original query unchanged when sorts is empty.
-  Accepts an adapter struct, repo module, repo name string, or nil.
-  """
+  @doc false
   def apply_sorts(_repo_or_adapter, sql, []), do: sql
 
   def apply_sorts(%Adapter{} = adapter, sql, sorts) do
@@ -518,6 +249,48 @@ defmodule Lotus.Source do
   end
 
   def apply_sorts(repo_or_name, sql, sorts) do
-    impl_for(resolve_source!(repo_or_name)).apply_sorts(sql, sorts)
+    dialect_for(resolve_repo!(repo_or_name)).apply_sorts(sql, sorts)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private helpers
+  # ---------------------------------------------------------------------------
+
+  defp resolver, do: Config.source_resolver()
+
+  @dialect_impls %{
+    Ecto.Adapters.Postgres => Lotus.Source.Adapters.Ecto.Dialects.Postgres,
+    Ecto.Adapters.SQLite3 => Lotus.Source.Adapters.Ecto.Dialects.SQLite3,
+    Ecto.Adapters.MyXQL => Lotus.Source.Adapters.Ecto.Dialects.MySQL
+  }
+
+  defp dialect_for(repo) do
+    source_mod = repo.__adapter__()
+    Map.get(@dialect_impls, source_mod, Lotus.Source.Adapters.Ecto.Dialects.Default)
+  end
+
+  defp dialect_for_error(%{__exception__: true, __struct__: exc_mod}) do
+    alias Lotus.Source.Adapters.Ecto.Dialects.Default, as: DefaultDialect
+
+    Enum.find_value(
+      Map.values(@dialect_impls) ++ [DefaultDialect],
+      DefaultDialect,
+      fn impl ->
+        if exc_mod in impl.handled_errors(), do: impl, else: false
+      end
+    )
+  end
+
+  defp dialect_for_error(_), do: Lotus.Source.Adapters.Ecto.Dialects.Default
+
+  defp resolve_repo!(source) when is_atom(source) and not is_nil(source), do: source
+
+  defp resolve_repo!(source_name) when is_binary(source_name) do
+    Config.get_data_source!(source_name)
+  end
+
+  defp resolve_repo!(nil) do
+    {_name, mod} = Config.default_data_source()
+    mod
   end
 end

@@ -209,6 +209,12 @@ defmodule Lotus.Config do
             ]
       """
     ],
+    source_adapters: [
+      type: {:list, :atom},
+      default: [],
+      doc:
+        "List of external adapter modules implementing `Lotus.Source.Adapter` with `can_handle?/1` and `wrap/2`."
+    ],
     source_resolver: [
       type: :atom,
       default: Lotus.Source.Resolvers.Static,
@@ -309,6 +315,7 @@ defmodule Lotus.Config do
       :schema_visibility,
       :cache,
       :ai,
+      :source_adapters,
       :source_resolver,
       :visibility_resolver,
       :middleware
@@ -624,6 +631,12 @@ defmodule Lotus.Config do
   """
   @spec ai_enabled?() :: boolean()
   def ai_enabled?, do: (get(:ai) || [])[:enabled] || false
+
+  @doc """
+  Returns the list of external source adapter modules.
+  """
+  @spec source_adapters() :: [module()]
+  def source_adapters, do: load!()[:source_adapters]
 
   @doc """
   Returns the configured source resolver module.

@@ -14,20 +14,12 @@ defmodule Lotus.Storage.TypeMapper do
 
   ## Usage
 
-      # Map PostgreSQL UUID to Lotus type
-      TypeMapper.db_type_to_lotus_type("uuid", Lotus.Sources.Postgres)
+      TypeMapper.db_type_to_lotus_type("uuid", :postgres)
       # => :uuid
 
-      # Map MySQL UUID storage to Lotus type
-      TypeMapper.db_type_to_lotus_type("char(36)", Lotus.Sources.MySQL)
+      TypeMapper.db_type_to_lotus_type("char(36)", :mysql)
       # => :uuid
-
-      # Get Ecto type for casting
-      TypeMapper.lotus_type_to_ecto_type(:uuid)
-      # => Ecto.UUID
   """
-
-  alias Lotus.Sources.{MySQL, Postgres, SQLite3}
 
   @type lotus_type ::
           :uuid
@@ -48,32 +40,32 @@ defmodule Lotus.Storage.TypeMapper do
   @doc """
   Convert database-specific type to Lotus internal type.
 
-  Uses source module to determine database flavor and map accordingly.
+  Uses source type atom to determine database flavor and map accordingly.
 
   ## Examples
 
-      db_type_to_lotus_type("uuid", Lotus.Sources.Postgres)
+      db_type_to_lotus_type("uuid", :postgres)
       # => :uuid
 
-      db_type_to_lotus_type("char(36)", Lotus.Sources.MySQL)
+      db_type_to_lotus_type("char(36)", :mysql)
       # => :uuid
 
-      db_type_to_lotus_type("INTEGER", Lotus.Sources.SQLite3)
+      db_type_to_lotus_type("INTEGER", :sqlite)
       # => :integer
   """
   @spec db_type_to_lotus_type(
           db_type :: String.t(),
-          source_module :: module()
+          source_type :: atom()
         ) :: lotus_type()
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  def db_type_to_lotus_type(db_type, Postgres) when is_binary(db_type) do
+  def db_type_to_lotus_type(db_type, :postgres) when is_binary(db_type) do
     lowercased = String.downcase(db_type)
 
     cond do
       # Array types end with []
       String.ends_with?(lowercased, "[]") ->
         base_type = String.replace_suffix(lowercased, "[]", "")
-        {:array, db_type_to_lotus_type(base_type, Postgres)}
+        {:array, db_type_to_lotus_type(base_type, :postgres)}
 
       # USER-DEFINED types (enums)
       lowercased == "user-defined" ->
@@ -151,18 +143,15 @@ defmodule Lotus.Storage.TypeMapper do
   end
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  def db_type_to_lotus_type(db_type, MySQL) do
+  def db_type_to_lotus_type(db_type, :mysql) do
     case String.downcase(db_type) do
       # UUID storage formats in MySQL
-      # CHAR(36) with dashes: "550e8400-e29b-41d4-a716-446655440000"
       "char(36)" ->
         :uuid
 
-      # CHAR(32) without dashes: "550e8400e29b41d4a716446655440000"
       "char(32)" ->
         :uuid
 
-      # BINARY(16) - raw 16 bytes
       "binary(16)" ->
         :uuid
 
@@ -217,7 +206,7 @@ defmodule Lotus.Storage.TypeMapper do
     end
   end
 
-  def db_type_to_lotus_type(db_type, SQLite3) do
+  def db_type_to_lotus_type(db_type, :sqlite) do
     # SQLite has dynamic typing but uses "type affinity"
     case String.upcase(db_type) do
       "INTEGER" ->
@@ -239,14 +228,13 @@ defmodule Lotus.Storage.TypeMapper do
         :binary
 
       # SQLite stores UUIDs as TEXT (no native UUID type)
-      # All other types default to text
       _ ->
         :text
     end
   end
 
   # Unknown source - default to text for safety
-  def db_type_to_lotus_type(_db_type, _source_module), do: :text
+  def db_type_to_lotus_type(_db_type, _source_type), do: :text
 
   @doc """
   Returns the Ecto type equivalent for a Lotus type.

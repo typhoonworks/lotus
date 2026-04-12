@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Extracted `Lotus.Source.Adapters.Ecto.Dialect` behaviour from the old `Lotus.Source` callbacks, adding `source_type/0` and `ecto_adapter/0` required callbacks (#193)
+- Consolidated three duplicated `@impls` maps (in `Lotus.Source`, `Lotus.Source.Adapters.Ecto`, and `Lotus.Sources`) into a single `@impls` in `Lotus.Source.Adapters.Ecto`, built dynamically from dialect modules' `ecto_adapter/0` callbacks (#193)
+- `Lotus.Source.Adapters.Ecto` now uses dialect modules under `Lotus.Source.Adapters.Ecto.Dialects.*` instead of `Lotus.Sources.*` (#193)
+- `Lotus.Source.Resolvers.Static` now supports pluggable adapter resolution via `can_handle?/1` and `wrap/2`, falling back to the built-in Ecto adapter (#193)
 - Renamed `data_repos` config key to `data_sources` (old key still works with deprecation warning)
 - Renamed `default_repo` config key to `default_source` (old key still works with deprecation warning)
 - Renamed public functions: `data_repos/0` → `data_sources/0`, `get_data_repo!/1` → `get_data_source!/1`, `list_data_repo_names/0` → `list_data_source_names/0`, `default_data_repo/0` → `default_data_source/0`, `rules_for_repo_name/1` → `rules_for_source_name/1` (and schema/column variants)
@@ -32,6 +36,10 @@
 
 ### Breaking
 
+- `Lotus.Source` is now a public facade instead of a behaviour. All facade functions previously on `Lotus.Sources` (`resolve!/2`, `list_sources/0`, `get_source!/1`, `default_source/0`, `source_type/1`, `supports_feature?/2`, `hierarchy_label/1`, `example_query/3`, `query_language/1`, `limit_query/3`, `name_from_module!/1`) are now on `Lotus.Source`. `Lotus.Sources` delegates for backward compatibility (#193)
+- Dialect modules moved from `Lotus.Sources.*` to `Lotus.Source.Adapters.Ecto.Dialects.*`: `Postgres`, `MySQL`, `SQLite3`, `Default`. Old modules delegate for backward compatibility (#193)
+- `Lotus.Storage.TypeMapper.db_type_to_lotus_type/2` second argument changed from source module atoms (`Lotus.Sources.Postgres`) to source type atoms (`:postgres`, `:mysql`, `:sqlite`) (#193)
+- `Lotus.Storage.TypeCaster` column_info key changed from `:source_module` to `:source_type` (atom like `:postgres`) (#193)
 - `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string
 - `Lotus.Source.apply_filters/2` callback is now `apply_filters/3` — accepts `params` list and returns `{sql, params}` tuple. All source adapters (Postgres, MySQL, SQLite3, Default) updated accordingly
 - `Lotus.Visibility.Resolver` callbacks now accept a second `scope` argument: `schema_rules_for/2`, `table_rules_for/2`, `column_rules_for/2`. Existing implementations must update their function signatures to accept `scope` (even if ignored). The default `Static` resolver accepts and ignores scope, so static config users are unaffected.
@@ -45,6 +53,10 @@
 
 ### Added
 
+- `Lotus.Source.Adapters.Ecto.Dialect` behaviour for SQL-specific callbacks (`source_type/0`, `ecto_adapter/0`, plus all existing dialect callbacks) (#193)
+- `can_handle?/1` and `wrap/2` optional callbacks on `Lotus.Source.Adapter` for pluggable adapter registration (#193)
+- `source_adapters` config option — list of external adapter modules with `can_handle?/1` and `wrap/2` (#193)
+- `use Lotus.Source.Adapters.Ecto, dialect: MyDialect` macro for external Ecto-backed adapters (#193)
 - `query_language/0` callback in `Lotus.Source` behaviour and dispatch in `Lotus.Source.Adapter` — returns the query language identifier for a source (e.g. `"sql:postgres"`, `"sql:mysql"`) (#122)
 - `limit_query/2` callback in `Lotus.Source` behaviour and dispatch in `Lotus.Source.Adapter` — wraps a statement with a source-specific limit clause (#122)
 - `:schema_hierarchy` feature flag in `Lotus.Sources.supports_feature?/2` — true for Postgres, false for MySQL/SQLite (#122)

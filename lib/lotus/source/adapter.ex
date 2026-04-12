@@ -251,6 +251,16 @@ defmodule Lotus.Source.Adapter do
   @callback example_query(state :: term(), table :: String.t(), schema :: String.t() | nil) ::
               String.t()
 
+  # ---------------------------------------------------------------------------
+  # Callbacks — Pluggable Registration
+  # ---------------------------------------------------------------------------
+
+  @doc "Whether this adapter can handle the given data source entry (e.g. a repo module)."
+  @callback can_handle?(term()) :: boolean()
+
+  @doc "Wrap a raw data source entry into an `%Adapter{}` struct."
+  @callback wrap(name :: String.t(), term()) :: t()
+
   @optional_callbacks [
     sanitize_query: 3,
     transform_query: 4,
@@ -259,7 +269,9 @@ defmodule Lotus.Source.Adapter do
     query_language: 1,
     limit_query: 3,
     hierarchy_label: 1,
-    example_query: 3
+    example_query: 3,
+    can_handle?: 1,
+    wrap: 2
   ]
 
   # ---------------------------------------------------------------------------

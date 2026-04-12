@@ -2,9 +2,9 @@ defmodule Lotus.Source.Adapters.Ecto do
   @moduledoc """
   Adapter wrapping any `Ecto.Repo` module in the `Lotus.Source.Adapter` behaviour.
 
-  Delegates database-specific operations to the existing source implementation
-  modules (`Lotus.Sources.Postgres`, `Lotus.Sources.MySQL`, `Lotus.Sources.SQLite3`,
-  `Lotus.Sources.Default`) based on the repo's underlying Ecto adapter.
+  Delegates database-specific operations to dialect modules under
+  `Lotus.Source.Adapters.Ecto.Dialects.*` based on the repo's underlying
+  Ecto adapter.
 
   ## Usage
 
@@ -16,18 +16,218 @@ defmodule Lotus.Source.Adapters.Ecto do
   The `state` field of the resulting `%Adapter{}` struct holds the repo module
   itself, since Ecto repos are statically supervised and don't require explicit
   connection management.
+
+  ## Extending with custom Ecto-backed adapters
+
+  External libraries can create Ecto-backed adapters by writing a dialect
+  module and a one-liner adapter:
+
+      defmodule LotusMSSql.Adapter do
+        use Lotus.Source.Adapters.Ecto, dialect: LotusMSSql.Dialect
+      end
+
+  The `use` macro injects default implementations for all
+  `Lotus.Source.Adapter` callbacks, delegating shared Ecto logic to helper
+  functions in this module and dialect-specific callbacks to the provided
+  `:dialect` module. All callbacks are `defoverridable`.
   """
 
   @behaviour Lotus.Source.Adapter
 
   alias Lotus.Source.Adapter
+  alias Lotus.Source.Adapters.Ecto.Dialects
   alias Lotus.SQL.Sanitizer
 
-  @impls %{
-    Ecto.Adapters.Postgres => Lotus.Sources.Postgres,
-    Ecto.Adapters.SQLite3 => Lotus.Sources.SQLite3,
-    Ecto.Adapters.MyXQL => Lotus.Sources.MySQL
-  }
+  @dialects [
+    Dialects.Postgres,
+    Dialects.MySQL,
+    Dialects.SQLite3
+  ]
+
+  @impls Map.new(@dialects, &{&1.ecto_adapter(), &1})
+
+  # ---------------------------------------------------------------------------
+  # __using__ macro for external Ecto-backed adapters
+  # ---------------------------------------------------------------------------
+
+  defmacro __using__(opts) do
+    dialect = Keyword.fetch!(opts, :dialect)
+
+    quote do
+      @behaviour Lotus.Source.Adapter
+
+      @dialect unquote(dialect)
+
+      alias Lotus.Source.Adapter
+      alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
+
+      # -- Pluggable Registration --
+
+      @impl true
+      def can_handle?(repo) when is_atom(repo) do
+        function_exported?(repo, :__adapter__, 0) and
+          repo.__adapter__() == @dialect.ecto_adapter()
+      end
+
+      def can_handle?(_), do: false
+
+      @impl true
+      def wrap(name, repo_module) when is_binary(name) and is_atom(repo_module) do
+        %Adapter{
+          name: name,
+          module: __MODULE__,
+          state: repo_module,
+          source_type: @dialect.source_type()
+        }
+      end
+
+      # -- Query Execution --
+
+      @impl true
+      def execute_query(repo, sql, params, opts) do
+        EctoAdapter.do_execute_query(@dialect, repo, sql, params, opts)
+      end
+
+      @impl true
+      def transaction(repo, fun, opts) do
+        @dialect.execute_in_transaction(repo, fn -> fun.(repo) end, opts)
+      end
+
+      # -- Introspection --
+
+      @impl true
+      def list_schemas(repo) do
+        {:ok, @dialect.list_schemas(repo)}
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+
+      @impl true
+      def list_tables(repo, schemas, opts) do
+        include_views? = Keyword.get(opts, :include_views, false)
+        {:ok, @dialect.list_tables(repo, schemas, include_views?)}
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+
+      @impl true
+      def get_table_schema(repo, schema, table) do
+        {:ok, @dialect.get_table_schema(repo, schema, table)}
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+
+      @impl true
+      def resolve_table_schema(repo, table, schemas) do
+        {:ok, @dialect.resolve_table_schema(repo, table, schemas)}
+      rescue
+        e -> {:error, Exception.message(e)}
+      end
+
+      # -- SQL Generation --
+
+      @impl true
+      def quote_identifier(_repo, identifier), do: @dialect.quote_identifier(identifier)
+
+      @impl true
+      def param_placeholder(_repo, index, var, type),
+        do: @dialect.param_placeholder(index, var, type)
+
+      @impl true
+      def limit_offset_placeholders(_repo, limit_index, offset_index),
+        do: @dialect.limit_offset_placeholders(limit_index, offset_index)
+
+      @impl true
+      def apply_filters(_repo, sql, params, filters),
+        do: @dialect.apply_filters(sql, params, filters)
+
+      @impl true
+      def apply_sorts(_repo, sql, sorts), do: @dialect.apply_sorts(sql, sorts)
+
+      @impl true
+      def explain_plan(repo, sql, params, opts),
+        do: @dialect.explain_plan(repo, sql, params, opts)
+
+      # -- Safety & Visibility --
+
+      @impl true
+      def builtin_denies(repo), do: @dialect.builtin_denies(repo)
+
+      @impl true
+      def builtin_schema_denies(repo), do: @dialect.builtin_schema_denies(repo)
+
+      @impl true
+      def default_schemas(repo), do: @dialect.default_schemas(repo)
+
+      # -- Lifecycle --
+
+      @impl true
+      def health_check(repo), do: EctoAdapter.do_health_check(repo)
+
+      @impl true
+      def disconnect(_repo), do: :ok
+
+      # -- Error Handling --
+
+      @impl true
+      def format_error(_repo, error), do: @dialect.format_error(error)
+
+      @impl true
+      def handled_errors(repo), do: @dialect.handled_errors()
+
+      # -- Pipeline --
+
+      @impl true
+      def sanitize_query(repo, query, opts), do: EctoAdapter.do_sanitize_query(query, opts)
+
+      @impl true
+      def transform_query(_repo, query, params, _opts), do: {query, params}
+
+      @impl true
+      def extract_accessed_resources(repo, query, params, opts) do
+        EctoAdapter.do_extract_accessed_resources(__MODULE__, @dialect, repo, query, params, opts)
+      end
+
+      @impl true
+      def apply_window(repo, query, params, window_opts) do
+        EctoAdapter.do_apply_window(__MODULE__, @dialect, repo, query, params, window_opts)
+      end
+
+      # -- Source Identity --
+
+      @impl true
+      def source_type(_repo), do: @dialect.source_type()
+
+      @impl true
+      def supports_feature?(_repo, feature) do
+        if function_exported?(@dialect, :supports_feature?, 1),
+          do: @dialect.supports_feature?(feature),
+          else: false
+      end
+
+      @impl true
+      def query_language(_repo), do: @dialect.query_language()
+
+      @impl true
+      def limit_query(_repo, statement, limit), do: @dialect.limit_query(statement, limit)
+
+      @impl true
+      def hierarchy_label(_repo) do
+        if function_exported?(@dialect, :hierarchy_label, 0),
+          do: @dialect.hierarchy_label(),
+          else: "Tables"
+      end
+
+      @impl true
+      def example_query(_repo, table, schema) do
+        if function_exported?(@dialect, :example_query, 2),
+          do: @dialect.example_query(table, schema),
+          else: "SELECT value_column FROM #{table}"
+      end
+
+      defoverridable Lotus.Source.Adapter
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -49,6 +249,7 @@ defmodule Lotus.Source.Adapters.Ecto do
       iex> adapter = Lotus.Source.Adapters.Ecto.wrap("main", MyApp.Repo)
       %Lotus.Source.Adapter{name: "main", module: Lotus.Source.Adapters.Ecto, ...}
   """
+  @impl true
   @spec wrap(String.t(), module()) :: Adapter.t()
   def wrap(name, repo_module) when is_binary(name) and is_atom(repo_module) do
     %Adapter{
@@ -58,6 +259,21 @@ defmodule Lotus.Source.Adapters.Ecto do
       source_type: detect_source_type(repo_module)
     }
   end
+
+  @doc """
+  Whether this adapter can handle the given data source entry.
+
+  Returns `true` for any module that exports `__adapter__/0` and whose
+  Ecto adapter is one of the known dialects.
+  """
+  @impl true
+  @spec can_handle?(term()) :: boolean()
+  def can_handle?(repo) when is_atom(repo) do
+    function_exported?(repo, :__adapter__, 0) and
+      Map.has_key?(@impls, repo.__adapter__())
+  end
+
+  def can_handle?(_), do: false
 
   @doc """
   Detects the source type from a repo module's underlying Ecto adapter.
@@ -83,41 +299,7 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def execute_query(repo, sql, params, opts) do
-    timeout = Keyword.get(opts, :timeout, 15_000)
-    search_path = Keyword.get(opts, :search_path)
-    impl = impl_for(repo)
-
-    impl.execute_in_transaction(
-      repo,
-      fn ->
-        if search_path do
-          impl.set_search_path(repo, search_path)
-        end
-
-        case repo.query(sql, params, timeout: timeout) do
-          {:ok, %{columns: cols, rows: rows} = raw} ->
-            num_rows = Map.get(raw, :num_rows, length(rows || []))
-
-            result =
-              %{columns: cols, rows: rows, num_rows: num_rows}
-              |> maybe_put(:command, Map.get(raw, :command))
-              |> maybe_put(:connection_id, Map.get(raw, :connection_id))
-              |> maybe_put(:messages, Map.get(raw, :messages))
-
-            result
-
-          {:error, err} ->
-            repo.rollback(impl.format_error(err))
-        end
-      end,
-      opts
-    )
-    |> case do
-      {:ok, result} -> {:ok, result}
-      {:error, reason} -> {:error, reason}
-    end
-  rescue
-    e -> {:error, Exception.message(e)}
+    do_execute_query(impl_for(repo), repo, sql, params, opts)
   end
 
   @impl true
@@ -216,14 +398,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def health_check(repo) do
-    case repo.query("SELECT 1", []) do
-      {:ok, _} -> :ok
-      {:error, err} -> {:error, err}
-    end
-  rescue
-    e -> {:error, Exception.message(e)}
-  end
+  def health_check(repo), do: do_health_check(repo)
 
   @impl true
   def disconnect(_repo) do
@@ -254,69 +429,19 @@ defmodule Lotus.Source.Adapters.Ecto do
   @deny ~r/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|VACUUM|ANALYZE|CALL|LOCK)\b/i
 
   @impl true
-  def sanitize_query(_repo, query, opts) do
-    read_only = Keyword.get(opts, :read_only, true)
-
-    with :ok <- assert_single_statement(query) do
-      assert_not_denied(query, read_only)
-    end
-  end
+  def sanitize_query(_repo, query, opts), do: do_sanitize_query(query, opts)
 
   @impl true
   def transform_query(_repo, query, params, _opts), do: {query, params}
 
   @impl true
   def extract_accessed_resources(repo, query, params, opts) do
-    source_type = detect_source_type(repo)
-    search_path = Keyword.get(opts, :search_path)
-
-    case source_type do
-      :postgres -> extract_pg_resources(repo, query, params, search_path)
-      :sqlite -> extract_sqlite_resources(repo, query, params)
-      :mysql -> extract_mysql_resources(repo, query, params)
-      _ -> :skip
-    end
+    do_extract_accessed_resources(__MODULE__, impl_for(repo), repo, query, params, opts)
   end
 
   @impl true
   def apply_window(repo, query, params, window_opts) do
-    base_sql = Sanitizer.strip_trailing_semicolon(query)
-    limit = Keyword.fetch!(window_opts, :limit)
-    offset = Keyword.get(window_opts, :offset, 0)
-    count_mode = Keyword.get(window_opts, :count, :none)
-    search_path = Keyword.get(window_opts, :search_path)
-
-    param_count = length(params)
-
-    {limit_ph, offset_ph} =
-      impl_for(repo).limit_offset_placeholders(param_count + 1, param_count + 2)
-
-    paged_sql =
-      "SELECT * FROM (" <>
-        base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
-
-    paged_params = params ++ [limit, offset]
-
-    window_meta =
-      case count_mode do
-        :exact ->
-          adapter_struct = wrap("__window__", repo)
-
-          %{
-            window: %{limit: limit, offset: offset},
-            total_count: :pending,
-            total_mode: :exact,
-            count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
-            count_params: params,
-            adapter: adapter_struct,
-            search_path: search_path
-          }
-
-        _ ->
-          %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
-      end
-
-    {paged_sql, paged_params, window_meta}
+    do_apply_window(__MODULE__, impl_for(repo), repo, query, params, window_opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -360,25 +485,140 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   # ---------------------------------------------------------------------------
+  # Shared helpers (called by __using__ macro and this module's own callbacks)
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  def do_execute_query(dialect, repo, sql, params, opts) do
+    timeout = Keyword.get(opts, :timeout, 15_000)
+    search_path = Keyword.get(opts, :search_path)
+
+    dialect.execute_in_transaction(
+      repo,
+      fn ->
+        if search_path do
+          dialect.set_search_path(repo, search_path)
+        end
+
+        case repo.query(sql, params, timeout: timeout) do
+          {:ok, %{columns: cols, rows: rows} = raw} ->
+            num_rows = Map.get(raw, :num_rows, length(rows || []))
+
+            result =
+              %{columns: cols, rows: rows, num_rows: num_rows}
+              |> maybe_put(:command, Map.get(raw, :command))
+              |> maybe_put(:connection_id, Map.get(raw, :connection_id))
+              |> maybe_put(:messages, Map.get(raw, :messages))
+
+            result
+
+          {:error, err} ->
+            repo.rollback(dialect.format_error(err))
+        end
+      end,
+      opts
+    )
+    |> case do
+      {:ok, result} -> {:ok, result}
+      {:error, reason} -> {:error, reason}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  @doc false
+  def do_health_check(repo) do
+    case repo.query("SELECT 1", []) do
+      {:ok, _} -> :ok
+      {:error, err} -> {:error, err}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  @doc false
+  def do_sanitize_query(query, opts) do
+    read_only = Keyword.get(opts, :read_only, true)
+
+    with :ok <- assert_single_statement(query) do
+      assert_not_denied(query, read_only)
+    end
+  end
+
+  @doc false
+  def do_extract_accessed_resources(adapter_mod, dialect, repo, query, params, opts) do
+    source_type = dialect.source_type()
+    search_path = Keyword.get(opts, :search_path)
+
+    case source_type do
+      :postgres -> extract_pg_resources(adapter_mod, repo, query, params, search_path)
+      :sqlite -> extract_sqlite_resources(adapter_mod, repo, query, params)
+      :mysql -> extract_mysql_resources(adapter_mod, repo, query, params)
+      _ -> :skip
+    end
+  end
+
+  @doc false
+  def do_apply_window(adapter_mod, dialect, repo, query, params, window_opts) do
+    base_sql = Sanitizer.strip_trailing_semicolon(query)
+    limit = Keyword.fetch!(window_opts, :limit)
+    offset = Keyword.get(window_opts, :offset, 0)
+    count_mode = Keyword.get(window_opts, :count, :none)
+    search_path = Keyword.get(window_opts, :search_path)
+
+    param_count = length(params)
+
+    {limit_ph, offset_ph} =
+      dialect.limit_offset_placeholders(param_count + 1, param_count + 2)
+
+    paged_sql =
+      "SELECT * FROM (" <>
+        base_sql <> ") AS lotus_sub LIMIT " <> limit_ph <> " OFFSET " <> offset_ph
+
+    paged_params = params ++ [limit, offset]
+
+    window_meta =
+      case count_mode do
+        :exact ->
+          adapter_struct = adapter_mod.wrap("__window__", repo)
+
+          %{
+            window: %{limit: limit, offset: offset},
+            total_count: :pending,
+            total_mode: :exact,
+            count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
+            count_params: params,
+            adapter: adapter_struct,
+            search_path: search_path
+          }
+
+        _ ->
+          %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
+      end
+
+    {paged_sql, paged_params, window_meta}
+  end
+
+  # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
 
   defp impl_for(repo) do
     source_mod = repo.__adapter__()
-    Map.get(@impls, source_mod, Lotus.Sources.Default)
+    Map.get(@impls, source_mod, Dialects.Default)
   end
 
   defp impl_for_error(%{__exception__: true, __struct__: exc_mod}) do
     Enum.find_value(
-      Map.values(@impls) ++ [Lotus.Sources.Default],
-      Lotus.Sources.Default,
+      Map.values(@impls) ++ [Dialects.Default],
+      Dialects.Default,
       fn impl ->
         if exc_mod in impl.handled_errors(), do: impl, else: false
       end
     )
   end
 
-  defp impl_for_error(_), do: Lotus.Sources.Default
+  defp impl_for_error(_), do: Dialects.Default
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
@@ -492,11 +732,11 @@ defmodule Lotus.Source.Adapters.Ecto do
   # Resource extraction helpers
   # ---------------------------------------------------------------------------
 
-  defp extract_pg_resources(repo, sql, params, search_path) do
+  defp extract_pg_resources(adapter_mod, repo, sql, params, search_path) do
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
     opts = if search_path, do: [search_path: search_path], else: []
 
-    case execute_query(repo, explain, params, opts) do
+    case adapter_mod.execute_query(repo, explain, params, opts) do
       {:ok, %{rows: [[json]]}} ->
         relations =
           json
@@ -539,12 +779,12 @@ defmodule Lotus.Source.Adapters.Ecto do
     end
   end
 
-  defp extract_sqlite_resources(repo, sql, params) do
+  defp extract_sqlite_resources(adapter_mod, repo, sql, params) do
     alias_map = parse_alias_map(sql)
 
     explain = "EXPLAIN QUERY PLAN " <> sql
 
-    case execute_query(repo, explain, params, []) do
+    case adapter_mod.execute_query(repo, explain, params, []) do
       {:ok, %{rows: rows}} ->
         relations =
           rows
@@ -562,12 +802,12 @@ defmodule Lotus.Source.Adapters.Ecto do
     end
   end
 
-  defp extract_mysql_resources(repo, sql, params) do
+  defp extract_mysql_resources(adapter_mod, repo, sql, params) do
     alias_map = parse_alias_map(sql)
 
     explain = "EXPLAIN FORMAT=JSON " <> sql
 
-    case execute_query(repo, explain, params, []) do
+    case adapter_mod.execute_query(repo, explain, params, []) do
       {:ok, %{rows: [[json]]}} ->
         explain_rels =
           json

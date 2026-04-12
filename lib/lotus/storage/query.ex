@@ -14,7 +14,7 @@ defmodule Lotus.Storage.Query do
   require Logger
 
   alias Lotus.Config
-  alias Lotus.Sources
+  alias Lotus.Source
   alias Lotus.SQL.{OptionalClause, Transformer}
   alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, TypeMapper, VariableResolver}
 
@@ -92,7 +92,6 @@ defmodule Lotus.Storage.Query do
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
     repo = get_repo(q.data_source)
     source_type = get_source_type(q.data_source)
-    source_module = get_source_module(repo)
 
     # Process optional clauses before transformation
     processed_sql = OptionalClause.process(sql, supplied_vars)
@@ -106,7 +105,7 @@ defmodule Lotus.Storage.Query do
     variable_bindings = VariableResolver.resolve_variables(transformed_sql)
 
     enriched_bindings =
-      enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_module)
+      enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_type)
 
     # Build SQL with parameters, using automatic type casting
     init = {:ok, {transformed_sql, [], 1}}
@@ -276,30 +275,21 @@ defmodule Lotus.Storage.Query do
 
   defp get_source_type(nil) do
     {_name, repo} = Config.default_data_source()
-    Sources.source_type(repo)
+    Source.source_type(repo)
   end
 
   defp get_source_type(repo_name) when is_binary(repo_name),
-    do: Sources.source_type(repo_name)
+    do: Source.source_type(repo_name)
 
-  defp get_source_type(repo) when is_atom(repo), do: Sources.source_type(repo)
+  defp get_source_type(repo) when is_atom(repo), do: Source.source_type(repo)
 
-  defp get_source_module(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> Lotus.Sources.Postgres
-      Ecto.Adapters.SQLite3 -> Lotus.Sources.SQLite3
-      Ecto.Adapters.MyXQL -> Lotus.Sources.MySQL
-      _ -> nil
-    end
-  end
-
-  defp enrich_bindings_with_types(bindings, repo, search_path, source_module) do
+  defp enrich_bindings_with_types(bindings, repo, search_path, source_type) do
     Enum.map(bindings, fn binding ->
       schema = resolve_schema(binding.table, search_path)
 
       case SchemaCache.get_column_type(repo, schema, binding.table, binding.column) do
         {:ok, db_type} ->
-          lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_module)
+          lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_type)
           Map.put(binding, :lotus_type, lotus_type)
 
         :not_found ->

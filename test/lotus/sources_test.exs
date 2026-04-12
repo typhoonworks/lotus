@@ -1,12 +1,12 @@
 defmodule Lotus.SourcesTest do
   use Lotus.Case, async: true
 
+  alias Lotus.Source
   alias Lotus.Source.Adapter
-  alias Lotus.Sources
 
   describe "resolve!/2" do
     test "resolves with string repo_opt" do
-      adapter = Sources.resolve!("postgres", nil)
+      adapter = Source.resolve!("postgres", nil)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
@@ -14,56 +14,56 @@ defmodule Lotus.SourcesTest do
     end
 
     test "resolves with another string repo_opt" do
-      adapter = Sources.resolve!("sqlite", nil)
+      adapter = Source.resolve!("sqlite", nil)
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
     end
 
     test "resolves with module repo_opt" do
-      adapter = Sources.resolve!(Lotus.Test.Repo, nil)
+      adapter = Source.resolve!(Lotus.Test.Repo, nil)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
     end
 
     test "resolves with different module repo_opt" do
-      adapter = Sources.resolve!(Lotus.Test.SqliteRepo, nil)
+      adapter = Source.resolve!(Lotus.Test.SqliteRepo, nil)
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
     end
 
     test "falls back to string q_repo when repo_opt is nil" do
-      adapter = Sources.resolve!(nil, "mysql")
+      adapter = Source.resolve!(nil, "mysql")
       assert %Adapter{} = adapter
       assert adapter.name == "mysql"
       assert adapter.state == Lotus.Test.MysqlRepo
     end
 
     test "falls back to module q_repo when repo_opt is nil" do
-      adapter = Sources.resolve!(nil, Lotus.Test.MysqlRepo)
+      adapter = Source.resolve!(nil, Lotus.Test.MysqlRepo)
       assert %Adapter{} = adapter
       assert adapter.name == "mysql"
       assert adapter.state == Lotus.Test.MysqlRepo
     end
 
     test "falls back to default repo when both are nil" do
-      adapter = Sources.resolve!(nil, nil)
+      adapter = Source.resolve!(nil, nil)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
     end
 
     test "repo_opt takes precedence over q_repo" do
-      adapter = Sources.resolve!("sqlite", "mysql")
+      adapter = Source.resolve!("sqlite", "mysql")
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
     end
 
     test "repo_opt module takes precedence over q_repo string" do
-      adapter = Sources.resolve!(Lotus.Test.SqliteRepo, "mysql")
+      adapter = Source.resolve!(Lotus.Test.SqliteRepo, "mysql")
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
@@ -71,32 +71,32 @@ defmodule Lotus.SourcesTest do
 
     test "raises when string repo_opt is not configured" do
       assert_raise ArgumentError, ~r/not configured/, fn ->
-        Sources.resolve!("unknown", nil)
+        Source.resolve!("unknown", nil)
       end
     end
 
     test "raises when string q_repo is not configured and repo_opt is nil" do
       assert_raise ArgumentError, ~r/not configured/, fn ->
-        Sources.resolve!(nil, "nonexistent")
+        Source.resolve!(nil, "nonexistent")
       end
     end
 
     test "non-repo module in repo_opt falls through to q_repo" do
-      adapter = Sources.resolve!(String, "sqlite")
+      adapter = Source.resolve!(String, "sqlite")
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
     end
 
     test "non-repo module in q_repo falls through to default" do
-      adapter = Sources.resolve!(String, Enum)
+      adapter = Source.resolve!(String, Enum)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
     end
 
     test "handles invalid types gracefully" do
-      adapter = Sources.resolve!(123, :atom)
+      adapter = Source.resolve!(123, :atom)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
@@ -105,9 +105,9 @@ defmodule Lotus.SourcesTest do
 
   describe "name_from_module!/1" do
     test "returns configured name for a repo module" do
-      assert Sources.name_from_module!(Lotus.Test.Repo) == "postgres"
-      assert Sources.name_from_module!(Lotus.Test.SqliteRepo) == "sqlite"
-      assert Sources.name_from_module!(Lotus.Test.MysqlRepo) == "mysql"
+      assert Source.name_from_module!(Lotus.Test.Repo) == "postgres"
+      assert Source.name_from_module!(Lotus.Test.SqliteRepo) == "sqlite"
+      assert Source.name_from_module!(Lotus.Test.MysqlRepo) == "mysql"
     end
 
     test "raises for unconfigured repo module" do
@@ -116,44 +116,44 @@ defmodule Lotus.SourcesTest do
       end
 
       assert_raise ArgumentError, fn ->
-        Sources.name_from_module!(UnknownRepo)
+        Source.name_from_module!(UnknownRepo)
       end
     end
   end
 
   describe "source_type/1" do
     test "detects postgres adapter from repo name" do
-      assert Sources.source_type("postgres") == :postgres
+      assert Source.source_type("postgres") == :postgres
     end
 
     test "detects sqlite adapter from repo name" do
-      assert Sources.source_type("sqlite") == :sqlite
+      assert Source.source_type("sqlite") == :sqlite
     end
 
     test "detects mysql adapter from repo name" do
-      assert Sources.source_type("mysql") == :mysql
+      assert Source.source_type("mysql") == :mysql
     end
 
     test "detects postgres adapter from repo module" do
-      assert Sources.source_type(Lotus.Test.Repo) == :postgres
+      assert Source.source_type(Lotus.Test.Repo) == :postgres
     end
 
     test "detects sqlite adapter from repo module" do
-      assert Sources.source_type(Lotus.Test.SqliteRepo) == :sqlite
+      assert Source.source_type(Lotus.Test.SqliteRepo) == :sqlite
     end
 
     test "detects mysql adapter from repo module" do
-      assert Sources.source_type(Lotus.Test.MysqlRepo) == :mysql
+      assert Source.source_type(Lotus.Test.MysqlRepo) == :mysql
     end
 
     test "detects source type from adapter struct" do
-      adapter = Sources.resolve!("postgres", nil)
-      assert Sources.source_type(adapter) == :postgres
+      adapter = Source.resolve!("postgres", nil)
+      assert Source.source_type(adapter) == :postgres
     end
 
     test "raises for unknown repo name" do
       assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
-        Sources.source_type("unknown")
+        Source.source_type("unknown")
       end
     end
 
@@ -164,13 +164,13 @@ defmodule Lotus.SourcesTest do
         end
       end
 
-      assert Sources.source_type(CustomAdapterRepo) == :other
+      assert Source.source_type(CustomAdapterRepo) == :other
     end
   end
 
   describe "list_sources/0" do
     test "returns all configured sources as adapters" do
-      adapters = Sources.list_sources()
+      adapters = Source.list_sources()
       names = Enum.map(adapters, & &1.name) |> Enum.sort()
 
       assert "mysql" in names
@@ -185,21 +185,21 @@ defmodule Lotus.SourcesTest do
 
   describe "get_source!/1" do
     test "returns adapter for configured name" do
-      adapter = Sources.get_source!("postgres")
+      adapter = Source.get_source!("postgres")
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
     end
 
     test "raises for unknown name" do
       assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
-        Sources.get_source!("unknown")
+        Source.get_source!("unknown")
       end
     end
   end
 
   describe "default_source/0" do
     test "returns the default source as adapter" do
-      adapter = Sources.default_source()
+      adapter = Source.default_source()
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
     end
@@ -207,70 +207,70 @@ defmodule Lotus.SourcesTest do
 
   describe "supports_feature?/2" do
     test "postgres features" do
-      assert Sources.supports_feature?(:postgres, :search_path) == true
-      assert Sources.supports_feature?(:postgres, :make_interval) == true
-      assert Sources.supports_feature?(:postgres, :arrays) == true
-      assert Sources.supports_feature?(:postgres, :json) == true
+      assert Source.supports_feature?(:postgres, :search_path) == true
+      assert Source.supports_feature?(:postgres, :make_interval) == true
+      assert Source.supports_feature?(:postgres, :arrays) == true
+      assert Source.supports_feature?(:postgres, :json) == true
     end
 
     test "mysql features" do
-      assert Sources.supports_feature?(:mysql, :search_path) == false
-      assert Sources.supports_feature?(:mysql, :make_interval) == false
-      assert Sources.supports_feature?(:mysql, :arrays) == false
-      assert Sources.supports_feature?(:mysql, :json) == true
+      assert Source.supports_feature?(:mysql, :search_path) == false
+      assert Source.supports_feature?(:mysql, :make_interval) == false
+      assert Source.supports_feature?(:mysql, :arrays) == false
+      assert Source.supports_feature?(:mysql, :json) == true
     end
 
     test "sqlite features" do
-      assert Sources.supports_feature?(:sqlite, :search_path) == false
-      assert Sources.supports_feature?(:sqlite, :make_interval) == false
-      assert Sources.supports_feature?(:sqlite, :arrays) == false
-      assert Sources.supports_feature?(:sqlite, :json) == true
+      assert Source.supports_feature?(:sqlite, :search_path) == false
+      assert Source.supports_feature?(:sqlite, :make_interval) == false
+      assert Source.supports_feature?(:sqlite, :arrays) == false
+      assert Source.supports_feature?(:sqlite, :json) == true
     end
 
     test "unknown source type returns false for all features" do
-      assert Sources.supports_feature?(:unknown, :search_path) == false
-      assert Sources.supports_feature?(:unknown, :make_interval) == false
-      assert Sources.supports_feature?(:unknown, :arrays) == false
-      assert Sources.supports_feature?(:unknown, :json) == false
+      assert Source.supports_feature?(:unknown, :search_path) == false
+      assert Source.supports_feature?(:unknown, :make_interval) == false
+      assert Source.supports_feature?(:unknown, :arrays) == false
+      assert Source.supports_feature?(:unknown, :json) == false
     end
 
     test "unknown feature returns false for all source types" do
-      assert Sources.supports_feature?(:postgres, :unknown_feature) == false
-      assert Sources.supports_feature?(:mysql, :unknown_feature) == false
-      assert Sources.supports_feature?(:sqlite, :unknown_feature) == false
-      assert Sources.supports_feature?(:other, :unknown_feature) == false
+      assert Source.supports_feature?(:postgres, :unknown_feature) == false
+      assert Source.supports_feature?(:mysql, :unknown_feature) == false
+      assert Source.supports_feature?(:sqlite, :unknown_feature) == false
+      assert Source.supports_feature?(:other, :unknown_feature) == false
     end
 
     test "schema_hierarchy feature" do
-      assert Sources.supports_feature?(:postgres, :schema_hierarchy) == true
-      assert Sources.supports_feature?(:mysql, :schema_hierarchy) == false
-      assert Sources.supports_feature?(:sqlite, :schema_hierarchy) == false
-      assert Sources.supports_feature?(:other, :schema_hierarchy) == false
+      assert Source.supports_feature?(:postgres, :schema_hierarchy) == true
+      assert Source.supports_feature?(:mysql, :schema_hierarchy) == false
+      assert Source.supports_feature?(:sqlite, :schema_hierarchy) == false
+      assert Source.supports_feature?(:other, :schema_hierarchy) == false
     end
   end
 
   describe "query_language/1" do
     test "returns query language from adapter struct" do
-      adapter = Sources.resolve!("postgres", nil)
-      assert Sources.query_language(adapter) == "sql:postgres"
+      adapter = Source.resolve!("postgres", nil)
+      assert Source.query_language(adapter) == "sql:postgres"
     end
 
     test "returns query language from source name" do
-      assert Sources.query_language("postgres") == "sql:postgres"
-      assert Sources.query_language("mysql") == "sql:mysql"
-      assert Sources.query_language("sqlite") == "sql:sqlite"
+      assert Source.query_language("postgres") == "sql:postgres"
+      assert Source.query_language("mysql") == "sql:mysql"
+      assert Source.query_language("sqlite") == "sql:sqlite"
     end
   end
 
   describe "limit_query/3" do
     test "wraps statement with limit from adapter struct" do
-      adapter = Sources.resolve!("postgres", nil)
-      result = Sources.limit_query(adapter, "SELECT * FROM users", 10)
+      adapter = Source.resolve!("postgres", nil)
+      result = Source.limit_query(adapter, "SELECT * FROM users", 10)
       assert result == "SELECT * FROM (SELECT * FROM users) AS limited_query LIMIT 10"
     end
 
     test "wraps statement with limit from source name" do
-      result = Sources.limit_query("postgres", "SELECT * FROM users", 10)
+      result = Source.limit_query("postgres", "SELECT * FROM users", 10)
       assert result == "SELECT * FROM (SELECT * FROM users) AS limited_query LIMIT 10"
     end
   end

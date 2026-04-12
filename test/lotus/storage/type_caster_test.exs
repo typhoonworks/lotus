@@ -353,7 +353,8 @@ defmodule Lotus.Storage.TypeCasterTest do
 
   describe "cast_value/3 with database type string" do
     test "maps database type to Lotus type and casts" do
-      column_info = Map.put(@column_info, :source_module, Lotus.Sources.Postgres)
+      column_info =
+        Map.put(@column_info, :source_type, :postgres)
 
       assert {:ok, binary} =
                TypeCaster.cast_value(
@@ -366,12 +367,16 @@ defmodule Lotus.Storage.TypeCasterTest do
     end
 
     test "handles integer database type" do
-      column_info = Map.put(@column_info, :source_module, Lotus.Sources.Postgres)
+      column_info =
+        Map.put(@column_info, :source_type, :postgres)
+
       assert {:ok, 42} = TypeCaster.cast_value("42", "integer", column_info)
     end
 
     test "defaults to text for unknown database type" do
-      column_info = Map.put(@column_info, :source_module, Lotus.Sources.Postgres)
+      column_info =
+        Map.put(@column_info, :source_type, :postgres)
+
       assert {:ok, "hello"} = TypeCaster.cast_value("hello", "unknown_type", column_info)
     end
   end

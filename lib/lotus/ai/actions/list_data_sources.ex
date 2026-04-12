@@ -26,7 +26,7 @@ defmodule Lotus.AI.Actions.ListDataSources do
 
     sources =
       Enum.map(names, fn name ->
-        source_type = Lotus.Sources.source_type(name)
+        source_type = Lotus.Source.source_type(name)
         %{name: name, type: source_type}
       end)
 

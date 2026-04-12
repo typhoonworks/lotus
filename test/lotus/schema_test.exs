@@ -488,7 +488,7 @@ defmodule Lotus.SchemaTest do
 
   describe "adapter error propagation" do
     setup do
-      Mimic.copy(Lotus.Sources)
+      Mimic.copy(Lotus.Source)
       Mimic.copy(Lotus.Source.Adapter)
 
       adapter = %Lotus.Source.Adapter{
@@ -498,7 +498,7 @@ defmodule Lotus.SchemaTest do
         source_type: :postgres
       }
 
-      Lotus.Sources
+      Lotus.Source
       |> stub(:resolve!, fn _repo, _fallback -> adapter end)
 
       Lotus.Source.Adapter

@@ -1,307 +1,33 @@
 defmodule Lotus.Sources.Postgres do
   @moduledoc false
 
-  @behaviour Lotus.Source
+  # Deprecated: use Lotus.Source.Adapters.Ecto.Dialects.Postgres instead.
+  # This module delegates all calls to the new location for backward compatibility
+  # during the migration. It will be deleted once all references are updated.
 
-  alias Lotus.Sources.Default
-  alias Lotus.SQL.FilterInjector
-  alias Lotus.SQL.Identifier
-  alias Lotus.SQL.SortInjector
+  alias Lotus.Source.Adapters.Ecto.Dialects.Postgres, as: PgDialect
 
-  @postgrex_error Module.concat([:Postgrex, :Error])
-
-  @impl true
-  def execute_in_transaction(repo, fun, opts) do
-    read_only? = Keyword.get(opts, :read_only, true)
-    stmt_ms = Keyword.get(opts, :statement_timeout_ms, 5_000)
-    timeout = Keyword.get(opts, :timeout, 15_000)
-    search_path = Keyword.get(opts, :search_path)
-
-    repo.transaction(
-      fn ->
-        if read_only?, do: repo.query!("SET LOCAL transaction_read_only = on")
-        repo.query!("SET LOCAL statement_timeout = #{stmt_ms}")
-
-        if search_path do
-          Identifier.validate_search_path!(search_path)
-          repo.query!("SET LOCAL search_path = #{search_path}")
-        end
-
-        fun.()
-      end,
-      timeout: timeout
-    )
-  rescue
-    e -> {:error, Exception.message(e)}
-  end
-
-  @impl true
-  def set_statement_timeout(repo, timeout_ms) do
-    repo.query!("SET LOCAL statement_timeout = #{timeout_ms}")
-    :ok
-  end
-
-  @impl true
-  def set_search_path(repo, search_path) when is_binary(search_path) do
-    Identifier.validate_search_path!(search_path)
-    repo.query!("SET LOCAL search_path = #{search_path}")
-    :ok
-  end
-
-  @impl true
-  def format_error(%{__struct__: mod} = e) when mod == @postgrex_error do
-    pg = Map.get(e, :postgres)
-
-    cond do
-      is_map(pg) and pg[:code] == :syntax_error and is_binary(pg[:message]) ->
-        "SQL syntax error: #{pg[:message]}"
-
-      is_map(pg) and is_binary(pg[:message]) ->
-        "SQL error: #{pg[:message]}"
-
-      is_binary(Map.get(e, :message)) ->
-        "SQL error: #{Map.get(e, :message)}"
-
-      true ->
-        Exception.message(e)
-    end
-  end
-
-  def format_error(other), do: Default.format_error(other)
-
-  @impl true
-  def param_placeholder(idx, _var, :uuid), do: "$#{idx}::uuid"
-  def param_placeholder(idx, _var, :date), do: "$#{idx}::date"
-  def param_placeholder(idx, _var, :datetime), do: "$#{idx}::timestamp"
-  def param_placeholder(idx, _var, :time), do: "$#{idx}::time"
-  def param_placeholder(idx, _var, :number), do: "$#{idx}::numeric"
-  def param_placeholder(idx, _var, :integer), do: "$#{idx}::integer"
-  def param_placeholder(idx, _var, :float), do: "$#{idx}::real"
-  def param_placeholder(idx, _var, :decimal), do: "$#{idx}::numeric"
-  def param_placeholder(idx, _var, :boolean), do: "$#{idx}::boolean"
-  def param_placeholder(idx, _var, :json), do: "$#{idx}::jsonb"
-  def param_placeholder(idx, _var, :binary), do: "$#{idx}::bytea"
-  def param_placeholder(idx, _var, :text), do: "$#{idx}"
-  def param_placeholder(idx, _var, _type), do: "$#{idx}"
-
-  @impl true
-  def limit_offset_placeholders(limit_idx, offset_idx) do
-    # Postgres supports positional parameters for LIMIT/OFFSET
-    {"$#{limit_idx}", "$#{offset_idx}"}
-  end
-
-  @impl true
-  def handled_errors, do: [Postgrex.Error]
-
-  @impl true
-  def query_language, do: "sql:postgres"
-
-  @impl true
-  def limit_query(statement, limit) do
-    "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
-  end
-
-  @impl true
-  def builtin_denies(repo) do
-    ms = repo.config()[:migration_source] || "schema_migrations"
-    prefix = repo.config()[:migration_default_prefix] || "public"
-
-    [
-      {"pg_catalog", ~r/.*/},
-      {"information_schema", ~r/.*/},
-      {prefix, ms},
-      {prefix, "lotus_queries"},
-      {prefix, "lotus_query_visualizations"},
-      {prefix, "lotus_dashboards"},
-      {prefix, "lotus_dashboard_cards"},
-      {prefix, "lotus_dashboard_filters"},
-      {prefix, "lotus_dashboard_card_filter_mappings"}
-    ]
-  end
-
-  @impl true
-  def default_schemas(_repo) do
-    ["public"]
-  end
-
-  @impl true
-  def supports_feature?(:schema_hierarchy), do: true
-  def supports_feature?(:search_path), do: true
-  def supports_feature?(:make_interval), do: true
-  def supports_feature?(:arrays), do: true
-  def supports_feature?(:json), do: true
-  def supports_feature?(_), do: false
-
-  @impl true
-  def hierarchy_label, do: "Tables"
-
-  @impl true
-  def example_query(table, schema) when is_binary(schema) do
-    "SELECT value_column FROM #{schema}.#{table}"
-  end
-
-  def example_query(table, _schema) do
-    "SELECT value_column FROM #{table}"
-  end
-
-  @impl true
-  def builtin_schema_denies(_repo) do
-    ["pg_catalog", "information_schema", "pg_toast", ~r/^pg_temp/, ~r/^pg_toast/]
-  end
-
-  @impl true
-  def list_schemas(repo) do
-    sql = """
-    SELECT schema_name
-    FROM information_schema.schemata
-    WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-    ORDER BY schema_name
-    """
-
-    %{rows: rows} = repo.query!(sql)
-    Enum.map(rows, fn [schema] -> schema end)
-  end
-
-  @impl true
-  def list_tables(repo, schemas, include_views?) do
-    types_sql =
-      if include_views?, do: "'BASE TABLE','VIEW'", else: "'BASE TABLE'"
-
-    sql = """
-    SELECT table_schema, table_name
-    FROM information_schema.tables
-    WHERE table_type IN (#{types_sql})
-      AND table_schema = ANY($1::text[])
-    ORDER BY table_schema, table_name
-    """
-
-    %{rows: rows} = repo.query!(sql, [schemas])
-    Enum.map(rows, fn [schema, table] -> {schema, table} end)
-  end
-
-  @impl true
-  def get_table_schema(repo, schema, table) do
-    sql = """
-    SELECT
-      c.column_name,
-      c.data_type,
-      c.character_maximum_length,
-      c.numeric_precision,
-      c.numeric_scale,
-      c.is_nullable,
-      c.column_default,
-      CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary_key
-    FROM information_schema.columns c
-    LEFT JOIN information_schema.key_column_usage kcu
-      ON c.table_name = kcu.table_name
-     AND c.column_name = kcu.column_name
-     AND c.table_schema = kcu.table_schema
-    LEFT JOIN information_schema.table_constraints tc
-      ON kcu.constraint_name = tc.constraint_name
-     AND kcu.table_schema = tc.table_schema
-     AND tc.constraint_type = 'PRIMARY KEY'
-    WHERE c.table_schema = $1 AND c.table_name = $2
-    ORDER BY c.ordinal_position
-    """
-
-    %{rows: rows} = repo.query!(sql, [schema, table])
-
-    Enum.map(rows, fn [name, type, char_len, num_prec, num_scale, nullable, default, is_pk] ->
-      %{
-        name: name,
-        type: format_postgres_type(type, char_len, num_prec, num_scale),
-        nullable: nullable == "YES",
-        default: default,
-        primary_key: is_pk || false
-      }
-    end)
-  end
-
-  @impl true
-  def explain_plan(repo, sql, params, opts) do
-    explain_sql = "EXPLAIN (FORMAT JSON) " <> sql
-    search_path = Keyword.get(opts, :search_path)
-
-    result =
-      repo.transaction(fn ->
-        repo.query!("SET LOCAL transaction_read_only = on")
-
-        if search_path do
-          Identifier.validate_search_path!(search_path)
-          repo.query!("SET LOCAL search_path = #{search_path}")
-        end
-
-        repo.query(explain_sql, params)
-      end)
-      |> case do
-        {:ok, query_result} -> query_result
-        {:error, err} -> {:error, err}
-      end
-
-    case result do
-      {:ok, %{rows: [[json]]}} ->
-        plan_text =
-          case json do
-            binary when is_binary(binary) -> binary
-            data -> Lotus.JSON.encode!(data)
-          end
-
-        {:ok, plan_text}
-
-      {:error, err} ->
-        {:error, format_error(err)}
-    end
-  end
-
-  @impl true
-  def resolve_table_schema(repo, table, schemas) do
-    sql = """
-    SELECT table_schema
-    FROM information_schema.tables
-    WHERE table_name = $1 AND table_schema = ANY($2::text[])
-    ORDER BY array_position($2::text[], table_schema) NULLS LAST
-    LIMIT 1
-    """
-
-    case repo.query(sql, [table, schemas]) do
-      {:ok, %{rows: [[schema]]}} -> schema
-      _ -> nil
-    end
-  end
-
-  @impl true
-  def quote_identifier(identifier) do
-    escaped = String.replace(identifier, "\"", "\"\"")
-    ~s("#{escaped}")
-  end
-
-  @impl true
-  def apply_filters(sql, params, filters) do
-    FilterInjector.apply(sql, params, filters, &quote_identifier/1, &placeholder/1)
-  end
-
-  defp placeholder(idx), do: "$#{idx}"
-
-  @impl true
-  def apply_sorts(sql, sorts) do
-    SortInjector.apply(sql, sorts, &quote_identifier/1)
-  end
-
-  defp format_postgres_type("character varying", char_len, _, _) when not is_nil(char_len),
-    do: "varchar(#{char_len})"
-
-  defp format_postgres_type("varchar", char_len, _, _) when not is_nil(char_len),
-    do: "varchar(#{char_len})"
-
-  defp format_postgres_type("character", char_len, _, _) when not is_nil(char_len),
-    do: "char(#{char_len})"
-
-  defp format_postgres_type("numeric", _, num_prec, num_scale)
-       when not is_nil(num_prec) and not is_nil(num_scale),
-       do: "numeric(#{num_prec},#{num_scale})"
-
-  defp format_postgres_type("numeric", _, num_prec, _) when not is_nil(num_prec),
-    do: "numeric(#{num_prec})"
-
-  defp format_postgres_type(type, _, _, _), do: type
+  defdelegate execute_in_transaction(repo, fun, opts), to: PgDialect
+  defdelegate set_statement_timeout(repo, ms), to: PgDialect
+  defdelegate set_search_path(repo, path), to: PgDialect
+  defdelegate format_error(error), to: PgDialect
+  defdelegate param_placeholder(idx, var, type), to: PgDialect
+  defdelegate limit_offset_placeholders(limit_idx, offset_idx), to: PgDialect
+  defdelegate handled_errors(), to: PgDialect
+  defdelegate query_language(), to: PgDialect
+  defdelegate limit_query(statement, limit), to: PgDialect
+  defdelegate builtin_denies(repo), to: PgDialect
+  defdelegate default_schemas(repo), to: PgDialect
+  defdelegate supports_feature?(feature), to: PgDialect
+  defdelegate hierarchy_label(), to: PgDialect
+  defdelegate example_query(table, schema), to: PgDialect
+  defdelegate builtin_schema_denies(repo), to: PgDialect
+  defdelegate list_schemas(repo), to: PgDialect
+  defdelegate list_tables(repo, schemas, include_views?), to: PgDialect
+  defdelegate get_table_schema(repo, schema, table), to: PgDialect
+  defdelegate explain_plan(repo, sql, params, opts), to: PgDialect
+  defdelegate resolve_table_schema(repo, table, schemas), to: PgDialect
+  defdelegate quote_identifier(identifier), to: PgDialect
+  defdelegate apply_filters(sql, params, filters), to: PgDialect
+  defdelegate apply_sorts(sql, sorts), to: PgDialect
 end

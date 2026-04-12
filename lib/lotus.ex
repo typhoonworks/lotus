@@ -66,7 +66,7 @@ defmodule Lotus do
         ]
 
   alias Lotus.Cache.{Key, KeyBuilder}
-  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Sources, Storage, Viz}
+  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
   alias Lotus.Source.Adapter
   alias Lotus.Storage.Query
 
@@ -457,7 +457,7 @@ defmodule Lotus do
   end
 
   defp execute_query(q, sql, params, vars, opts) do
-    adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_source)
+    adapter = Source.resolve!(Keyword.get(opts, :repo), q.data_source)
     search_path = Keyword.get(opts, :search_path) || q.search_path
     runner_opts = prepare_final_opts(opts, search_path)
 
@@ -612,7 +612,7 @@ defmodule Lotus do
         ]) ::
           {:ok, Result.t()} | {:error, term()}
   def run_statement(statement, params \\ [], opts \\ []) do
-    adapter = Sources.resolve!(Keyword.get(opts, :repo), nil)
+    adapter = Source.resolve!(Keyword.get(opts, :repo), nil)
 
     runner_opts =
       opts

@@ -192,7 +192,7 @@ defmodule Lotus.Visibility do
 
   alias Lotus.Config
   alias Lotus.Source.Adapter
-  alias Lotus.Sources.Default
+  alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.Visibility.Policy
 
   @doc """

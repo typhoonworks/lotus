@@ -44,13 +44,13 @@ defmodule Lotus.Source.Resolvers.Static do
   @impl true
   def list_sources do
     Config.data_sources()
-    |> Enum.map(fn {name, mod} -> EctoAdapter.wrap(name, mod) end)
+    |> Enum.map(fn {name, mod} -> wrap_entry(name, mod) end)
   end
 
   @impl true
   def get_source!(name) do
     mod = Config.get_data_source!(name)
-    EctoAdapter.wrap(name, mod)
+    wrap_entry(name, mod)
   end
 
   @impl true
@@ -61,7 +61,7 @@ defmodule Lotus.Source.Resolvers.Static do
   @impl true
   def default_source do
     {name, mod} = Config.default_data_source()
-    {name, EctoAdapter.wrap(name, mod)}
+    {name, wrap_entry(name, mod)}
   end
 
   # ---------------------------------------------------------------------------
@@ -71,14 +71,28 @@ defmodule Lotus.Source.Resolvers.Static do
   defp lookup_by_name(name) do
     case Map.get(Config.data_sources(), name) do
       nil -> {:error, :not_found}
-      mod -> {:ok, EctoAdapter.wrap(name, mod)}
+      mod -> {:ok, wrap_entry(name, mod)}
     end
   end
 
   defp lookup_by_module(mod) do
     case Enum.find(Config.data_sources(), fn {_name, m} -> m == mod end) do
-      {name, _} -> {:ok, EctoAdapter.wrap(name, mod)}
+      {name, _} -> {:ok, wrap_entry(name, mod)}
       nil -> {:error, :not_found}
+    end
+  end
+
+  defp wrap_entry(name, entry) do
+    case find_adapter(entry) do
+      {:ok, adapter_mod} -> adapter_mod.wrap(name, entry)
+      :none -> EctoAdapter.wrap(name, entry)
+    end
+  end
+
+  defp find_adapter(entry) do
+    case Enum.find(Config.source_adapters(), & &1.can_handle?(entry)) do
+      nil -> :none
+      mod -> {:ok, mod}
     end
   end
 
@@ -89,6 +103,6 @@ defmodule Lotus.Source.Resolvers.Static do
 
   defp default_adapter do
     {name, mod} = Config.default_data_source()
-    EctoAdapter.wrap(name, mod)
+    wrap_entry(name, mod)
   end
 end

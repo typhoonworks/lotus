@@ -8,7 +8,7 @@ defmodule Lotus.ColumnVisibilityTest do
   setup do
     Mimic.copy(Lotus.Config)
     Mimic.copy(Lotus.Source.Adapter)
-    Mimic.copy(Lotus.Sources)
+    Mimic.copy(Lotus.Source)
     :ok
   end
 
@@ -111,7 +111,7 @@ defmodule Lotus.ColumnVisibilityTest do
         source_type: :postgres
       }
 
-      Lotus.Sources
+      Lotus.Source
       |> stub(:resolve!, fn _repo_opt, _fallback -> mock_adapter end)
 
       Lotus.Source.Adapter

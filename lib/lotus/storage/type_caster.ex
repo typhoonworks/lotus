@@ -80,8 +80,8 @@ defmodule Lotus.Storage.TypeCaster do
 
       :not_found ->
         # Map to Lotus type and use built-in casting
-        source_module = Map.get(column_info, :source_module)
-        lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_module)
+        source_type = Map.get(column_info, :source_type)
+        lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_type)
         cast_value(value, lotus_type, column_info)
     end
   end
