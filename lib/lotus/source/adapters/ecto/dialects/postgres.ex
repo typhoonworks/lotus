@@ -417,4 +417,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   defp pg_scalar_type("timestamptz" <> _), do: :datetime
   defp pg_scalar_type("time" <> _), do: :time
   defp pg_scalar_type(_), do: :text
+
+  @impl true
+  def editor_config do
+    Lotus.Source.Adapters.Ecto.Dialects.Postgres.EditorConfig.config()
+  end
 end

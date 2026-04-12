@@ -271,6 +271,15 @@ defmodule Lotus.Source.Adapter do
   @doc "Map a database column type string to a Lotus internal type atom."
   @callback db_type_to_lotus_type(state :: term(), db_type :: String.t()) :: atom()
 
+  @doc "Return editor configuration (keywords, types, functions) for the adapter."
+  @callback editor_config(state :: term()) :: %{
+              language: String.t(),
+              keywords: [String.t()],
+              types: [String.t()],
+              functions: [%{name: String.t(), detail: String.t(), args: String.t()}],
+              context_boundaries: [String.t()]
+            }
+
   @optional_callbacks [
     sanitize_query: 3,
     transform_query: 4,
@@ -283,7 +292,8 @@ defmodule Lotus.Source.Adapter do
     can_handle?: 1,
     wrap: 2,
     transform_sql: 2,
-    db_type_to_lotus_type: 2
+    db_type_to_lotus_type: 2,
+    editor_config: 1
   ]
 
   # ---------------------------------------------------------------------------
@@ -468,6 +478,14 @@ defmodule Lotus.Source.Adapter do
     if function_exported?(mod, :query_language, 1),
       do: mod.query_language(state),
       else: "sql"
+  end
+
+  @doc "Return editor configuration via the adapter."
+  @spec editor_config(t()) :: map()
+  def editor_config(%__MODULE__{module: mod, state: state}) do
+    if function_exported?(mod, :editor_config, 1),
+      do: mod.editor_config(state),
+      else: %{language: "sql", keywords: [], types: [], functions: [], context_boundaries: []}
   end
 
   @doc "Wrap a statement with a limit clause via the adapter."

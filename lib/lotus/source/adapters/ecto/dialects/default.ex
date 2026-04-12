@@ -137,4 +137,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   def apply_sorts(sql, sorts) do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
+
+  @impl true
+  def editor_config do
+    Lotus.Source.Adapters.Ecto.Dialects.Default.EditorConfig.config()
+  end
 end

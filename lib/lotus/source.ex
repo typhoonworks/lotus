@@ -134,6 +134,16 @@ defmodule Lotus.Source do
   end
 
   @doc """
+  Return the editor configuration for a source.
+  """
+  @spec editor_config(Adapter.t() | String.t()) :: map()
+  def editor_config(%Adapter{} = adapter), do: Adapter.editor_config(adapter)
+
+  def editor_config(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.editor_config()
+  end
+
+  @doc """
   Wrap a statement with a limit clause using the source's syntax.
   """
   @spec limit_query(Adapter.t() | String.t(), String.t(), pos_integer()) :: String.t()

@@ -323,4 +323,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
         :text
     end
   end
+
+  @impl true
+  def editor_config do
+    Lotus.Source.Adapters.Ecto.Dialects.SQLite3.EditorConfig.config()
+  end
 end

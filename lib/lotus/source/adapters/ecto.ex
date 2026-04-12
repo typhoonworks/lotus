@@ -231,6 +231,13 @@ defmodule Lotus.Source.Adapters.Ecto do
 
       @impl true
       def limit_query(_repo, statement, limit), do: @dialect.limit_query(statement, limit)
+
+      @impl true
+      def editor_config(_repo) do
+        if function_exported?(@dialect, :editor_config, 0),
+          do: @dialect.editor_config(),
+          else: %{language: "sql", keywords: [], types: [], functions: [], context_boundaries: []}
+      end
     end
   end
 
@@ -526,6 +533,13 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @impl true
   def limit_query(_repo, statement, limit), do: @default_dialect.limit_query(statement, limit)
+
+  @impl true
+  def editor_config(_repo) do
+    if function_exported?(@default_dialect, :editor_config, 0),
+      do: @default_dialect.editor_config(),
+      else: %{language: "sql", keywords: [], types: [], functions: [], context_boundaries: []}
+  end
 
   @impl true
   def hierarchy_label(_repo) do

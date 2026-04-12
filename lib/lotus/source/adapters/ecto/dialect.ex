@@ -92,6 +92,14 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   # Optional callbacks — Source identity
   # ---------------------------------------------------------------------------
 
+  @callback editor_config() :: %{
+              language: String.t(),
+              keywords: [String.t()],
+              types: [String.t()],
+              functions: [%{name: String.t(), detail: String.t(), args: String.t()}],
+              context_boundaries: [String.t()]
+            }
+
   @callback supports_feature?(feature :: atom()) :: boolean()
   @callback hierarchy_label() :: String.t()
   @callback example_query(table :: String.t(), schema :: String.t() | nil) :: String.t()
@@ -147,6 +155,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
     example_query: 2,
     extract_accessed_resources: 4,
     transform_sql: 1,
-    db_type_to_lotus_type: 1
+    db_type_to_lotus_type: 1,
+    editor_config: 0
   ]
 end

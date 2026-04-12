@@ -501,4 +501,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   defp mysql_scalar_type("datetime" <> _), do: :datetime
   defp mysql_scalar_type("timestamp" <> _), do: :datetime
   defp mysql_scalar_type(_), do: :text
+
+  @impl true
+  def editor_config do
+    Lotus.Source.Adapters.Ecto.Dialects.MySQL.EditorConfig.config()
+  end
 end
