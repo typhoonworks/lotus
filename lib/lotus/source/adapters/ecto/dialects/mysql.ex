@@ -471,70 +471,34 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
 
   @impl true
   def transform_sql(sql) do
-    Lotus.SQL.Transformer.transform(sql, :mysql)
+    alias Lotus.SQL.Transformer
+
+    sql
+    |> Transformer.transform_wildcards(:concat_fn)
+    |> Transformer.strip_quoted_variables()
   end
 
   @impl true
   def db_type_to_lotus_type(db_type) do
-    case String.downcase(db_type) do
-      # UUID storage formats in MySQL
-      "char(36)" ->
-        :uuid
-
-      "char(32)" ->
-        :uuid
-
-      "binary(16)" ->
-        :uuid
-
-      # Integer types
-      "int" <> _ ->
-        :integer
-
-      "bigint" <> _ ->
-        :integer
-
-      "smallint" <> _ ->
-        :integer
-
-      # MySQL boolean is tinyint(1)
-      "tinyint(1)" ->
-        :boolean
-
-      "tinyint" <> _ ->
-        :integer
-
-      # Decimal/numeric types
-      "decimal" <> _ ->
-        :decimal
-
-      "numeric" <> _ ->
-        :decimal
-
-      # Float types
-      "float" <> _ ->
-        :float
-
-      "double" <> _ ->
-        :float
-
-      # Date/time types
-      "date" ->
-        :date
-
-      "datetime" <> _ ->
-        :datetime
-
-      "timestamp" <> _ ->
-        :datetime
-
-      # JSON
-      "json" ->
-        :json
-
-      # Default to text
-      _ ->
-        :text
-    end
+    mysql_scalar_type(String.downcase(db_type))
   end
+
+  defp mysql_scalar_type("char(36)"), do: :uuid
+  defp mysql_scalar_type("char(32)"), do: :uuid
+  defp mysql_scalar_type("binary(16)"), do: :uuid
+  defp mysql_scalar_type("tinyint(1)"), do: :boolean
+  defp mysql_scalar_type("date"), do: :date
+  defp mysql_scalar_type("json"), do: :json
+
+  defp mysql_scalar_type("int" <> _), do: :integer
+  defp mysql_scalar_type("bigint" <> _), do: :integer
+  defp mysql_scalar_type("smallint" <> _), do: :integer
+  defp mysql_scalar_type("tinyint" <> _), do: :integer
+  defp mysql_scalar_type("decimal" <> _), do: :decimal
+  defp mysql_scalar_type("numeric" <> _), do: :decimal
+  defp mysql_scalar_type("float" <> _), do: :float
+  defp mysql_scalar_type("double" <> _), do: :float
+  defp mysql_scalar_type("datetime" <> _), do: :datetime
+  defp mysql_scalar_type("timestamp" <> _), do: :datetime
+  defp mysql_scalar_type(_), do: :text
 end

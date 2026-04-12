@@ -289,7 +289,11 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
 
   @impl true
   def transform_sql(sql) do
-    Lotus.SQL.Transformer.transform(sql, :sqlite)
+    alias Lotus.SQL.Transformer
+
+    sql
+    |> Transformer.transform_wildcards(:pipe)
+    |> Transformer.strip_quoted_variables()
   end
 
   @impl true

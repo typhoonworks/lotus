@@ -55,8 +55,23 @@ defmodule Lotus.Source.Adapters.Ecto do
       alias Lotus.Source.Adapter
       alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
-      # -- Pluggable Registration --
+      unquote(registration_callbacks())
+      unquote(execution_callbacks())
+      unquote(introspection_callbacks())
+      unquote(sql_generation_callbacks())
+      unquote(visibility_callbacks())
+      unquote(lifecycle_callbacks())
+      unquote(pipeline_callbacks())
+      unquote(identity_callbacks())
+      unquote(presentation_callbacks())
+      unquote(type_mapping_callbacks())
 
+      defoverridable Lotus.Source.Adapter
+    end
+  end
+
+  defp registration_callbacks do
+    quote do
       @impl true
       def can_handle?(repo) when is_atom(repo) do
         function_exported?(repo, :__adapter__, 0) and
@@ -74,9 +89,11 @@ defmodule Lotus.Source.Adapters.Ecto do
           source_type: @dialect.source_type()
         }
       end
+    end
+  end
 
-      # -- Query Execution --
-
+  defp execution_callbacks do
+    quote do
       @impl true
       def execute_query(repo, sql, params, opts) do
         EctoAdapter.do_execute_query(@dialect, repo, sql, params, opts)
@@ -86,9 +103,11 @@ defmodule Lotus.Source.Adapters.Ecto do
       def transaction(repo, fun, opts) do
         @dialect.execute_in_transaction(repo, fn -> fun.(repo) end, opts)
       end
+    end
+  end
 
-      # -- Introspection --
-
+  defp introspection_callbacks do
+    quote do
       @impl true
       def list_schemas(repo) do
         {:ok, @dialect.list_schemas(repo)}
@@ -117,9 +136,11 @@ defmodule Lotus.Source.Adapters.Ecto do
       rescue
         e -> {:error, Exception.message(e)}
       end
+    end
+  end
 
-      # -- SQL Generation --
-
+  defp sql_generation_callbacks do
+    quote do
       @impl true
       def quote_identifier(_repo, identifier), do: @dialect.quote_identifier(identifier)
 
@@ -141,9 +162,11 @@ defmodule Lotus.Source.Adapters.Ecto do
       @impl true
       def explain_plan(repo, sql, params, opts),
         do: @dialect.explain_plan(repo, sql, params, opts)
+    end
+  end
 
-      # -- Safety & Visibility --
-
+  defp visibility_callbacks do
+    quote do
       @impl true
       def builtin_denies(repo), do: @dialect.builtin_denies(repo)
 
@@ -152,27 +175,29 @@ defmodule Lotus.Source.Adapters.Ecto do
 
       @impl true
       def default_schemas(repo), do: @dialect.default_schemas(repo)
+    end
+  end
 
-      # -- Lifecycle --
-
+  defp lifecycle_callbacks do
+    quote do
       @impl true
       def health_check(repo), do: EctoAdapter.do_health_check(repo)
 
       @impl true
       def disconnect(_repo), do: :ok
 
-      # -- Error Handling --
-
       @impl true
       def format_error(_repo, error), do: @dialect.format_error(error)
 
       @impl true
-      def handled_errors(repo), do: @dialect.handled_errors()
+      def handled_errors(_repo), do: @dialect.handled_errors()
+    end
+  end
 
-      # -- Pipeline --
-
+  defp pipeline_callbacks do
+    quote do
       @impl true
-      def sanitize_query(repo, query, opts), do: EctoAdapter.do_sanitize_query(query, opts)
+      def sanitize_query(_repo, query, opts), do: EctoAdapter.do_sanitize_query(query, opts)
 
       @impl true
       def transform_query(_repo, query, params, _opts), do: {query, params}
@@ -186,9 +211,11 @@ defmodule Lotus.Source.Adapters.Ecto do
       def apply_window(repo, query, params, window_opts) do
         EctoAdapter.do_apply_window(__MODULE__, @dialect, repo, query, params, window_opts)
       end
+    end
+  end
 
-      # -- Source Identity --
-
+  defp identity_callbacks do
+    quote do
       @impl true
       def source_type(_repo), do: @dialect.source_type()
 
@@ -204,7 +231,11 @@ defmodule Lotus.Source.Adapters.Ecto do
 
       @impl true
       def limit_query(_repo, statement, limit), do: @dialect.limit_query(statement, limit)
+    end
+  end
 
+  defp presentation_callbacks do
+    quote do
       @impl true
       def hierarchy_label(_repo) do
         if function_exported?(@dialect, :hierarchy_label, 0),
@@ -218,9 +249,11 @@ defmodule Lotus.Source.Adapters.Ecto do
           do: @dialect.example_query(table, schema),
           else: "SELECT value_column FROM #{table}"
       end
+    end
+  end
 
-      # -- SQL Transformation & Type Mapping --
-
+  defp type_mapping_callbacks do
+    quote do
       @impl true
       def transform_sql(_repo, sql) do
         if function_exported?(@dialect, :transform_sql, 1),
@@ -234,8 +267,6 @@ defmodule Lotus.Source.Adapters.Ecto do
           do: @dialect.db_type_to_lotus_type(db_type),
           else: :text
       end
-
-      defoverridable Lotus.Source.Adapter
     end
   end
 

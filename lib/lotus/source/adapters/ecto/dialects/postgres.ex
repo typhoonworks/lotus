@@ -372,7 +372,12 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
 
   @impl true
   def transform_sql(sql) do
-    Lotus.SQL.Transformer.transform(sql, :postgres)
+    alias Lotus.SQL.Transformer
+
+    sql
+    |> Transformer.transform_pg_intervals()
+    |> Transformer.transform_wildcards(:pipe)
+    |> Transformer.strip_quoted_variables()
   end
 
   @impl true
@@ -380,83 +385,36 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
     lowercased = String.downcase(db_type)
 
     cond do
-      # Array types end with []
       String.ends_with?(lowercased, "[]") ->
         base_type = String.replace_suffix(lowercased, "[]", "")
         {:array, db_type_to_lotus_type(base_type)}
 
-      # USER-DEFINED types (enums)
       lowercased == "user-defined" ->
         :enum
 
-      # Standard types
       true ->
-        case lowercased do
-          "uuid" ->
-            :uuid
-
-          # Integer types
-          "integer" ->
-            :integer
-
-          "bigint" ->
-            :integer
-
-          "smallint" ->
-            :integer
-
-          "serial" ->
-            :integer
-
-          "bigserial" ->
-            :integer
-
-          # Decimal/numeric types
-          "numeric" <> _ ->
-            :decimal
-
-          "decimal" <> _ ->
-            :decimal
-
-          # Float types
-          "real" ->
-            :float
-
-          "double precision" ->
-            :float
-
-          # Boolean
-          "boolean" ->
-            :boolean
-
-          # Date/time types
-          "date" ->
-            :date
-
-          "timestamp" <> _ ->
-            :datetime
-
-          "timestamptz" <> _ ->
-            :datetime
-
-          "time" <> _ ->
-            :time
-
-          # JSON types
-          "json" ->
-            :json
-
-          "jsonb" ->
-            :json
-
-          # Binary
-          "bytea" ->
-            :binary
-
-          # Default to text
-          _ ->
-            :text
-        end
+        pg_scalar_type(lowercased)
     end
   end
+
+  defp pg_scalar_type("uuid"), do: :uuid
+  defp pg_scalar_type("integer"), do: :integer
+  defp pg_scalar_type("bigint"), do: :integer
+  defp pg_scalar_type("smallint"), do: :integer
+  defp pg_scalar_type("serial"), do: :integer
+  defp pg_scalar_type("bigserial"), do: :integer
+  defp pg_scalar_type("real"), do: :float
+  defp pg_scalar_type("double precision"), do: :float
+  defp pg_scalar_type("boolean"), do: :boolean
+  defp pg_scalar_type("date"), do: :date
+  defp pg_scalar_type("json"), do: :json
+  defp pg_scalar_type("jsonb"), do: :json
+  defp pg_scalar_type("bytea"), do: :binary
+
+  defp pg_scalar_type("numeric" <> _), do: :decimal
+  defp pg_scalar_type("decimal" <> _), do: :decimal
+  defp pg_scalar_type("timestamp" <> _), do: :datetime
+  defp pg_scalar_type("timestamptz" <> _), do: :datetime
+  defp pg_scalar_type("time" <> _), do: :time
+  defp pg_scalar_type(_), do: :text
 end
