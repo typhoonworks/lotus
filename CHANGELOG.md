@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **Widened `data_sources` config to accept maps** — `data_sources` NimbleOptions type changed from `{:map, :string, :atom}` to `{:map, :string, {:or, [:atom, :map]}}`, allowing non-Ecto adapters to pass config maps (e.g. `%{adapter: :elasticsearch, url: "http://..."}`) alongside repo modules. Updated typespecs for `data_sources/0` and `get_data_source!/1`. Simplified `source_module?/1` guard in `Lotus.Source.Resolvers.Static` to accept any atom
 - Extracted `Lotus.Source.Adapters.Ecto.Dialect` behaviour from the old `Lotus.Source` callbacks, adding `source_type/0` and `ecto_adapter/0` required callbacks (#193)
 - Consolidated three duplicated `@impls` maps (in `Lotus.Source`, `Lotus.Source.Adapters.Ecto`, and `Lotus.Sources`) into a single `@impls` in `Lotus.Source.Adapters.Ecto`, built dynamically from dialect modules' `ecto_adapter/0` callbacks (#193)
 - `Lotus.Source.Adapters.Ecto` now uses dialect modules under `Lotus.Source.Adapters.Ecto.Dialects.*` instead of `Lotus.Sources.*` (#193)

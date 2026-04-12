@@ -82,7 +82,7 @@ defmodule Lotus.Config do
           ecto_repo: module(),
           read_only: boolean(),
           unique_names: boolean(),
-          data_sources: %{String.t() => module()},
+          data_sources: %{String.t() => module() | map()},
           default_source: String.t() | nil,
           default_page_size: pos_integer() | nil,
           table_visibility: map(),
@@ -117,10 +117,10 @@ defmodule Lotus.Config do
         "When true (default), blocks write operations (INSERT, UPDATE, DELETE, DDL) at the application level. Set to false to allow write queries."
     ],
     data_sources: [
-      type: {:map, :string, :atom},
+      type: {:map, :string, {:or, [:atom, :map]}},
       default: %{},
       doc:
-        "Named data sources that can be used for query execution. Keys are strings, values are repo modules."
+        "Named data sources for query execution. Values are repo modules (Ecto) or config maps (non-Ecto adapters)."
     ],
     default_source: [
       type: :string,
@@ -371,7 +371,7 @@ defmodule Lotus.Config do
   @doc """
   Returns the configured data sources.
   """
-  @spec data_sources() :: %{String.t() => module()}
+  @spec data_sources() :: %{String.t() => module() | map()}
   def data_sources, do: load!()[:data_sources]
 
   @doc """
@@ -379,7 +379,7 @@ defmodule Lotus.Config do
 
   Returns the source module or raises if not found.
   """
-  @spec get_data_source!(String.t()) :: module()
+  @spec get_data_source!(String.t()) :: module() | map()
   def get_data_source!(name) do
     case Map.get(data_sources(), name) do
       nil ->

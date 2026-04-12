@@ -98,9 +98,7 @@ defmodule Lotus.Source.Resolvers.Static do
     end
   end
 
-  defp source_module?(mod) when is_atom(mod) and not is_nil(mod),
-    do: function_exported?(mod, :__adapter__, 0)
-
+  defp source_module?(mod) when is_atom(mod) and not is_nil(mod), do: true
   defp source_module?(_), do: false
 
   defp default_adapter do

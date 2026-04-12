@@ -142,6 +142,21 @@ defmodule Lotus.ConfigTest do
     end
   end
 
+  describe "data_sources config validation" do
+    test "accepts map data source values alongside module atoms" do
+      Application.put_env(:lotus, :data_sources, %{
+        "postgres" => Lotus.Test.Repo,
+        "search" => %{adapter: :elasticsearch, url: "http://localhost:9200"}
+      })
+
+      Config.reload!()
+
+      sources = Config.data_sources()
+      assert sources["postgres"] == Lotus.Test.Repo
+      assert sources["search"] == %{adapter: :elasticsearch, url: "http://localhost:9200"}
+    end
+  end
+
   describe "deprecated config key backward compatibility" do
     test "data_repos config key still works and resolves correctly" do
       original_sources = Application.get_env(:lotus, :data_sources)
