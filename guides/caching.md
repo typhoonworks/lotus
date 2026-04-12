@@ -50,10 +50,10 @@ Once configured and started, caching works automatically:
 
 ```elixir
 # First call - executes query and caches result
-{:ok, result1} = Lotus.run_sql("SELECT COUNT(*) FROM users")
+{:ok, result1} = Lotus.run_statement("SELECT COUNT(*) FROM users")
 
 # Second call - returns cached result (much faster!)
-{:ok, result2} = Lotus.run_sql("SELECT COUNT(*) FROM users")
+{:ok, result2} = Lotus.run_statement("SELECT COUNT(*) FROM users")
 ```
 
 ## Configuration
@@ -176,7 +176,7 @@ When no cache mode is specified, Lotus automatically caches results:
 
 ```elixir
 # Uses cache if available, otherwise queries database and caches result
-{:ok, result} = Lotus.run_sql("SELECT * FROM products")
+{:ok, result} = Lotus.run_statement("SELECT * FROM products")
 ```
 
 ### Bypass Mode
@@ -185,7 +185,7 @@ Skip cache entirely - always query the database:
 
 ```elixir
 # Always hits database, never reads from or writes to cache
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [], cache: :bypass)
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [], cache: :bypass)
 ```
 
 **Use cases:**
@@ -200,7 +200,7 @@ Execute query and update cache with fresh results:
 
 ```elixir
 # Executes query AND updates cache with new result
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [], cache: :refresh)
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [], cache: :refresh)
 ```
 
 **Use cases:**
@@ -217,7 +217,7 @@ Choose a specific cache profile for a query:
 
 ```elixir
 # Use the 'schema' profile (longer TTL)
-{:ok, tables} = Lotus.run_sql("SELECT name FROM sqlite_master", [], cache: [profile: :schema])
+{:ok, tables} = Lotus.run_statement("SELECT name FROM sqlite_master", [], cache: [profile: :schema])
 ```
 
 ### TTL Override
@@ -226,7 +226,7 @@ Override the default TTL for specific queries:
 
 ```elixir
 # Cache for exactly 2 minutes regardless of profile
-{:ok, result} = Lotus.run_sql("SELECT * FROM users", [], cache: [ttl_ms: 120_000])
+{:ok, result} = Lotus.run_statement("SELECT * FROM users", [], cache: [ttl_ms: 120_000])
 ```
 
 ### Tag-Based Caching
@@ -235,7 +235,7 @@ Tag cache entries for selective invalidation:
 
 ```elixir
 # Tag this cache entry
-{:ok, user} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123],
+{:ok, user} = Lotus.run_statement("SELECT * FROM users WHERE id = $1", [123],
   cache: [tags: ["user:123", "user_data"]])
 
 # Later, invalidate all entries with these tags
@@ -247,7 +247,7 @@ Lotus.Cache.invalidate_tags(["user:123"])
 You can combine multiple cache options:
 
 ```elixir
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [],
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [],
   cache: [
     profile: :reports,
     ttl_ms: 600_000,  # Override profile TTL
@@ -403,7 +403,7 @@ This is useful when visibility rules change for a specific scope (e.g. a tenant'
 
 `invalidate_scope/1` accepts any non-nil term and returns `:ok`. Passing `nil` is a no-op (there is no scope tag to invalidate).
 
-When passing `:scope` to query execution (`run_query/2`, `run_sql/3`), the scope is hashed into the result cache key so different scopes produce independent cached results. This is important when the database uses row-level security (RLS) policies, middleware rewrites queries per-scope, or a `SET ROLE` / session variable changes what data the query sees.
+When passing `:scope` to query execution (`run_query/2`, `run_statement/3`), the scope is hashed into the result cache key so different scopes produce independent cached results. This is important when the database uses row-level security (RLS) policies, middleware rewrites queries per-scope, or a `SET ROLE` / session variable changes what data the query sees.
 
 ## Working with run_query
 
@@ -473,7 +473,7 @@ Pre-populate cache with commonly used queries:
 
 ```elixir
 # During application startup or scheduled jobs
-{:ok, _} = Lotus.run_sql("SELECT * FROM lookup_tables", [], cache: :refresh)
+{:ok, _} = Lotus.run_statement("SELECT * FROM lookup_tables", [], cache: :refresh)
 {:ok, _} = Lotus.run_query(dashboard_query_id, cache: :refresh)
 ```
 

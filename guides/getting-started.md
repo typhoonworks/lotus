@@ -80,7 +80,7 @@ Sometimes you want to run a query without saving it first:
 
 ```elixir
 # Run SQL directly
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT name, email FROM users WHERE active = $1 LIMIT $2",
   [true, 10]
 )
@@ -102,14 +102,14 @@ Lotus supports PostgreSQL, MySQL, and SQLite databases. If you have configured m
 
 ```elixir
 # Execute against a specific repository by name
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT COUNT(*) FROM page_views WHERE date = $1",
   [Date.utc_today()],
   repo: "analytics"
 )
 
 # Execute against a repository module directly
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT SUM(amount) FROM transactions",
   [],
   repo: MyApp.MySQLRepo
@@ -389,11 +389,11 @@ PostgreSQL's `search_path` determines which schemas are searched when you refere
 
 ```elixir
 # Without search_path - must fully qualify table names
-{:error, reason} = Lotus.run_sql("SELECT * FROM customers")
+{:error, reason} = Lotus.run_statement("SELECT * FROM customers")
 # "SQL error: relation \"customers\" does not exist"
 
 # With search_path - finds reporting.customers automatically
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT * FROM customers", 
   [], 
   search_path: "reporting, public"
@@ -430,7 +430,7 @@ You can override or provide a `search_path` at runtime:
 {:ok, result} = Lotus.run_query(query, search_path: "analytics, public")
 
 # Provide search_path for ad-hoc queries
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id",
   [],
   repo: "postgres",
@@ -544,7 +544,7 @@ For non-PostgreSQL databases, `search_path` is safely ignored:
 
 ```elixir
 # SQLite ignores search_path without error
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "SELECT COUNT(*) FROM products",
   [],
   repo: "sqlite",
@@ -687,17 +687,17 @@ Lotus provides clear error messages for common issues:
 
 ```elixir
 # Invalid SQL
-{:error, reason} = Lotus.run_sql("SELCT * FROM users")  # typo in SELECT
+{:error, reason} = Lotus.run_statement("SELCT * FROM users")  # typo in SELECT
 IO.inspect(reason)
 # "SQL syntax error: syntax error at or near \"SELCT\""
 
 # Attempting destructive operation
-{:error, reason} = Lotus.run_sql("DROP TABLE users")
+{:error, reason} = Lotus.run_statement("DROP TABLE users")
 IO.inspect(reason)
 # "Only read-only queries are allowed"
 
 # Query timeout
-{:error, reason} = Lotus.run_sql(
+{:error, reason} = Lotus.run_statement(
   "SELECT pg_sleep(10)",
   [],
   timeout: 1000  # 1 second timeout
@@ -706,7 +706,7 @@ IO.inspect(reason)
 # "SQL error: canceling statement due to user request"
 
 # Table visibility restriction
-{:error, reason} = Lotus.run_sql("SELECT * FROM schema_migrations")
+{:error, reason} = Lotus.run_statement("SELECT * FROM schema_migrations")
 IO.inspect(reason)
 # "Query touches blocked table(s): schema_migrations"
 ```
@@ -752,13 +752,13 @@ Lotus.create_query(%{
 
 ```elixir
 # Good - safe from SQL injection
-Lotus.run_sql(
+Lotus.run_statement(
   "SELECT * FROM users WHERE status = $1",
   [user_status]
 )
 
 # Avoid - vulnerable to SQL injection
-Lotus.run_sql("SELECT * FROM users WHERE status = '#{user_status}'")
+Lotus.run_statement("SELECT * FROM users WHERE status = '#{user_status}'")
 ```
 
 ### 3. Handle Errors Gracefully

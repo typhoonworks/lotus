@@ -83,13 +83,13 @@ config :lotus,
 
 ```elixir
 # Execute against a specific repository by name
-Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "analytics")
+Lotus.run_statement("SELECT COUNT(*) FROM users", [], repo: "analytics")
 
 # Execute against a repository module directly
-Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: MyApp.AnalyticsRepo)
+Lotus.run_statement("SELECT COUNT(*) FROM users", [], repo: MyApp.AnalyticsRepo)
 
 # When no repo is specified, uses the configured default_source
-Lotus.run_sql("SELECT COUNT(*) FROM users")  # Uses "main" from default_source config
+Lotus.run_statement("SELECT COUNT(*) FROM users")  # Uses "main" from default_source config
 ```
 
 **Data Source Management:**
@@ -165,19 +165,19 @@ This configuration only applies when using windowed pagination (`window` option)
 
 ```elixir
 # Without window option - returns ALL rows (no pagination applied)
-{:ok, result} = Lotus.run_sql("SELECT * FROM large_table")
+{:ok, result} = Lotus.run_statement("SELECT * FROM large_table")
 # Could return millions of rows
 
 # With window option but no limit - uses default_page_size
-{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [])
+{:ok, result} = Lotus.run_statement("SELECT * FROM large_table", [], window: [])
 # Returns max 1000 rows (or your configured default)
 
 # With explicit limit - uses the specified limit (capped at default_page_size)
-{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [limit: 500])
+{:ok, result} = Lotus.run_statement("SELECT * FROM large_table", [], window: [limit: 500])
 # Returns max 500 rows
 
 # Limit exceeding default is capped for safety
-{:ok, result} = Lotus.run_sql("SELECT * FROM large_table", [], window: [limit: 5000])  
+{:ok, result} = Lotus.run_statement("SELECT * FROM large_table", [], window: [limit: 5000])  
 # Returns max 1000 rows (capped at default_page_size)
 ```
 
@@ -404,14 +404,14 @@ You can also enable writes per query without changing the global config:
 
 ```elixir
 # Insert a record
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "INSERT INTO notes (body) VALUES ($1) RETURNING id, body",
   ["hello world"],
   read_only: false
 )
 
 # Update records
-{:ok, result} = Lotus.run_sql(
+{:ok, result} = Lotus.run_statement(
   "UPDATE users SET active = true WHERE id = $1 RETURNING id",
   [42],
   read_only: false
@@ -488,10 +488,10 @@ When a data source is configured with Ecto's `read_only: true`:
 
 ```elixir
 # Reads work normally
-{:ok, result} = Lotus.run_sql("SELECT COUNT(*) FROM users", [], repo: "main")
+{:ok, result} = Lotus.run_statement("SELECT COUNT(*) FROM users", [], repo: "main")
 
 # Writes are blocked by Ecto's read-only repo — even with read_only: false
-{:error, _} = Lotus.run_sql(
+{:error, _} = Lotus.run_statement(
   "INSERT INTO users (name) VALUES ($1)", ["test"],
   repo: "main", read_only: false
 )
