@@ -470,10 +470,10 @@ defmodule Lotus do
     {sql, params} = Adapter.transform_query(adapter, sql, params, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
+    {sql, params} = Adapter.apply_filters(adapter, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
-    sql = Lotus.Source.apply_sorts(adapter, sql, sorts)
+    sql = Adapter.apply_sorts(adapter, sql, sorts)
 
     {sql, params, window_meta, cache_bound} =
       maybe_apply_window(

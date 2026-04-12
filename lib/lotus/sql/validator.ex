@@ -7,6 +7,8 @@ defmodule Lotus.SQL.Validator do
   stripped so the raw template can be checked.
   """
 
+  alias Lotus.Source
+  alias Lotus.Source.Adapter
   alias Lotus.SQL.OptionalClause
   alias Lotus.Variables
 
@@ -35,9 +37,9 @@ defmodule Lotus.SQL.Validator do
       |> OptionalClause.strip_brackets()
       |> Variables.neutralize("NULL")
 
-    repo = Lotus.Config.get_data_source!(data_source)
+    adapter = Source.get_source!(data_source)
 
-    case Lotus.Source.explain_plan(repo, neutralized) do
+    case Adapter.explain_plan(adapter, neutralized, [], []) do
       {:ok, _plan} -> :ok
       {:error, reason} when is_binary(reason) -> {:error, reason}
       {:error, reason} -> {:error, inspect(reason)}

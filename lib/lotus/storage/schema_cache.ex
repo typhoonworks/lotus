@@ -161,13 +161,22 @@ defmodule Lotus.Storage.SchemaCache do
   end
 
   defp fetch_schema_from_db(repo, schema, table) do
-    columns = Lotus.Source.get_table_schema(repo, schema, table)
+    alias Lotus.Source
+    alias Lotus.Source.Adapter
 
-    Enum.into(columns, %{}, fn column ->
-      {column.name, Map.take(column, [:type, :nullable, :default, :primary_key])}
-    end)
+    adapter = Source.resolve!(repo, nil)
+
+    case Adapter.get_table_schema(adapter, schema, table) do
+      {:ok, columns} ->
+        Enum.into(columns, %{}, fn column ->
+          {column.name, Map.take(column, [:type, :nullable, :default, :primary_key])}
+        end)
+
+      {:error, reason} ->
+        raise "Failed to fetch schema: #{inspect(reason)}"
+    end
   rescue
-    error in [ArgumentError, DBConnection.ConnectionError, Ecto.QueryError] ->
+    error ->
       Logger.error(
         "Failed to fetch schema for #{inspect(repo)}.#{schema}.#{table}: #{Exception.message(error)}"
       )

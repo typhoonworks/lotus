@@ -19,6 +19,11 @@
 - Removed duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
 - Extracted shared filter → sort → window → cache → execute pipeline from `Lotus.run_sql/3` and `Lotus.execute_query/5` into a single private `execute_with_options/7` helper. `run_sql/3` now reuses `build_cache_tags/3` and `determine_cache_profile/1` instead of inlining the same logic. No public API or behavior changes (#160)
 - Renamed `Lotus.run_sql/3` → `Lotus.run_statement/3` and `Lotus.Runner.run_sql/4` → `Lotus.Runner.run_statement/4`; `sql` parameter renamed to `statement` throughout (#211)
+- Migrated all internal callers (`Runner`, `Preflight`, `SQL.Validator`, `AI.QueryOptimizer`, `Storage.SchemaCache`, `Lotus`) from deprecated `Lotus.Source.*` dialect dispatch to `Lotus.Source.Adapter` dispatch helpers (#193)
+- Removed deprecated dispatch functions and `@dialect_impls` map from `Lotus.Source` — all dispatch now goes through `Lotus.Source.Adapter` (#193)
+- Deduplicated `@builtin_adapters` list — `Lotus.Source.Adapters.Ecto.builtin_adapters/0` is the single source of truth, referenced by `Lotus.Source.Resolvers.Static` (#193)
+- `Lotus.Source.Adapters.Ecto` direct callbacks now consistently delegate to `@default_dialect` for all identity callbacks (`source_type`, `supports_feature?`, `query_language`, etc.) (#193)
+- Deleted `Lotus.Storage.TypeMapper` — type mapping moved to dialect `db_type_to_lotus_type/1` callbacks (#193)
 - `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
 - Extracted SQL sanitization (`assert_single_statement`, deny-list), EXPLAIN-based relation extraction, and window pagination SQL construction from `Runner`, `Preflight`, and `Lotus` into 4 new optional adapter callbacks (`sanitize_query/3`, `transform_query/4`, `extract_accessed_resources/4`, `apply_window/4`). `Runner` and `Preflight` now delegate to `Adapter` dispatch helpers with safe defaults for adapters that don't implement the optional callbacks. No public API or behavior changes (#208)
 
@@ -40,6 +45,8 @@
 
 - `Lotus.Source` is now a public facade instead of a behaviour. All facade functions previously on `Lotus.Sources` (`resolve!/2`, `list_sources/0`, `get_source!/1`, `default_source/0`, `source_type/1`, `supports_feature?/2`, `hierarchy_label/1`, `example_query/3`, `query_language/1`, `limit_query/3`, `name_from_module!/1`) are now on `Lotus.Source`. `Lotus.Sources` delegates for backward compatibility (#193)
 - Dialect modules moved from `Lotus.Sources.*` to `Lotus.Source.Adapters.Ecto.Dialects.*`: `Postgres`, `MySQL`, `SQLite3`, `Default`. Old modules delegate for backward compatibility (#193)
+- Removed deprecated `Lotus.Source` dispatch functions (`execute_in_transaction`, `set_statement_timeout`, `set_search_path`, `list_schemas`, `list_tables`, `get_table_schema`, `resolve_table_schema`, `explain_plan`, `quote_identifier`, `param_placeholder`, `limit_offset_placeholders`, `apply_filters`, `apply_sorts`, `format_error`, `builtin_denies`, `builtin_schema_denies`, `default_schemas`). Use `Lotus.Source.Adapter` dispatch helpers instead (#193)
+- Removed `Lotus.Storage.TypeMapper` module — use dialect `db_type_to_lotus_type/1` callbacks via `Lotus.Source.Adapter.db_type_to_lotus_type/2` (#193)
 - `Lotus.Storage.TypeMapper.db_type_to_lotus_type/2` second argument changed from source module atoms (`Lotus.Sources.Postgres`) to source type atoms (`:postgres`, `:mysql`, `:sqlite`) (#193)
 - `Lotus.Storage.TypeCaster` column_info key changed from `:source_module` to `:source_type` (atom like `:postgres`) (#193)
 - `FilterInjector.apply/3` is now `apply/5` — accepts `params` (existing parameter list) and `placeholder_fn` (database-specific placeholder generator), returns `{sql, params}` tuple instead of a plain SQL string

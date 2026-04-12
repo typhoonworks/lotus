@@ -1,4 +1,4 @@
-defmodule Lotus.Storage.TypeMapperTest do
+defmodule Lotus.Source.Adapters.Ecto.TypeMappingTest do
   use Lotus.Case, async: true
 
   alias Lotus.Source.Adapters.Ecto.Dialects

@@ -274,6 +274,19 @@ defmodule Lotus.Source.Adapters.Ecto do
   # Public API
   # ---------------------------------------------------------------------------
 
+  @builtin_ecto_adapters [
+    Lotus.Source.Adapters.Postgres,
+    Lotus.Source.Adapters.MySQL,
+    Lotus.Source.Adapters.SQLite3
+  ]
+
+  @doc """
+  Returns the list of built-in per-dialect Ecto adapter modules.
+
+  Used by `Lotus.Source.Resolvers.Static` to avoid duplicating this list.
+  """
+  def builtin_adapters, do: @builtin_ecto_adapters
+
   @doc """
   Wraps an `Ecto.Repo` module in an `%Adapter{}` struct.
 
@@ -290,22 +303,16 @@ defmodule Lotus.Source.Adapters.Ecto do
       iex> adapter = Lotus.Source.Adapters.Ecto.wrap("main", MyApp.Repo)
       %Lotus.Source.Adapter{name: "main", module: Lotus.Source.Adapters.Ecto, ...}
   """
-  @builtin_adapters [
-    Lotus.Source.Adapters.Postgres,
-    Lotus.Source.Adapters.MySQL,
-    Lotus.Source.Adapters.SQLite3
-  ]
-
   @impl true
   @spec wrap(String.t(), module()) :: Adapter.t()
   def wrap(name, repo_module) when is_binary(name) and is_atom(repo_module) do
-    case Enum.find(@builtin_adapters, & &1.can_handle?(repo_module)) do
+    case Enum.find(@builtin_ecto_adapters, & &1.can_handle?(repo_module)) do
       nil ->
         %Adapter{
           name: name,
           module: __MODULE__,
           state: repo_module,
-          source_type: detect_source_type(repo_module)
+          source_type: @default_dialect.source_type()
         }
 
       adapter_mod ->
@@ -316,8 +323,12 @@ defmodule Lotus.Source.Adapters.Ecto do
   @doc """
   Whether this adapter can handle the given data source entry.
 
-  Returns `true` for any module that exports `__adapter__/0` and whose
-  Ecto adapter is one of the known dialects.
+  Returns `true` for any module that exports `__adapter__/0`. This is
+  intentionally broad — it acts as a catch-all fallback for Ecto repos
+  that don't match a more specific per-dialect adapter. The resolver
+  checks per-dialect adapters first (via `builtin_adapters/0` and
+  `source_adapters` config), so this only matches repos with unknown
+  Ecto adapters.
   """
   @impl true
   @spec can_handle?(term()) :: boolean()
@@ -501,7 +512,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def source_type(repo), do: detect_source_type(repo)
+  def source_type(_repo), do: @default_dialect.source_type()
 
   @impl true
   def supports_feature?(_repo, feature) do

@@ -7,7 +7,7 @@ defmodule Lotus.Runner do
   `read_only: false` to allow write operations.
   """
 
-  alias Lotus.{Middleware, Preflight, Result, Source, Telemetry, Visibility}
+  alias Lotus.{Middleware, Preflight, Result, Telemetry, Visibility}
   alias Lotus.Preflight.Relations
   alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
@@ -81,7 +81,7 @@ defmodule Lotus.Runner do
       {:error, reason} -> {:error, reason}
     end
   rescue
-    e -> {:error, Source.format_error(e)}
+    e -> {:error, Adapter.format_error(adapter, e)}
   end
 
   defp handle_query_result(
