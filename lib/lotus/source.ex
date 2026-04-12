@@ -81,8 +81,7 @@ defmodule Lotus.Source do
   @doc """
   Detect the source type from an adapter, repository module, or name.
   """
-  @spec source_type(Adapter.t() | module() | String.t()) ::
-          :postgres | :mysql | :sqlite | :other
+  @spec source_type(Adapter.t() | module() | String.t()) :: Adapter.source_type()
   def source_type(%Adapter{source_type: st}), do: st
 
   def source_type(repo_or_name) when is_binary(repo_or_name) or is_atom(repo_or_name) do
