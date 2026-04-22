@@ -20,10 +20,10 @@
 - `Lotus.Source.Resolvers.Static` now supports pluggable adapter resolution via `can_handle?/1` and `wrap/2`, falling back to the built-in Ecto adapter (#193)
 - Built-in per-dialect adapters (`Lotus.Source.Adapters.Postgres`, `Lotus.Source.Adapters.MySQL`, `Lotus.Source.Adapters.SQLite3`) now use `use Lotus.Source.Adapters.Ecto, dialect: ...` — the same pattern external adapters use (#193)
 - Deleted `Lotus.Sources`, `Lotus.Sources.Postgres`, `Lotus.Sources.MySQL`, `Lotus.Sources.SQLite3`, `Lotus.Sources.Default` — replaced by the new adapter and dialect modules (#193)
-- Renamed `data_repos` config key to `data_sources` (old key still works with deprecation warning)
-- Renamed `default_repo` config key to `default_source` (old key still works with deprecation warning)
-- Renamed public functions: `data_repos/0` → `data_sources/0`, `get_data_repo!/1` → `get_data_source!/1`, `list_data_repo_names/0` → `list_data_source_names/0`, `default_data_repo/0` → `default_data_source/0`, `rules_for_repo_name/1` → `rules_for_source_name/1` (and schema/column variants)
-- Renamed `data_repo` field in `Lotus.Storage.Query` to `data_source` (DB column unchanged)
+- Renamed `data_repos` config key to `data_sources`; old key removed.
+- Renamed `default_repo` config key to `default_source`; old key removed.
+- Renamed public functions: `data_repos/0` → `data_sources/0`, `get_data_repo!/1` → `get_data_source!/1`, `list_data_repo_names/0` → `list_data_source_names/0`, `default_data_repo/0` → `default_data_source/0`, `rules_for_repo_name/1` → `rules_for_source_name/1` (and schema/column variants). Old names removed.
+- Renamed `data_repo` field in `Lotus.Storage.Query` to `data_source` (both Elixir field and DB column).
 - Renamed `@type repo` in `Lotus.Source` to `@type source_module`
 - Removed `FilterInjector.quote_value/1` — no longer needed since values are parameterized
 - Removed duplicated private `Lotus.trim_trailing_semicolon/1` in favor of `Lotus.SQL.Sanitizer.strip_trailing_semicolon/1`, eliminating code duplication and a redundant double-trim in the window pagination path (#155)
@@ -37,22 +37,16 @@
 - `Lotus.can_run?/2` now reuses the private `prepare_variables/2` helper instead of duplicating the default-merge logic inline. No behavior change (#156)
 - Extracted SQL sanitization (`assert_single_statement`, deny-list), EXPLAIN-based relation extraction, and pagination SQL construction from `Runner`, `Preflight`, and `Lotus` into adapter callbacks (`sanitize_query/3`, `transform_bound_query/3`, `extract_accessed_resources/2`, `apply_pagination/3`). `Runner` and `Preflight` now delegate to `Adapter` dispatch helpers with safe defaults for adapters that don't implement the optional callbacks (#208)
 
-### Deprecated
-
-- `:data_repos` config key — use `:data_sources` instead (will be removed in v1.0)
-- `:default_repo` config key — use `:default_source` instead (will be removed in v1.0)
-- `Lotus.data_repos/0` — use `Lotus.data_sources/0` (will be removed in v1.0)
-- `Lotus.get_data_repo!/1` — use `Lotus.get_data_source!/1` (will be removed in v1.0)
-- `Lotus.list_data_repo_names/0` — use `Lotus.list_data_source_names/0` (will be removed in v1.0)
-- `Lotus.default_data_repo/0` — use `Lotus.default_data_source/0` (will be removed in v1.0)
-- `Lotus.Config.rules_for_repo_name/1` — use `Lotus.Config.rules_for_source_name/1` (will be removed in v1.0)
-- `Lotus.Config.schema_rules_for_repo_name/1` — use `Lotus.Config.schema_rules_for_source_name/1` (will be removed in v1.0)
 - `Lotus.Config.column_rules_for_repo_name/1` — use `Lotus.Config.column_rules_for_source_name/1` (will be removed in v1.0)
 - `Lotus.run_sql/3` — use `Lotus.run_statement/3` (will be removed in v1.0) (#211)
 - `Lotus.Runner.run_sql/4` — use `Lotus.Runner.run_statement/4` (will be removed in v1.0) (#211)
 
 ### Breaking
 
+- **Deprecations removed. No more `:data_repos` / `:default_repo` config keys, no more `*_repo*` helpers.** `Lotus.data_repos/0`, `get_data_repo!/1`, `list_data_repo_names/0`, `default_data_repo/0`, `Lotus.Config.data_repos/0`, `get_data_repo!/1`, `list_data_repo_names/0`, `default_data_repo/0`, `rules_for_repo_name/1`, `schema_rules_for_repo_name/1`, `column_rules_for_repo_name/1` all removed. `Lotus.Config.normalize_deprecated_keys/1` also removed — passing `:data_repos` or `:default_repo` now fails validation instead of emitting a warning. `Lotus.run_sql/3` removed (use `Lotus.run_statement/3`).
+- **Config key renamed: `:ecto_repo` → `:storage_repo`.** Update your `config :lotus, ...` block. Accessor names (`Lotus.repo/0`, `Lotus.Config.repo!/0`) unchanged. No deprecation alias.
+- **Cache tag prefix renamed: `"repo:<name>"` → `"source:<name>"`.** Pre-v1 cached entries (discovery + result) won't be found after upgrade. This is not a correctness bug — stale entries simply miss and get re-seeded on the next read. Custom `Lotus.Cache.KeyBuilder` implementations and middleware that tag cache entries must update their prefix.
+- **DB column `data_repo` renamed to `data_source`** in `lotus_queries`. New installs get the updated column name directly from the migration chain. Upgrading Postgres installs get a conditional `ALTER TABLE ... RENAME COLUMN` via `Lotus.Migrations.Postgres.V4` — run `mix ecto.migrate` after upgrading. **MySQL / SQLite users must rename the column manually** (`ALTER TABLE lotus_queries RENAME COLUMN data_repo TO data_source`) before running app code against the new schema. `Lotus.Storage.Query` drops its `field(:data_source, :string, source: :data_repo)` shim.
 - **Renamed AI modules: `Lotus.AI.SQLGenerator` → `Lotus.AI.QueryGenerator`; `Lotus.AI.Prompts.SQLGeneration` → `Lotus.AI.Prompts.QueryGeneration`.** Hard rename, no alias — internal modules, but any host app reaching into them must update. Public entry points (`Lotus.AI.generate_query/1`, `generate_query_with_context/1`) are unchanged.
 - **`Lotus.AI.suggest_optimizations/1` and `Lotus.AI.QueryOptimizer.suggest_optimizations/2` take `:statement` instead of `:sql`.** The `:statement` option accepts a `%Lotus.Query.Statement{}`. Drops the `:params` and SQL-string inputs — callers wrap their SQL via `Lotus.Query.Statement.new/2`. No `:sql` backward-compat shim per v1.0's no-deprecations policy. lotus_web migration tracked as Phase 6A-T1.
 - **AI public functions return `{:error, {:ai_feature_unsupported, feature, reason}}` when a capability is disabled.** `Lotus.AI.generate_query/1`, `generate_query_with_context/1`, `suggest_optimizations/1`, and `explain_query/1` check `Adapter.ai_context/1`'s `:capabilities` map before invoking the model. Sources declaring `optimization: {false, "no plan API"}` now fail fast at the AI entry point rather than surfacing a downstream error.

@@ -11,9 +11,7 @@ defmodule Lotus.ConfigTest do
     :schema_visibility,
     :column_visibility,
     :data_sources,
-    :data_repos,
     :default_source,
-    :default_repo,
     :source_adapters,
     :allow_unrestricted_resources
   ]
@@ -156,86 +154,6 @@ defmodule Lotus.ConfigTest do
       sources = Config.data_sources()
       assert sources["postgres"] == Lotus.Test.Repo
       assert sources["search"] == %{adapter: :elasticsearch, url: "http://localhost:9200"}
-    end
-  end
-
-  describe "deprecated config key backward compatibility" do
-    test "data_repos config key still works and resolves correctly" do
-      original_sources = Application.get_env(:lotus, :data_sources)
-      original_default = Application.get_env(:lotus, :default_source)
-      Application.delete_env(:lotus, :data_sources)
-      # Cross-validation requires :default_source to be a key in :data_sources,
-      # so align both when we swap the source map for this test.
-      Application.put_env(:lotus, :default_source, "test")
-      Application.put_env(:lotus, :data_repos, %{"test" => Lotus.Test.Repo})
-
-      log =
-        capture_log(fn ->
-          Config.reload!()
-          assert Config.data_sources() == %{"test" => Lotus.Test.Repo}
-        end)
-
-      assert log =~ "deprecated"
-      assert log =~ ":data_repos"
-      assert log =~ ":data_sources"
-
-      Application.delete_env(:lotus, :data_repos)
-      Application.put_env(:lotus, :data_sources, original_sources)
-
-      if original_default do
-        Application.put_env(:lotus, :default_source, original_default)
-      else
-        Application.delete_env(:lotus, :default_source)
-      end
-
-      Config.reload!()
-    end
-
-    test "default_repo config key still works with warning" do
-      original_source = Application.get_env(:lotus, :default_source)
-      Application.delete_env(:lotus, :default_source)
-      Application.put_env(:lotus, :default_repo, "postgres")
-
-      log =
-        capture_log(fn ->
-          Config.reload!()
-          {name, _mod} = Config.default_data_source()
-          assert name == "postgres"
-        end)
-
-      assert log =~ "deprecated"
-      assert log =~ ":default_repo"
-      assert log =~ ":default_source"
-
-      Application.delete_env(:lotus, :default_repo)
-
-      if original_source do
-        Application.put_env(:lotus, :default_source, original_source)
-      end
-
-      Config.reload!()
-    end
-
-    test "both data_repos and data_sources present raises error" do
-      Application.put_env(:lotus, :data_repos, %{"old" => Lotus.Test.Repo})
-
-      assert_raise ArgumentError, ~r/Cannot configure both/, fn ->
-        Config.reload!()
-      end
-
-      Application.delete_env(:lotus, :data_repos)
-      Config.reload!()
-    end
-
-    test "both default_repo and default_source present raises error" do
-      Application.put_env(:lotus, :default_repo, "old")
-
-      assert_raise ArgumentError, ~r/Cannot configure both/, fn ->
-        Config.reload!()
-      end
-
-      Application.delete_env(:lotus, :default_repo)
-      Config.reload!()
     end
   end
 

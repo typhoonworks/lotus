@@ -88,7 +88,7 @@ defmodule Lotus.Schema do
     start_time = Telemetry.schema_introspection_start(:list_schemas, adapter.name)
 
     key = schema_key(:list_schemas, adapter.name, scope)
-    tags = ["repo:#{adapter.name}", "schema:list_schemas"] ++ scope_tags(scope)
+    tags = ["source:#{adapter.name}", "schema:list_schemas"] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -196,7 +196,7 @@ defmodule Lotus.Schema do
               scope
             )
 
-          tags = ["repo:#{adapter.name}", "schema:list_tables"] ++ scope_tags(scope)
+          tags = ["source:#{adapter.name}", "schema:list_tables"] ++ scope_tags(scope)
 
           profile =
             if is_list(opts[:cache]) do
@@ -356,7 +356,7 @@ defmodule Lotus.Schema do
 
     tags =
       [
-        "repo:#{adapter.name}",
+        "source:#{adapter.name}",
         "schema:get_table_schema",
         "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
       ] ++ scope_tags(scope)
@@ -478,7 +478,7 @@ defmodule Lotus.Schema do
 
     tags =
       [
-        "repo:#{adapter.name}",
+        "source:#{adapter.name}",
         "schema:get_table_stats",
         "table:#{if resolved_schema, do: "#{resolved_schema}.#{table_name}", else: table_name}"
       ] ++ scope_tags(scope)
@@ -563,7 +563,7 @@ defmodule Lotus.Schema do
         scope
       )
 
-    tags = ["repo:#{adapter.name}", "schema:list_relations"] ++ scope_tags(scope)
+    tags = ["source:#{adapter.name}", "schema:list_relations"] ++ scope_tags(scope)
 
     profile =
       if is_list(opts[:cache]) do
@@ -663,7 +663,7 @@ defmodule Lotus.Schema do
        ) do
     search_key = Enum.join(schemas, ",")
     key = schema_key(:resolve_table_schema, adapter.name, search_key, table, nil)
-    tags = ["repo:#{adapter.name}", "schema:resolve_table_schema", "table:#{table}"]
+    tags = ["source:#{adapter.name}", "schema:resolve_table_schema", "table:#{table}"]
 
     profile =
       if is_list(cache_opts),

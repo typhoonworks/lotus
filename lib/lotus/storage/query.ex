@@ -54,7 +54,7 @@ defmodule Lotus.Storage.Query do
     field(:name, :string)
     field(:description, :string)
     field(:statement, :string)
-    field(:data_source, :string, source: :data_repo)
+    field(:data_source, :string)
     field(:search_path, :string)
 
     embeds_many(:variables, QueryVariable, on_replace: :delete)

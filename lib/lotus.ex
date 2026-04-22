@@ -117,24 +117,6 @@ defmodule Lotus do
   """
   def default_data_source, do: Config.default_data_source()
 
-  # ── Deprecated aliases ──────────────────────────────────────────────────────
-
-  @doc false
-  @deprecated "Use data_sources/0 instead. Will be removed in v1.0"
-  def data_repos, do: data_sources()
-
-  @doc false
-  @deprecated "Use get_data_source!/1 instead. Will be removed in v1.0"
-  def get_data_repo!(name), do: get_data_source!(name)
-
-  @doc false
-  @deprecated "Use list_data_source_names/0 instead. Will be removed in v1.0"
-  def list_data_repo_names, do: list_data_source_names()
-
-  @doc false
-  @deprecated "Use default_data_source/0 instead. Will be removed in v1.0"
-  def default_data_repo, do: default_data_source()
-
   @doc """
   Lists all saved queries.
   """
@@ -511,8 +493,8 @@ defmodule Lotus do
   defp build_cache_tags(query_id, repo_name, opts) do
     base_tags =
       case query_id do
-        nil -> ["repo:#{repo_name}"]
-        id -> ["query:#{id}", "repo:#{repo_name}"]
+        nil -> ["source:#{repo_name}"]
+        id -> ["query:#{id}", "source:#{repo_name}"]
       end
 
     custom_tags =
@@ -624,12 +606,6 @@ defmodule Lotus do
 
     execute_with_options(adapter, statement, params, opts, runner_opts, params, nil)
   end
-
-  @doc false
-  @deprecated "Use Lotus.run_statement/3 instead"
-  @spec run_sql(binary(), list(any()), keyword()) :: {:ok, Result.t()} | {:error, term()}
-  def run_sql(statement, params \\ [], opts \\ []),
-    do: run_statement(statement, params, opts)
 
   @doc """
   Returns whether unique query names are enforced.
