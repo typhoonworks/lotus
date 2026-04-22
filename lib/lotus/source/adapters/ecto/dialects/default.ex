@@ -163,7 +163,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   end
 
   @impl true
-  def explain_plan(_repo, _sql, _params, _opts) do
+  def query_plan(_repo, _sql, _params, _opts) do
     {:error, "EXPLAIN not supported for this database adapter"}
   end
 

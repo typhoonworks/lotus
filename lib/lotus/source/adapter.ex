@@ -19,7 +19,7 @@ defmodule Lotus.Source.Adapter do
     * **Query execution** — `execute_query/4`, `transaction/3`
     * **Introspection** — `list_schemas/1`, `list_tables/3`, `get_table_schema/3`,
       `resolve_table_schema/3`
-    * **SQL generation** — `quote_identifier/2`, `explain_plan/4`
+    * **SQL generation** — `quote_identifier/2`, `query_plan/4`
     * **Pipeline** — `transform_statement/2`, `transform_bound_query/3`,
       `apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
       `needs_preflight?/2`, `sanitize_query/3`,
@@ -80,8 +80,16 @@ defmodule Lotus.Source.Adapter do
   # Callbacks — Query Execution
   # ---------------------------------------------------------------------------
 
-  @doc "Execute a SQL query against the data source."
-  @callback execute_query(state :: term(), sql :: String.t(), params :: list(), opts :: keyword()) ::
+  @doc """
+  Execute a prepared statement against the data source.
+
+  This is the driver boundary: adapters receive the adapter-native statement
+  payload (SQL text for Ecto, a JSON body for Elasticsearch, a DSL AST for
+  other engines) together with any bound `params`, and return the usual
+  `{columns, rows, num_rows}` result shape so core can assemble a
+  `%Lotus.Result{}`.
+  """
+  @callback execute_query(state :: term(), sql :: term(), params :: list(), opts :: keyword()) ::
               {:ok, %{columns: [String.t()], rows: [[term()]], num_rows: non_neg_integer()}}
               | {:error, term()}
 
@@ -123,9 +131,21 @@ defmodule Lotus.Source.Adapter do
   @callback apply_sorts(state :: term(), statement :: Statement.t(), sorts :: list()) ::
               Statement.t()
 
-  @doc "Return the execution plan for a SQL query."
-  @callback explain_plan(state :: term(), sql :: String.t(), params :: list(), opts :: keyword()) ::
-              {:ok, String.t()} | {:error, term()}
+  @doc """
+  Return an execution plan for a query.
+
+  For SQL-prepared adapters, this is typically the output of the dialect's
+  EXPLAIN variant (e.g. `EXPLAIN` on Postgres, `EXPLAIN QUERY PLAN` on
+  SQLite, `EXPLAIN FORMAT=JSON` on MySQL) — a human-readable or structured
+  string describing how the server will execute the query.
+
+  Non-SQL adapters whose engines don't expose a plan (or don't expose one
+  cheaply) may legitimately return `{:ok, nil}` or `{:error, :unsupported}`;
+  Lotus callers treat both as "no plan available" without surfacing an
+  error to the user.
+  """
+  @callback query_plan(state :: term(), sql :: String.t(), params :: list(), opts :: keyword()) ::
+              {:ok, String.t() | nil} | {:error, term()}
 
   # ---------------------------------------------------------------------------
   # Callbacks — Pipeline (Query Processing)
@@ -331,10 +351,22 @@ defmodule Lotus.Source.Adapter do
   # Callbacks — Error Handling
   # ---------------------------------------------------------------------------
 
-  @doc "Format a database error into a human-readable string."
+  @doc """
+  Format a data-source error into a human-readable string.
+
+  Adapters translate driver-specific exceptions (e.g. `Postgrex.Error`,
+  `MyXQL.Error`, or a non-SQL engine's error struct) into a user-facing
+  message. Called from `Lotus.Runner` when the execution phase raises.
+  """
   @callback format_error(state :: term(), any()) :: String.t()
 
-  @doc "Return the exception modules this adapter knows how to format."
+  @doc """
+  Return the exception modules this adapter knows how to format.
+
+  Used by `Lotus.Runner`'s rescue clause to match a raised exception
+  against the adapter's `format_error/2`. Returning the narrow set the
+  adapter actually handles lets unrelated exceptions propagate.
+  """
   @callback handled_errors(state :: term()) :: [module()]
 
   # ---------------------------------------------------------------------------
@@ -347,10 +379,32 @@ defmodule Lotus.Source.Adapter do
   @doc "Whether this adapter supports a given feature."
   @callback supports_feature?(state :: term(), atom()) :: boolean()
 
-  @doc "Return the query language identifier for this source (e.g. `\"sql:postgres\"`)."
+  @doc """
+  Return the query language identifier for this source.
+
+  Used by the AI pipeline, editor integrations, and `:schema_hierarchy` UI
+  affordances to know what kind of statement text this source accepts.
+  Examples:
+
+    * `"sql:postgres"`, `"sql:mysql"`, `"sql:sqlite"` for SQL-prepared adapters
+    * `"elasticsearch:json"` for an Elasticsearch DSL adapter
+    * `"mongo:aggregation"` for a MongoDB aggregation pipeline adapter
+  """
   @callback query_language(state :: term()) :: String.t()
 
-  @doc "Wrap a statement with a limit clause using source-specific syntax."
+  @doc """
+  Wrap a raw statement string with a source-specific row limit.
+
+  **SQL-shaped callback.** The `statement` argument is the raw statement
+  text (typically SQL) and the result is the same text wrapped with a
+  single-page `LIMIT` / `TOP` / `FETCH FIRST` clause (exact syntax varies
+  per dialect). Used by the UI's "preview this query" affordance to cap
+  returned rows without touching the underlying query.
+
+  Non-SQL adapters whose languages don't have a textual limit clause may
+  return the input unchanged — Lotus core treats the callback as best-
+  effort and does not depend on it for correctness.
+  """
   @callback limit_query(state :: term(), statement :: String.t(), limit :: pos_integer()) ::
               String.t()
 
@@ -518,10 +572,10 @@ defmodule Lotus.Source.Adapter do
   end
 
   @doc "Get the execution plan for a query via the adapter."
-  @spec explain_plan(t(), String.t(), list(), keyword()) ::
-          {:ok, String.t()} | {:error, term()}
-  def explain_plan(%__MODULE__{module: mod, state: state}, sql, params, opts) do
-    mod.explain_plan(state, sql, params, opts)
+  @spec query_plan(t(), String.t(), list(), keyword()) ::
+          {:ok, String.t() | nil} | {:error, term()}
+  def query_plan(%__MODULE__{module: mod, state: state}, sql, params, opts) do
+    mod.query_plan(state, sql, params, opts)
   end
 
   @doc "Return built-in deny rules via the adapter."

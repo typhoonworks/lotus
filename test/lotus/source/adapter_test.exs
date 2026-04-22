@@ -95,7 +95,7 @@ defmodule Lotus.Source.AdapterTest do
     end
 
     @impl true
-    def explain_plan(_state, sql, _params, _opts), do: {:ok, "Seq Scan on #{sql}"}
+    def query_plan(_state, sql, _params, _opts), do: {:ok, "Seq Scan on #{sql}"}
 
     # --- Safety & Visibility ---
     @impl true
@@ -202,8 +202,8 @@ defmodule Lotus.Source.AdapterTest do
       assert :ok = Adapter.health_check(adapter)
     end
 
-    test "explain_plan/4 dispatches to module with state", %{adapter: adapter} do
-      assert {:ok, plan} = Adapter.explain_plan(adapter, "SELECT 1", [], [])
+    test "query_plan/4 dispatches to module with state", %{adapter: adapter} do
+      assert {:ok, plan} = Adapter.query_plan(adapter, "SELECT 1", [], [])
       assert plan =~ "Seq Scan"
     end
 

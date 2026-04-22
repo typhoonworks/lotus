@@ -199,8 +199,8 @@ defmodule Lotus.Source.Adapters.Ecto do
       def apply_sorts(_repo, statement, sorts), do: @dialect.apply_sorts(statement, sorts)
 
       @impl true
-      def explain_plan(repo, sql, params, opts),
-        do: @dialect.explain_plan(repo, sql, params, opts)
+      def query_plan(repo, sql, params, opts),
+        do: @dialect.query_plan(repo, sql, params, opts)
     end
   end
 
@@ -493,8 +493,8 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @impl true
-  def explain_plan(repo, sql, params, opts) do
-    @default_dialect.explain_plan(repo, sql, params, opts)
+  def query_plan(repo, sql, params, opts) do
+    @default_dialect.query_plan(repo, sql, params, opts)
   end
 
   # ---------------------------------------------------------------------------

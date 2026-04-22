@@ -72,7 +72,7 @@ defmodule Lotus.AI.QueryOptimizer do
   defp get_execution_plan(adapter, sql, params, opts) do
     explainable_sql = prepare_sql_for_explain(sql)
 
-    case Adapter.explain_plan(adapter, explainable_sql, params, opts) do
+    case Adapter.query_plan(adapter, explainable_sql, params, opts) do
       {:ok, plan} -> plan
       {:error, _} -> nil
     end

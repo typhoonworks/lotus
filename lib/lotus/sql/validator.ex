@@ -44,7 +44,7 @@ defmodule Lotus.SQL.Validator do
     # through Source.name_from_module!/1 first.
     adapter = resolve_adapter(data_source)
 
-    case Adapter.explain_plan(adapter, neutralized, [], []) do
+    case Adapter.query_plan(adapter, neutralized, [], []) do
       {:ok, _plan} -> :ok
       {:error, reason} when is_binary(reason) -> {:error, reason}
       {:error, reason} -> {:error, inspect(reason)}
