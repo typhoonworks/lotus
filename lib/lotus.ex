@@ -12,9 +12,9 @@ defmodule Lotus do
   Add to your config:
 
       config :lotus,
-        repo: MyApp.Repo,
-        primary_key_type: :id,    # or :binary_id
-        foreign_key_type: :id     # or :binary_id
+        storage_repo: MyApp.Repo,
+        default_source: "main",
+        data_sources: %{"main" => MyApp.Repo}
 
   ## Usage
 
@@ -33,6 +33,16 @@ defmodule Lotus do
 
       # Execute SQL directly (read-only)
       {:ok, results} = Lotus.run_statement("SELECT * FROM products WHERE price > $1", [100])
+
+  ## Further reading
+
+    * [Source adapters guide](source-adapters.md) — how the adapter contract
+      works, building custom SQL dialects or non-Ecto adapters, AI
+      `ai_context` + trust boundary, security boundaries around variable
+      substitution and visibility.
+    * [Upgrading to v1.0](upgrading-to-v1.md) — step-by-step migration from
+      v0.x (config renames, DB column rename, middleware/telemetry payload
+      changes, adapter-contract updates).
   """
 
   @default_page_size 1000
