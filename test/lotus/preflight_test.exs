@@ -26,11 +26,16 @@ defmodule Lotus.PreflightTest do
   end
 
   describe "unrestricted adapter behavior" do
-    # Phase 2A: without the `:allow_unrestricted_resources` opt-in wired up
-    # (planned for Phase 2D), adapters that return `{:unrestricted, _}` or
-    # simply omit the callback are blocked. Phase 2D will introduce the
-    # per-source opt-in that flips this to `:ok` when the host app opts in.
-    test "blocks queries when adapter returns {:unrestricted, _}" do
+    setup :set_mimic_from_context
+
+    setup do
+      Mimic.copy(Lotus.Config)
+      :ok
+    end
+
+    test "blocks queries when adapter returns {:unrestricted, _} and opt-in is off" do
+      stub(Lotus.Config, :allow_unrestricted_resources?, fn _name -> false end)
+
       unknown_adapter = %Lotus.Source.Adapter{
         name: "unknown",
         module: Lotus.Test.NoOpAdapter,
@@ -45,7 +50,9 @@ defmodule Lotus.PreflightTest do
       assert msg =~ "allow_unrestricted_resources"
     end
 
-    test "blocks queries when adapter does not implement extract_accessed_resources" do
+    test "blocks queries when adapter does not implement extract_accessed_resources and opt-in is off" do
+      stub(Lotus.Config, :allow_unrestricted_resources?, fn _name -> false end)
+
       stub_adapter = %Lotus.Source.Adapter{
         name: "stub",
         module: Lotus.Test.StubAdapter,
@@ -57,6 +64,34 @@ defmodule Lotus.PreflightTest do
                Preflight.authorize(stub_adapter, Statement.new("SELECT * FROM anything"))
 
       assert msg =~ "Preflight blocked"
+    end
+
+    test "allows queries when adapter returns {:unrestricted, _} and source is opted in" do
+      stub(Lotus.Config, :allow_unrestricted_resources?, fn "trusted" -> true end)
+
+      trusted_adapter = %Lotus.Source.Adapter{
+        name: "trusted",
+        module: Lotus.Test.NoOpAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert :ok =
+               Preflight.authorize(trusted_adapter, Statement.new("SELECT * FROM anything"))
+    end
+
+    test "allows queries when adapter omits extract_accessed_resources and source is opted in" do
+      stub(Lotus.Config, :allow_unrestricted_resources?, fn "trusted" -> true end)
+
+      trusted_adapter = %Lotus.Source.Adapter{
+        name: "trusted",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert :ok =
+               Preflight.authorize(trusted_adapter, Statement.new("SELECT * FROM anything"))
     end
   end
 end

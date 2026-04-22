@@ -116,6 +116,20 @@ defmodule Lotus.Config do
       doc:
         "When true (default), blocks write operations (INSERT, UPDATE, DELETE, DDL) at the application level. Set to false to allow write queries."
     ],
+    allow_unrestricted_resources: [
+      type: :boolean,
+      default: false,
+      doc: """
+      Global opt-in for adapters that return `{:unrestricted, _}` from
+      `extract_accessed_resources/2`. When `false` (default), preflight blocks
+      such statements with an error. When `true`, Lotus trusts the adapter
+      (or its engine's own access control layer) to enforce visibility —
+      useful for non-SQL adapters like Elasticsearch that gate access at
+      the index level. A per-source opt-in via `allow_unrestricted_resources: true`
+      in a `data_sources` entry's config map overrides this flag for that
+      source only.
+      """
+    ],
     data_sources: [
       type: {:map, :string, {:or, [:atom, :map]}},
       default: %{},
@@ -358,6 +372,7 @@ defmodule Lotus.Config do
     |> Keyword.take([
       :ecto_repo,
       :read_only,
+      :allow_unrestricted_resources,
       :unique_names,
       :data_repos,
       :data_sources,
@@ -421,6 +436,29 @@ defmodule Lotus.Config do
   """
   @spec read_only?() :: boolean()
   def read_only?, do: load!()[:read_only]
+
+  @doc """
+  Returns whether the given source is allowed to return
+  `{:unrestricted, _}` from `extract_accessed_resources/2` without being
+  blocked by preflight.
+
+  Resolution order:
+
+    1. If the source's `data_sources` entry is a config map and has
+       `allow_unrestricted_resources: true`, returns `true` for that
+       source regardless of the global flag.
+    2. Falls back to the top-level `:allow_unrestricted_resources` flag.
+
+  Used by `Lotus.Preflight.authorize/3` to gate non-SQL adapters whose
+  engines enforce visibility at a layer Lotus can't introspect.
+  """
+  @spec allow_unrestricted_resources?(String.t()) :: boolean()
+  def allow_unrestricted_resources?(name) when is_binary(name) do
+    case Map.get(data_sources(), name) do
+      %{allow_unrestricted_resources: true} -> true
+      _ -> load!()[:allow_unrestricted_resources]
+    end
+  end
 
   @doc """
   Returns the configured data sources.

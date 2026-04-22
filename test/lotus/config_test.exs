@@ -14,7 +14,8 @@ defmodule Lotus.ConfigTest do
     :data_repos,
     :default_source,
     :default_repo,
-    :source_adapters
+    :source_adapters,
+    :allow_unrestricted_resources
   ]
 
   setup do
@@ -275,5 +276,65 @@ defmodule Lotus.ConfigTest do
   defp put_visibility(key, value) do
     Application.put_env(:lotus, key, value)
     Config.reload!()
+  end
+
+  describe "allow_unrestricted_resources?/1" do
+    setup do
+      # Preserve the app-level `default_source` pointing at the real test
+      # sources; these test cases use isolated `data_sources` and would fail
+      # the cross-validation that `:default_source` must be a configured key.
+      Application.delete_env(:lotus, :default_source)
+      :ok
+    end
+
+    test "returns true when the source's config map opts in" do
+      Application.put_env(:lotus, :allow_unrestricted_resources, false)
+
+      Application.put_env(:lotus, :data_sources, %{
+        "es" => %{adapter: :elasticsearch, allow_unrestricted_resources: true}
+      })
+
+      Config.reload!()
+
+      assert Config.allow_unrestricted_resources?("es") == true
+    end
+
+    test "falls back to the global flag when the source has no per-source setting" do
+      Application.put_env(:lotus, :allow_unrestricted_resources, true)
+      Application.put_env(:lotus, :data_sources, %{"pg" => Lotus.Test.Repo})
+      Config.reload!()
+
+      assert Config.allow_unrestricted_resources?("pg") == true
+    end
+
+    test "returns false when neither the source nor the global flag opts in" do
+      Application.put_env(:lotus, :allow_unrestricted_resources, false)
+      Application.put_env(:lotus, :data_sources, %{"pg" => Lotus.Test.Repo})
+      Config.reload!()
+
+      assert Config.allow_unrestricted_resources?("pg") == false
+    end
+
+    test "per-source opt-in wins over global flag being false" do
+      Application.put_env(:lotus, :allow_unrestricted_resources, false)
+
+      Application.put_env(:lotus, :data_sources, %{
+        "es" => %{adapter: :elasticsearch, allow_unrestricted_resources: true},
+        "pg" => Lotus.Test.Repo
+      })
+
+      Config.reload!()
+
+      assert Config.allow_unrestricted_resources?("es") == true
+      assert Config.allow_unrestricted_resources?("pg") == false
+    end
+
+    test "defaults to false when nothing is configured" do
+      Application.delete_env(:lotus, :allow_unrestricted_resources)
+      Application.put_env(:lotus, :data_sources, %{"pg" => Lotus.Test.Repo})
+      Config.reload!()
+
+      assert Config.allow_unrestricted_resources?("pg") == false
+    end
   end
 end

@@ -14,6 +14,7 @@ defmodule Lotus.Preflight do
   `config :lotus, :allow_unrestricted_resources`; otherwise preflight raises.
   """
 
+  alias Lotus.Config
   alias Lotus.Preflight.Relations
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
@@ -46,13 +47,16 @@ defmodule Lotus.Preflight do
     end
   end
 
-  # Phase 2D will layer the `:allow_unrestricted_resources` opt-in on top of
-  # this branch. Until then, `{:unrestricted, _}` is treated as a preflight
-  # error so adapters can't silently bypass visibility checks.
   defp handle_unrestricted(%Adapter{name: name}, reason) do
-    {:error,
-     "Preflight blocked: source #{inspect(name)} cannot enforce visibility at the " <>
-       "adapter layer (#{reason}). Opt-in via :allow_unrestricted_resources is not yet wired up."}
+    if Config.allow_unrestricted_resources?(name) do
+      :ok
+    else
+      {:error,
+       "Preflight blocked: source #{inspect(name)} cannot enforce visibility at the " <>
+         "adapter layer (#{reason}). Set `config :lotus, :allow_unrestricted_resources, true` " <>
+         "or opt in per-source via `allow_unrestricted_resources: true` in the source's " <>
+         "data_sources entry."}
+    end
   end
 
   defp check_relations_visibility(rels, source_name) do
