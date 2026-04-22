@@ -1,4 +1,4 @@
-defmodule Lotus.AI.SQLGenerator do
+defmodule Lotus.AI.QueryGenerator do
   @moduledoc """
   Generates SQL from natural language using ReqLLM.
 
@@ -9,7 +9,7 @@ defmodule Lotus.AI.SQLGenerator do
 
   alias Lotus.AI.Actions
   alias Lotus.AI.Conversation
-  alias Lotus.AI.Prompts.SQLGeneration
+  alias Lotus.AI.Prompts.QueryGeneration
   alias Lotus.AI.Tool
   alias Lotus.Query.Statement
   alias Lotus.Source
@@ -64,26 +64,36 @@ defmodule Lotus.AI.SQLGenerator do
     api_key = Keyword.fetch!(opts, :api_key)
     temperature = Keyword.get(opts, :temperature, 0.1)
 
-    database_type = Lotus.Source.source_type(data_source)
+    adapter = Source.resolve!(data_source, nil)
 
-    {:ok, all_schemas} = Lotus.Schema.list_schemas(data_source)
-    {:ok, tables} = Lotus.Schema.list_tables(data_source, schemas: all_schemas)
-    table_names = extract_table_names(tables)
+    case Adapter.ai_context(adapter) do
+      {:ok, ai_context} ->
+        {:ok, all_schemas} = Lotus.Schema.list_schemas(data_source)
+        {:ok, tables} = Lotus.Schema.list_tables(data_source, schemas: all_schemas)
+        table_names = extract_table_names(tables)
 
-    system_prompt = SQLGeneration.system_prompt(database_type, table_names, read_only: read_only)
+        system_prompt =
+          QueryGeneration.system_prompt(ai_context, table_names, read_only: read_only)
 
-    tools = build_tools(data_source)
-    messages = build_messages(conversation, prompt, system_prompt, query_context)
-    context = build_context(messages)
+        tools = build_tools(data_source)
+        messages = build_messages(conversation, prompt, system_prompt, query_context)
+        context = build_context(messages)
 
-    Tool.run(model_string, context, tools, api_key: api_key, temperature: temperature)
-    |> handle_response(model_string, data_source)
+        Tool.run(model_string, context, tools, api_key: api_key, temperature: temperature)
+        |> handle_response(model_string, data_source)
+
+      {:error, :ai_not_supported} ->
+        {:error, :ai_not_supported_for_source}
+
+      {:error, _} = err ->
+        err
+    end
   end
 
   defp handle_response({:ok, response}, model_string, data_source) do
     content = ReqLLM.Response.text(response)
 
-    case SQLGeneration.extract_response(content) do
+    case QueryGeneration.extract_response(content) do
       {:ok, %{sql: sql, variables: variables}} ->
         {:ok, build_success_response(response, model_string, sql, variables)}
 
@@ -93,7 +103,7 @@ defmodule Lotus.AI.SQLGenerator do
 
         case Adapter.validate_statement(adapter, statement, []) do
           :ok ->
-            variables = SQLGeneration.extract_variables(candidate)
+            variables = QueryGeneration.extract_variables(candidate)
             {:ok, build_success_response(response, model_string, candidate, variables)}
 
           {:error, _reason} ->

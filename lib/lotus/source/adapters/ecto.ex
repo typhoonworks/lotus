@@ -286,6 +286,13 @@ defmodule Lotus.Source.Adapters.Ecto do
 
       @impl true
       def supported_filter_operators(_repo), do: EctoAdapter.do_supported_filter_operators()
+
+      @impl true
+      def ai_context(_repo), do: EctoAdapter.do_ai_context(@dialect)
+
+      @impl true
+      def prepare_for_analysis(_repo, statement),
+        do: EctoAdapter.do_prepare_for_analysis(statement)
     end
   end
 
@@ -615,6 +622,12 @@ defmodule Lotus.Source.Adapters.Ecto do
   @impl true
   def supported_filter_operators(_repo), do: do_supported_filter_operators()
 
+  @impl true
+  def ai_context(_repo), do: do_ai_context(@default_dialect)
+
+  @impl true
+  def prepare_for_analysis(_repo, statement), do: do_prepare_for_analysis(statement)
+
   # ---------------------------------------------------------------------------
   # Callbacks — Source Identity
   # ---------------------------------------------------------------------------
@@ -888,6 +901,41 @@ defmodule Lotus.Source.Adapters.Ecto do
   # set (e.g. if an engine lacks regex LIKE support).
   @doc false
   def do_supported_filter_operators, do: Filter.operators()
+
+  # Assemble the dialect's AI context. Dialects that implement the
+  # optional `ai_context/0` callback supply their own (Postgres/MySQL/
+  # SQLite with dialect-specific syntax notes + error patterns); dialects
+  # that don't get a generic-SQL context synthesized from `query_language/0`.
+  @doc false
+  def do_ai_context(dialect) do
+    if function_exported?(dialect, :ai_context, 0) do
+      dialect.ai_context()
+    else
+      {:ok,
+       %{
+         language: dialect.query_language(),
+         example_query: "SELECT column1 FROM table_name LIMIT 10",
+         syntax_notes: "Use standard SQL.",
+         error_patterns: []
+       }}
+    end
+  end
+
+  # Resolve Lotus template syntax so the statement is parseable by the
+  # dialect's EXPLAIN variant without bound params. SQL gets "NULL" for
+  # `{{var}}` placeholders; `[[...]]` optional blocks are kept (inner
+  # content retained so all clauses are visible to the planner).
+  @doc false
+  def do_prepare_for_analysis(%Statement{text: sql} = statement) when is_binary(sql) do
+    prepared =
+      sql
+      |> OptionalClause.strip_brackets()
+      |> Variables.neutralize("NULL")
+
+    {:ok, %{statement | text: prepared, params: []}}
+  end
+
+  def do_prepare_for_analysis(_statement), do: {:error, :non_text_statement}
 
   # ---------------------------------------------------------------------------
   # Private helpers

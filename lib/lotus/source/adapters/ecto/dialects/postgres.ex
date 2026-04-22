@@ -104,6 +104,40 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   def query_language, do: "sql:postgres"
 
   @impl true
+  def ai_context do
+    {:ok,
+     %{
+       language: query_language(),
+       example_query:
+         "SELECT * FROM users WHERE created_at > NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 10",
+       syntax_notes:
+         "Use double-quoted identifiers (\"table\", \"column\"). Arrays, JSONB, CTEs, and window functions are available. Date helpers: DATE_TRUNC, EXTRACT, NOW(), INTERVAL.",
+       error_patterns: [
+         %{
+           pattern: ~r/relation "[^"]+" does not exist/i,
+           hint:
+             "The referenced table or view doesn't exist. Use list_tables() or schema-qualified names (e.g. \"public.users\")."
+         },
+         %{
+           pattern: ~r/column "[^"]+" does not exist/i,
+           hint:
+             "The referenced column doesn't exist. Use get_table_schema() to list real columns before retrying."
+         },
+         %{
+           pattern: ~r/syntax error at or near/i,
+           hint:
+             "Postgres parser rejected the query. Check quoting (double quotes for identifiers, single for strings), commas, and keyword placement."
+         },
+         %{
+           pattern: ~r/function [a-z0-9_]+\(.*\) does not exist/i,
+           hint:
+             "Postgres function signature mismatch. Cast arguments explicitly (e.g. `value::integer`) or use the documented Postgres function name."
+         }
+       ]
+     }}
+  end
+
+  @impl true
   def limit_query(statement, limit) do
     "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
   end

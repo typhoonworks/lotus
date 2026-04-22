@@ -467,4 +467,55 @@ defmodule Lotus.Source.Adapters.EctoTest do
       assert Enum.sort(ops) == Enum.sort(Filter.operators())
     end
   end
+
+  describe "prepare_for_analysis/2" do
+    test "neutralizes {{var}} placeholders to NULL" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:ok, %Statement{text: prepared}} =
+               Adapter.prepare_for_analysis(
+                 adapter,
+                 Statement.new("SELECT * FROM test_users WHERE id = {{id}}")
+               )
+
+      assert prepared =~ "id = NULL"
+      refute prepared =~ "{{id}}"
+    end
+
+    test "strips [[...]] brackets while keeping inner content visible to the planner" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:ok, %Statement{text: prepared}} =
+               Adapter.prepare_for_analysis(
+                 adapter,
+                 Statement.new("SELECT * FROM test_users [[WHERE name = {{name}}]]")
+               )
+
+      assert prepared =~ "WHERE name = NULL"
+      refute prepared =~ "[["
+      refute prepared =~ "]]"
+    end
+
+    test "empties :params — the prepared statement carries no bound values" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:ok, %Statement{params: []}} =
+               Adapter.prepare_for_analysis(
+                 adapter,
+                 Statement.new("SELECT 1", [1, 2, 3])
+               )
+    end
+
+    test "returns the prepared statement validatable by query_plan/4" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      {:ok, prepared} =
+        Adapter.prepare_for_analysis(
+          adapter,
+          Statement.new("SELECT id FROM test_users WHERE id = {{id}} [[AND name = {{name}}]]")
+        )
+
+      assert {:ok, _plan} = Adapter.query_plan(adapter, prepared.text, prepared.params, [])
+    end
+  end
 end

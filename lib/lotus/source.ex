@@ -170,6 +170,26 @@ defmodule Lotus.Source do
     source_name |> get_source!() |> Adapter.supported_filter_operators()
   end
 
+  @doc """
+  Ask the adapter to resolve a statement into a form suitable for
+  optimization analysis (e.g. neutralizing `{{var}}` placeholders and
+  stripping `[[...]]` optional clauses so the engine's EXPLAIN / profile
+  endpoint can parse it).
+
+  Returns `{:error, :unsupported}` when the adapter does not implement
+  `prepare_for_analysis/2` — callers should treat that as "skip
+  optimization for this source".
+  """
+  @spec prepare_for_analysis(Adapter.t() | String.t(), Lotus.Query.Statement.t()) ::
+          {:ok, Lotus.Query.Statement.t()} | {:error, term()}
+  def prepare_for_analysis(%Adapter{} = adapter, %Lotus.Query.Statement{} = statement),
+    do: Adapter.prepare_for_analysis(adapter, statement)
+
+  def prepare_for_analysis(source_name, %Lotus.Query.Statement{} = statement)
+      when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.prepare_for_analysis(statement)
+  end
+
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------

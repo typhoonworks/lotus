@@ -74,18 +74,50 @@ defmodule Lotus.AI.ErrorDetector do
       "SELECT status FROM users"
       iex> Enum.any?(result.suggestions, &String.contains?(&1, "get_table_schema"))
       true
+
+  ## Adapter-supplied hints
+
+  An optional fourth argument — `ai_context` — accepts the sanitized map
+  returned by `Lotus.Source.Adapter.ai_context/1`. When present, its
+  `:error_patterns` are matched against the error message; each
+  matching pattern's `:hint` is prepended to the suggestions list.
+
+  Untrusted adapters have their `:error_patterns` stripped upstream
+  (by the `ai_context` dispatch helper) to `[]`, so no adapter-
+  contributed text reaches users from untrusted sources — the fall-back
+  is the generic classification + suggestion flow.
   """
-  @spec analyze_error(String.t(), String.t() | nil, map()) :: error_context()
-  def analyze_error(error_message, sql \\ nil, schema_context \\ %{}) do
+  @spec analyze_error(String.t(), String.t() | nil, map(), map() | nil) :: error_context()
+  def analyze_error(error_message, sql \\ nil, schema_context \\ %{}, ai_context \\ nil) do
     error_type = classify_error(error_message)
-    suggestions = suggest_fixes(error_type, error_message, sql, schema_context)
+    generic_suggestions = suggest_fixes(error_type, error_message, sql, schema_context)
+    adapter_hints = match_adapter_error_patterns(ai_context, error_message)
 
     %{
       error_type: error_type,
       error_message: error_message,
       failed_sql: sql,
-      suggestions: suggestions
+      suggestions: adapter_hints ++ generic_suggestions
     }
+  end
+
+  # Pull hints from the adapter's `ai_context.error_patterns` for patterns
+  # that match the error message. For untrusted adapters,
+  # `Lotus.Source.Adapter.ai_context/1` has already stripped this list
+  # to `[]` — so `match_adapter_error_patterns/2` returns an empty list
+  # and we fall back to the generic suggestions. There is no unsafe
+  # adapter-contributed text that reaches the user.
+  defp match_adapter_error_patterns(nil, _error_message), do: []
+
+  defp match_adapter_error_patterns(ai_context, error_message) when is_map(ai_context) do
+    ai_context
+    |> Map.get(:error_patterns, [])
+    |> Enum.filter(fn
+      %{pattern: %Regex{} = re} -> Regex.match?(re, error_message)
+      _ -> false
+    end)
+    |> Enum.map(fn %{hint: hint} -> hint end)
+    |> Enum.reject(&(&1 in [nil, ""]))
   end
 
   @doc """

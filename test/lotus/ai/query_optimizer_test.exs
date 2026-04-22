@@ -2,6 +2,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
   use Lotus.AICase, async: true
 
   alias Lotus.AI.QueryOptimizer
+  alias Lotus.Query.Statement
 
   describe "suggest_optimizations/2" do
     setup do
@@ -31,7 +32,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, result} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM orders WHERE created_at > '2024-01-01'",
+                 statement: Statement.new("SELECT * FROM orders WHERE created_at > '2024-01-01'"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -57,7 +58,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, result} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT id, name FROM users WHERE id = 1",
+                 statement: Statement.new("SELECT id, name FROM users WHERE id = 1"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -74,7 +75,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, result} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM orders",
+                 statement: Statement.new("SELECT * FROM orders"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -89,7 +90,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, _} =
                QueryOptimizer.suggest_optimizations("anthropic:claude-opus-4",
-                 sql: "SELECT * FROM orders",
+                 statement: Statement.new("SELECT * FROM orders"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -106,7 +107,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, _} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM orders",
+                 statement: Statement.new("SELECT * FROM orders"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -117,7 +118,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:error, %Lotus.AI.Error.ServiceError{}} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM orders",
+                 statement: Statement.new("SELECT * FROM orders"),
                  data_source: "postgres",
                  api_key: "sk-invalid"
                )
@@ -128,7 +129,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:error, %Lotus.AI.Error.ServiceError{}} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM orders",
+                 statement: Statement.new("SELECT * FROM orders"),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -146,7 +147,10 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, _} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: "SELECT * FROM users WHERE id = {{user_id}} AND status = {{status}}",
+                 statement:
+                   Statement.new(
+                     "SELECT * FROM users WHERE id = {{user_id}} AND status = {{status}}"
+                   ),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -171,7 +175,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, _} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: sql,
+                 statement: Statement.new(sql),
                  data_source: "postgres",
                  api_key: "sk-test"
                )
@@ -193,7 +197,7 @@ defmodule Lotus.AI.QueryOptimizerTest do
 
       assert {:ok, _} =
                QueryOptimizer.suggest_optimizations("openai:gpt-4o",
-                 sql: original_sql,
+                 statement: Statement.new(original_sql),
                  data_source: "postgres",
                  api_key: "sk-test"
                )

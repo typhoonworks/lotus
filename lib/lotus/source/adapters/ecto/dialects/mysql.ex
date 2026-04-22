@@ -191,6 +191,35 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   def query_language, do: "sql:mysql"
 
   @impl true
+  def ai_context do
+    {:ok,
+     %{
+       language: query_language(),
+       example_query:
+         "SELECT * FROM users WHERE created_at > DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY created_at DESC LIMIT 10",
+       syntax_notes:
+         "Use backtick-quoted identifiers (`table`, `column`). JSON support is limited — prefer JSON functions over direct operators. No array type. Date helpers: DATE_FORMAT, DATE_SUB, TIMESTAMPDIFF.",
+       error_patterns: [
+         %{
+           pattern: ~r/Table '[^']+' doesn't exist/i,
+           hint:
+             "Table doesn't exist. Use list_tables() to see available tables or schema-qualified names (e.g. `dbname.users`)."
+         },
+         %{
+           pattern: ~r/Unknown column '[^']+' in/i,
+           hint:
+             "Column doesn't exist. Use get_table_schema() to list real columns before retrying."
+         },
+         %{
+           pattern: ~r/You have an error in your SQL syntax/i,
+           hint:
+             "MySQL parser rejected the query. Check backtick quoting, comma placement, and reserved-word usage."
+         }
+       ]
+     }}
+  end
+
+  @impl true
   def limit_query(statement, limit) do
     "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
   end

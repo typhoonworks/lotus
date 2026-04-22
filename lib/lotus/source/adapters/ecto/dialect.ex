@@ -161,6 +161,19 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   """
   @callback db_type_to_lotus_type(db_type :: String.t()) :: atom()
 
+  @doc """
+  Return the adapter-shaped AI context for this dialect.
+
+  Supplies the four `Lotus.Source.Adapter.ai_context_map` keys —
+  `:language`, `:example_query`, `:syntax_notes`, `:error_patterns` —
+  with dialect-specific content. The built-in SQL dialects populate
+  Postgres / MySQL / SQLite quirks here.
+
+  Default (when not implemented): generic-SQL context synthesized from
+  `query_language/0`, with an empty error-pattern list.
+  """
+  @callback ai_context() :: {:ok, Lotus.Source.Adapter.ai_context_map()} | {:error, term()}
+
   @optional_callbacks [
     supports_feature?: 1,
     hierarchy_label: 0,
@@ -169,6 +182,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
     transform_statement: 1,
     needs_preflight?: 1,
     db_type_to_lotus_type: 1,
-    editor_config: 0
+    editor_config: 0,
+    ai_context: 0
   ]
 end

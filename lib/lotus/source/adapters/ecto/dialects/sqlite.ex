@@ -110,6 +110,35 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   def query_language, do: "sql:sqlite"
 
   @impl true
+  def ai_context do
+    {:ok,
+     %{
+       language: query_language(),
+       example_query:
+         "SELECT * FROM users WHERE created_at > datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 10",
+       syntax_notes:
+         "Use double-quoted identifiers (\"table\", \"column\"). Dynamic typing — column types are hints, not enforced. Date helpers: date(), datetime(), strftime(). Older versions lack window functions; prefer subqueries.",
+       error_patterns: [
+         %{
+           pattern: ~r/no such table/i,
+           hint:
+             "Table doesn't exist. SQLite is schema-flat — use list_tables() to see what's available."
+         },
+         %{
+           pattern: ~r/no such column/i,
+           hint:
+             "Column doesn't exist. Use get_table_schema() to list real columns before retrying."
+         },
+         %{
+           pattern: ~r/near ".*": syntax error/i,
+           hint:
+             "SQLite parser rejected the query near a specific token. Check quoting and keyword order."
+         }
+       ]
+     }}
+  end
+
+  @impl true
   def limit_query(statement, limit) do
     "SELECT * FROM (#{statement}) AS limited_query LIMIT #{limit}"
   end

@@ -229,6 +229,20 @@ defmodule Lotus.Config do
       doc:
         "List of external adapter modules implementing `Lotus.Source.Adapter` with `can_handle?/1` and `wrap/2`."
     ],
+    trusted_source_adapters: [
+      type: {:list, :atom},
+      default: [],
+      doc: """
+      Adapter modules whose `ai_context/1` output Lotus plumbs through
+      to the LLM prompt unchanged. The built-in `Lotus.Source.Adapters.Ecto`
+      (and its per-dialect wrappers) are always trusted; listing a
+      module here trusts an external adapter the same way.
+
+      For untrusted adapters, only `:language` reaches the prompt;
+      `:syntax_notes` and `:error_patterns` are discarded to bound the
+      prompt-injection blast radius.
+      """
+    ],
     source_resolver: [
       type: :atom,
       default: Lotus.Source.Resolvers.Static,
@@ -385,6 +399,7 @@ defmodule Lotus.Config do
       :cache,
       :ai,
       :source_adapters,
+      :trusted_source_adapters,
       :source_resolver,
       :visibility_resolver,
       :middleware
@@ -729,6 +744,27 @@ defmodule Lotus.Config do
   """
   @spec source_adapters() :: [module()]
   def source_adapters, do: load!()[:source_adapters]
+
+  @doc """
+  Return whether the given adapter module is trusted to contribute
+  free-form text (`:syntax_notes`, `:error_patterns`) to AI prompts.
+
+  Always-trusted: the built-in `Lotus.Source.Adapters.Ecto` and the
+  first-party per-dialect adapters it exposes via `builtin_adapters/0`
+  (Postgres, MySQL, SQLite3). Additional modules can be trusted via
+  `config :lotus, :trusted_source_adapters, [MyAdapter]`.
+
+  Untrusted adapters still supply a `:language` identifier to the
+  prompt — just not the free-form fields.
+  """
+  @spec trusted_source_adapter?(module()) :: boolean()
+  def trusted_source_adapter?(mod) when is_atom(mod) do
+    alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
+
+    mod == EctoAdapter or
+      mod in EctoAdapter.builtin_adapters() or
+      mod in load!()[:trusted_source_adapters]
+  end
 
   @doc """
   Returns the configured source resolver module.

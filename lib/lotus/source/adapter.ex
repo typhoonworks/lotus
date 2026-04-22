@@ -482,6 +482,96 @@ defmodule Lotus.Source.Adapter do
   """
   @callback query_language(state :: term()) :: String.t()
 
+  @typedoc """
+  Per-AI-feature capability declaration. Adapters use this to declare
+  which AI features they actually support — `Lotus.AI.supports?/2`
+  reads it directly to let UIs gate per-source button visibility.
+
+    * `true` — feature supported.
+    * `{false, reason}` — feature unsupported; the reason is surfaced
+      to users. For untrusted adapters, reasons are replaced with a
+      generic fallback at the dispatch layer.
+
+  Default (when the `:capabilities` key is absent from `ai_context_map`):
+  all three features `true` — existing adapters inherit the permissive
+  behavior without needing to declare anything.
+  """
+  @type ai_capability :: true | {false, String.t()}
+
+  @type ai_capabilities :: %{
+          generation: ai_capability(),
+          optimization: ai_capability(),
+          explanation: ai_capability()
+        }
+
+  @typedoc """
+  Structured, bounded context an adapter supplies to the AI pipeline.
+
+  Fixed keys; free-form fields are length-capped at the dispatch layer
+  to bound blast radius from a compromised or noisy adapter. See
+  `Lotus.Source.Adapter.ai_context/1` dispatch for exact limits.
+
+  The optional `:capabilities` map declares per-feature AI support.
+  """
+  @type ai_context_map :: %{
+          required(:language) => String.t(),
+          required(:example_query) => String.t(),
+          required(:syntax_notes) => String.t(),
+          required(:error_patterns) => [%{pattern: Regex.t(), hint: String.t()}],
+          optional(:capabilities) => ai_capabilities()
+        }
+
+  @doc """
+  Return the structured context the AI pipeline uses when generating
+  queries for this source.
+
+  The returned map has fixed keys:
+
+    * `:language` — query-language identifier (same shape as
+      `query_language/1`: `"sql:postgres"`, `"elasticsearch:json"`, ...).
+      Must match a constrained character set; violating identifiers are
+      replaced with `"unknown"` at the dispatch layer.
+    * `:example_query` — one concrete example statement showing the
+      adapter's syntax idioms. Capped at 2048 bytes.
+    * `:syntax_notes` — short prose covering quoting, reserved words,
+      or dialect-specific pitfalls. Capped at 1024 bytes.
+    * `:error_patterns` — up to 20 `%{pattern: Regex.t(), hint: binary}`
+      entries. When a query fails, the first matching `:pattern` feeds
+      its `:hint` back into the LLM so it can self-correct.
+
+  Return `{:error, :ai_not_supported}` (or any `{:error, term}`) to opt
+  the source out of AI generation entirely — `Lotus.AI.generate_query_with_context/1`
+  surfaces a clean "AI not supported for source" error instead of
+  hallucinating syntax the adapter can't run.
+
+  **Security note.** Untrusted adapters can influence LLM output through
+  `:syntax_notes` and `:error_patterns`. Host apps opt adapters into the
+  full context via `config :lotus, :trusted_source_adapters`. Untrusted
+  adapters see only `:language` plumbed to the prompt; free-form fields
+  are discarded.
+
+  Default (when not implemented): `{:error, :ai_not_supported}` — the
+  adapter is opted out of AI.
+  """
+  @callback ai_context(state :: term()) :: {:ok, ai_context_map()} | {:error, term()}
+
+  @doc """
+  Return a statement safe to pass to `query_plan/4` for optimization
+  analysis.
+
+  Callers (`Lotus.AI.QueryOptimizer`) run this first so the adapter can
+  resolve any `[[ ... ]]` optional clauses and replace `{{var}}`
+  placeholders with language-appropriate null-ish literals (`NULL` for
+  SQL, `null` for JSON DSLs). The returned statement's `:text` must be
+  syntactically valid in the adapter's language without bound params
+  so the engine's EXPLAIN / profile endpoint can parse it.
+
+  Default (when not implemented): `{:error, :unsupported}` — the caller
+  skips optimization analysis for this adapter.
+  """
+  @callback prepare_for_analysis(state :: term(), statement :: Statement.t()) ::
+              {:ok, Statement.t()} | {:error, term()}
+
   @doc """
   Wrap a raw statement string with a source-specific row limit.
 
@@ -561,6 +651,8 @@ defmodule Lotus.Source.Adapter do
     parse_qualified_name: 2,
     validate_identifier: 3,
     supported_filter_operators: 1,
+    ai_context: 1,
+    prepare_for_analysis: 2,
     query_language: 1,
     hierarchy_label: 1,
     example_query: 3,
@@ -915,6 +1007,185 @@ defmodule Lotus.Source.Adapter do
     if function_exported?(mod, :query_language, 1),
       do: mod.query_language(state),
       else: "sql"
+  end
+
+  # Hard limits on the free-form AI context fields. Adapters that return
+  # values over these bounds are truncated at this dispatch layer with a
+  # one-time warning — prevents a noisy or compromised adapter from
+  # bloating the prompt beyond the LLM's context budget.
+  @ai_context_max_example_query_bytes 2048
+  @ai_context_max_syntax_notes_bytes 1024
+  @ai_context_max_error_patterns 20
+
+  # Constrains the `:language` field to a small character set so untrusted
+  # adapters can't inject prompt text through it.
+  @ai_context_language_regex ~r/\A[a-z0-9]+:[a-z0-9_-]+\z/
+
+  @doc """
+  Return the adapter's AI context, with free-form fields capped at safe
+  sizes.
+
+  Returns `{:error, :ai_not_supported}` if the adapter does not implement
+  `ai_context/1` — the host can branch on this to disable AI features for
+  the source.
+
+  Oversized `:example_query`, `:syntax_notes`, or `:error_patterns` are
+  truncated at the dispatch layer with a one-time `Logger.warning/1` per
+  adapter module. A `:language` value that doesn't match the allowed
+  character set (`^[a-z0-9]+:[a-z0-9_-]+$`) is replaced with `"unknown"`.
+  """
+  @spec ai_context(t()) :: {:ok, ai_context_map()} | {:error, term()}
+  def ai_context(%__MODULE__{module: mod, state: state}) do
+    if function_exported?(mod, :ai_context, 1) do
+      case mod.ai_context(state) do
+        {:ok, ctx} when is_map(ctx) -> {:ok, sanitize_ai_context(mod, ctx)}
+        {:error, _} = err -> err
+        other -> {:error, {:invalid_ai_context, other}}
+      end
+    else
+      {:error, :ai_not_supported}
+    end
+  end
+
+  @doc """
+  Prepare a statement for optimization analysis via the adapter. Returns
+  `{:error, :unsupported}` if the adapter does not implement
+  `prepare_for_analysis/2` — callers skip optimization for that adapter.
+  """
+  @spec prepare_for_analysis(t(), Statement.t()) :: {:ok, Statement.t()} | {:error, term()}
+  def prepare_for_analysis(%__MODULE__{module: mod, state: state}, %Statement{} = statement) do
+    if function_exported?(mod, :prepare_for_analysis, 2),
+      do: mod.prepare_for_analysis(state, statement),
+      else: {:error, :unsupported}
+  end
+
+  # Trust boundary: untrusted adapters supply only `:language` to the
+  # prompt. Free-form fields (`:example_query`, `:syntax_notes`,
+  # `:error_patterns`) are discarded so a compromised or incidentally
+  # adversarial adapter can't inject prompt text. Capability
+  # declarations still apply — they gate feature visibility, not prompt
+  # content — but their reason strings are replaced with a generic
+  # fallback for untrusted adapters (same injection concern).
+  defp sanitize_ai_context(mod, ctx) do
+    ctx
+    |> sanitize_language(mod)
+    |> apply_trust_boundary(mod)
+    |> truncate_bytes(
+      :example_query,
+      @ai_context_max_example_query_bytes,
+      mod
+    )
+    |> truncate_bytes(
+      :syntax_notes,
+      @ai_context_max_syntax_notes_bytes,
+      mod
+    )
+    |> truncate_list(:error_patterns, @ai_context_max_error_patterns, mod)
+    |> normalize_capabilities(mod)
+  end
+
+  defp apply_trust_boundary(ctx, mod) do
+    if Lotus.Config.trusted_source_adapter?(mod) do
+      ctx
+    else
+      ctx
+      |> Map.put(:example_query, "")
+      |> Map.put(:syntax_notes, "")
+      |> Map.put(:error_patterns, [])
+    end
+  end
+
+  # Default to all-supported when the adapter omits `:capabilities` —
+  # existing adapters that returned `{:ok, ctx}` before this extension
+  # should opt into everything. For untrusted adapters, any `{false,
+  # reason}` has its reason replaced with a generic fallback.
+  @generic_unsupported_reason "This feature is not available for this data source."
+
+  defp normalize_capabilities(ctx, mod) do
+    caps =
+      ctx
+      |> Map.get(:capabilities, %{})
+      |> ensure_capability(:generation)
+      |> ensure_capability(:optimization)
+      |> ensure_capability(:explanation)
+      |> filter_capability_reasons(mod)
+
+    Map.put(ctx, :capabilities, caps)
+  end
+
+  defp ensure_capability(caps, key) do
+    case Map.get(caps, key) do
+      true -> caps
+      {false, reason} when is_binary(reason) -> caps
+      false -> Map.put(caps, key, {false, @generic_unsupported_reason})
+      nil -> Map.put(caps, key, true)
+      _ -> Map.put(caps, key, true)
+    end
+  end
+
+  defp filter_capability_reasons(caps, mod) do
+    if Lotus.Config.trusted_source_adapter?(mod) do
+      caps
+    else
+      Enum.into(caps, %{}, fn
+        {key, {false, _reason}} -> {key, {false, @generic_unsupported_reason}}
+        {key, true} -> {key, true}
+      end)
+    end
+  end
+
+  defp sanitize_language(ctx, mod) do
+    case Map.get(ctx, :language) do
+      lang when is_binary(lang) ->
+        if Regex.match?(@ai_context_language_regex, lang) do
+          ctx
+        else
+          warn_ai_context_once(mod, :language, "invalid format")
+          Map.put(ctx, :language, "unknown")
+        end
+
+      _ ->
+        warn_ai_context_once(mod, :language, "missing or non-binary")
+        Map.put(ctx, :language, "unknown")
+    end
+  end
+
+  defp truncate_bytes(ctx, key, limit, mod) do
+    case Map.get(ctx, key) do
+      value when is_binary(value) and byte_size(value) > limit ->
+        warn_ai_context_once(mod, key, "exceeds #{limit} bytes, truncating")
+        Map.put(ctx, key, binary_part(value, 0, limit))
+
+      _ ->
+        ctx
+    end
+  end
+
+  defp truncate_list(ctx, key, limit, mod) do
+    case Map.get(ctx, key) do
+      list when is_list(list) and length(list) > limit ->
+        warn_ai_context_once(mod, key, "exceeds #{limit} entries, truncating")
+        Map.put(ctx, key, Enum.take(list, limit))
+
+      _ ->
+        ctx
+    end
+  end
+
+  # Log each (adapter, field) truncation/repair once per BEAM node so a
+  # misconfigured adapter doesn't spam the log on every AI call.
+  defp warn_ai_context_once(mod, field, msg) do
+    key = {__MODULE__, :ai_context_warn, mod, field}
+
+    case :persistent_term.get(key, :none) do
+      :warned ->
+        :ok
+
+      :none ->
+        :persistent_term.put(key, :warned)
+        require Logger
+        Logger.warning("ai_context from #{inspect(mod)} field #{inspect(field)}: #{msg}")
+    end
   end
 
   @doc "Return editor configuration via the adapter."
