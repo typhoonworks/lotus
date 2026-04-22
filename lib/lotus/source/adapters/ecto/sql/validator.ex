@@ -1,4 +1,4 @@
-defmodule Lotus.SQL.Validator do
+defmodule Lotus.Source.Adapters.Ecto.SQL.Validator do
   @moduledoc """
   Validates SQL syntax by preparing it against the database without executing.
 
@@ -9,7 +9,7 @@ defmodule Lotus.SQL.Validator do
 
   alias Lotus.Source
   alias Lotus.Source.Adapter
-  alias Lotus.SQL.OptionalClause
+  alias Lotus.Query.OptionalClause
   alias Lotus.Variables
 
   @doc """
@@ -24,10 +24,10 @@ defmodule Lotus.SQL.Validator do
 
   ## Examples
 
-      iex> Lotus.SQL.Validator.validate("SELECT 1", "postgres")
+      iex> Lotus.Source.Adapters.Ecto.SQL.Validator.validate("SELECT 1", "postgres")
       :ok
 
-      iex> Lotus.SQL.Validator.validate("NOT VALID SQL", "postgres")
+      iex> Lotus.Source.Adapters.Ecto.SQL.Validator.validate("NOT VALID SQL", "postgres")
       {:error, "SQL syntax error: ..."}
   """
   @spec validate(String.t() | module() | Adapter.t(), String.t() | module() | nil) ::

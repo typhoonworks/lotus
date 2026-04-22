@@ -10,7 +10,7 @@ defmodule Lotus.AI.QueryOptimizer do
   alias Lotus.AI.Prompts.Optimization
   alias Lotus.AI.Tool
   alias Lotus.Source.Adapter
-  alias Lotus.SQL.OptionalClause
+  alias Lotus.Query.OptionalClause
   alias Lotus.Variables
 
   @doc """

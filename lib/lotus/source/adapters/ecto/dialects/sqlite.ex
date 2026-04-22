@@ -8,8 +8,8 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   alias __MODULE__.EditorConfig
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
-  alias Lotus.SQL.FilterInjector
-  alias Lotus.SQL.SortInjector
+  alias Lotus.Source.Adapters.Ecto.SQL.FilterInjector
+  alias Lotus.Source.Adapters.Ecto.SQL.SortInjector
 
   @impl true
   def source_type, do: :sqlite
@@ -312,7 +312,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
 
   @impl true
   def transform_statement(%Statement{text: sql} = statement) do
-    alias Lotus.SQL.Transformer
+    alias Lotus.Source.Adapters.Ecto.SQL.Transformer
 
     new_sql =
       sql

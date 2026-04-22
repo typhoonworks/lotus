@@ -1,4 +1,4 @@
-defmodule Lotus.SQL.Transformer do
+defmodule Lotus.Source.Adapters.Ecto.SQL.Transformer do
   @moduledoc """
   Shared SQL transformation utilities used by dialect implementations.
 

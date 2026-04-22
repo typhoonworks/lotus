@@ -8,7 +8,8 @@ defmodule Lotus.AI.Actions.GetTableSchema do
 
   @behaviour Lotus.AI.Action
 
-  alias Lotus.SQL.Identifier
+  alias Lotus.Source
+  alias Lotus.Source.Adapter
 
   @impl true
   def name, do: "get_table_schema"
@@ -33,11 +34,37 @@ defmodule Lotus.AI.Actions.GetTableSchema do
 
   @impl true
   def run(params, _context) do
-    {schema, table} = Identifier.parse_table_name(params.table_name)
+    adapter = Source.resolve!(params.data_source, nil)
 
-    with :ok <- Identifier.validate_table_parts(schema, table) do
+    with {:ok, {schema, table}} <- parse_name(adapter, params.table_name),
+         :ok <- validate_parts(adapter, schema, table) do
       fetch_schema(params.data_source, schema, table, params.table_name)
     end
+  end
+
+  defp parse_name(adapter, table_name) do
+    case Adapter.parse_qualified_name(adapter, table_name) do
+      {:ok, [schema, table]} ->
+        {:ok, {schema, table}}
+
+      {:ok, [table]} ->
+        {:ok, {nil, table}}
+
+      {:ok, parts} ->
+        {:error, "Unexpected hierarchy depth for #{inspect(table_name)}: #{inspect(parts)}"}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp validate_parts(adapter, nil, table),
+    do: Adapter.validate_identifier(adapter, :table, table)
+
+  defp validate_parts(adapter, schema, table) do
+    with :ok <- Adapter.validate_identifier(adapter, :schema, schema),
+         :ok <- Adapter.validate_identifier(adapter, :table, table),
+         do: :ok
   end
 
   defp fetch_schema(data_source, nil, table, original_name) do

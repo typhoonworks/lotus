@@ -17,7 +17,7 @@ defmodule Lotus.Storage.Query do
   alias Lotus.Query.Statement
   alias Lotus.Source
   alias Lotus.Source.Adapter
-  alias Lotus.SQL.OptionalClause
+  alias Lotus.Query.OptionalClause
   alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, VariableResolver}
 
   @type t :: %__MODULE__{

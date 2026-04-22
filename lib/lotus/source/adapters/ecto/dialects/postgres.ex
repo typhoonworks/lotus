@@ -6,9 +6,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   alias __MODULE__.EditorConfig
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
-  alias Lotus.SQL.FilterInjector
-  alias Lotus.SQL.Identifier
-  alias Lotus.SQL.SortInjector
+  alias Lotus.Source.Adapters.Ecto.SQL.FilterInjector
+  alias Lotus.Source.Adapters.Ecto.SQL.Identifier
+  alias Lotus.Source.Adapters.Ecto.SQL.SortInjector
 
   @default_statement_timeout_ms 5_000
 
@@ -394,7 +394,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
 
   @impl true
   def transform_statement(%Statement{text: sql} = statement) do
-    alias Lotus.SQL.Transformer
+    alias Lotus.Source.Adapters.Ecto.SQL.Transformer
 
     new_sql =
       sql

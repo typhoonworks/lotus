@@ -24,7 +24,9 @@ defmodule Lotus.Source.Adapter do
       `apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
       `needs_preflight?/2`, `sanitize_query/3`,
       `substitute_variable/5`, `substitute_list_variable/5`,
-      `extract_accessed_resources/2`
+      `validate_statement/3`, `extract_accessed_resources/2`
+    * **Name & operator validation** — `parse_qualified_name/2`,
+      `validate_identifier/3`, `supported_filter_operators/1`
     * **Safety & visibility** — `builtin_denies/1`, `builtin_schema_denies/1`,
       `default_schemas/1`
     * **Lifecycle** — `health_check/1`, `disconnect/1`
@@ -323,6 +325,93 @@ defmodule Lotus.Source.Adapter do
             ) ::
               {:ok, Statement.t()} | {:error, term()}
 
+  @doc """
+  Validate that a statement can be parsed and prepared by the data source
+  without executing it.
+
+  SQL-prepared adapters typically implement this via `EXPLAIN` (the server
+  parses + type-checks the query without running it). Non-SQL engines
+  might use a `_validate` endpoint (Elasticsearch) or return `:ok`
+  unconditionally as a trust-on-execute fallback.
+
+  Called by lotus_web's "validate before run" feature and AI actions that
+  want to sanity-check a draft before surfacing it to the user. Callers
+  are responsible for neutralizing any unbound `{{var}}` placeholders
+  before calling this — adapters see the statement as-is.
+
+  Default (when not implemented): `:ok` — trust-on-execute; errors surface
+  at run time.
+  """
+  @callback validate_statement(
+              state :: term(),
+              statement :: Statement.t(),
+              opts :: keyword()
+            ) ::
+              :ok | {:error, term()}
+
+  @doc """
+  Parse a qualified resource name into its hierarchy components.
+
+  The return is an ordered list: the most-coarse component first, the leaf
+  last. Component count should match `hierarchy_label/1` depth.
+
+  Examples across query languages:
+
+    * SQL: `"public.users"` → `["public", "users"]`
+    * Elasticsearch: `"logs-2025-01"` → `["logs-2025-01"]` (flat)
+    * Mongo: `"mydb.users"` → `["mydb", "users"]`
+
+  Used by discovery UIs and AI actions to route a user-supplied name to
+  the right introspection call.
+
+  Default (when not implemented): `{:ok, [name]}` — single-component
+  interpretation.
+  """
+  @callback parse_qualified_name(state :: term(), name :: String.t()) ::
+              {:ok, [String.t()]} | {:error, term()}
+
+  @doc """
+  Validate that a string is a safe identifier for the given kind in this
+  adapter's query language.
+
+  Each adapter declares what characters are allowed:
+
+    * Ecto SQL dialects: `[a-zA-Z_][a-zA-Z0-9_]*` for `:schema`, `:table`,
+      and `:column`.
+    * Elasticsearch: `:table` (index) allows hyphens and leading digits;
+      `:column` (field path) allows dots for nested fields.
+    * Mongo: `:column` allows dot paths for embedded document fields.
+
+  Called from the pipeline before dispatching filter/sort column names to
+  the adapter, and from AI actions that take user-supplied names.
+
+  Default (when not implemented): `:ok` — permissive; the adapter trusts
+  its caller to validate identifiers.
+  """
+  @callback validate_identifier(
+              state :: term(),
+              kind :: :schema | :table | :column,
+              value :: String.t()
+            ) ::
+              :ok | {:error, String.t()}
+
+  @doc """
+  Return the `Lotus.Query.Filter` operators this adapter's `apply_filters/3`
+  can handle.
+
+  Core validates filter operators against this list before dispatching.
+  Unsupported operators raise `Lotus.UnsupportedOperatorError` rather than
+  silently degrading. lotus_web reads this through
+  `Lotus.Source.supported_filter_operators/1` to gate the filter operator
+  dropdown per source.
+
+  Default (when not implemented): all operators in `Lotus.Query.Filter.operators/0`
+  — the permissive choice, which existing adapters inherit without change.
+  Adapters that cannot implement the full set must override and declare
+  their actual support.
+  """
+  @callback supported_filter_operators(state :: term()) :: [atom()]
+
   # ---------------------------------------------------------------------------
   # Callbacks — Safety & Visibility
   # ---------------------------------------------------------------------------
@@ -467,6 +556,10 @@ defmodule Lotus.Source.Adapter do
     needs_preflight?: 2,
     substitute_variable: 5,
     substitute_list_variable: 5,
+    validate_statement: 3,
+    parse_qualified_name: 2,
+    validate_identifier: 3,
+    supported_filter_operators: 1,
     query_language: 1,
     hierarchy_label: 1,
     example_query: 3,
@@ -721,6 +814,58 @@ defmodule Lotus.Source.Adapter do
     if function_exported?(mod, :substitute_list_variable, 5),
       do: mod.substitute_list_variable(state, statement, var_name, values, type),
       else: {:error, :unsupported}
+  end
+
+  @doc """
+  Validate a statement via the adapter. Returns `:ok` if the adapter does
+  not implement the callback (trust-on-execute).
+  """
+  @spec validate_statement(t(), Statement.t(), keyword()) :: :ok | {:error, term()}
+  def validate_statement(
+        %__MODULE__{module: mod, state: state},
+        %Statement{} = statement,
+        opts
+      ) do
+    if function_exported?(mod, :validate_statement, 3),
+      do: mod.validate_statement(state, statement, opts),
+      else: :ok
+  end
+
+  @doc """
+  Parse a qualified name into hierarchy components via the adapter.
+  Returns `{:ok, [name]}` (single-component) if the adapter does not
+  implement the callback.
+  """
+  @spec parse_qualified_name(t(), String.t()) :: {:ok, [String.t()]} | {:error, term()}
+  def parse_qualified_name(%__MODULE__{module: mod, state: state}, name) when is_binary(name) do
+    if function_exported?(mod, :parse_qualified_name, 2),
+      do: mod.parse_qualified_name(state, name),
+      else: {:ok, [name]}
+  end
+
+  @doc """
+  Validate an identifier for the given kind via the adapter. Returns `:ok`
+  (permissive) if the adapter does not implement the callback.
+  """
+  @spec validate_identifier(t(), :schema | :table | :column, String.t()) ::
+          :ok | {:error, String.t()}
+  def validate_identifier(%__MODULE__{module: mod, state: state}, kind, value)
+      when kind in [:schema, :table, :column] and is_binary(value) do
+    if function_exported?(mod, :validate_identifier, 3),
+      do: mod.validate_identifier(state, kind, value),
+      else: :ok
+  end
+
+  @doc """
+  Return the filter operators this adapter's `apply_filters/3` supports.
+  Defaults to all of `Lotus.Query.Filter.operators/0` if the adapter does
+  not declare a subset.
+  """
+  @spec supported_filter_operators(t()) :: [atom()]
+  def supported_filter_operators(%__MODULE__{module: mod, state: state}) do
+    if function_exported?(mod, :supported_filter_operators, 1),
+      do: mod.supported_filter_operators(state),
+      else: Lotus.Query.Filter.operators()
   end
 
   @doc "Apply filters to a statement via the adapter. Empty filters short-circuit."

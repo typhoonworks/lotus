@@ -51,6 +51,20 @@
 
 ### Breaking
 
+- **`Lotus.SQL.*` namespace moved under Ecto.** SQL-specific internal modules relocated to `Lotus.Source.Adapters.Ecto.SQL.*`:
+  - `Lotus.SQL.FilterInjector` → `Lotus.Source.Adapters.Ecto.SQL.FilterInjector`
+  - `Lotus.SQL.SortInjector` → `Lotus.Source.Adapters.Ecto.SQL.SortInjector`
+  - `Lotus.SQL.Transformer` → `Lotus.Source.Adapters.Ecto.SQL.Transformer`
+  - `Lotus.SQL.Sanitizer` → `Lotus.Source.Adapters.Ecto.SQL.Sanitizer`
+  - `Lotus.SQL.Validator` → `Lotus.Source.Adapters.Ecto.SQL.Validator`
+  - `Lotus.SQL.Identifier` → `Lotus.Source.Adapters.Ecto.SQL.Identifier`
+
+  These are Ecto-adapter internals — universal code paths now reach the same functionality through `Lotus.Source.Adapter` callbacks (`validate_statement/3`, `validate_identifier/3`, `parse_qualified_name/2`, `apply_filters/3`, `apply_sorts/3`). The old module paths no longer exist.
+
+- **`Lotus.SQL.OptionalClause` → `Lotus.Query.OptionalClause`** (elevated, not hidden). The `[[ ... ]]` / `{{var}}` template syntax is language-agnostic — it works on SQL, JSON DSLs, Cypher, or any textual query format. Adapters with AST representations apply this before serialization. Public module at the new path; old path removed.
+
+- **AI actions now dispatch through the adapter contract.** `Lotus.AI.Actions.ValidateSQL` calls `Adapter.validate_statement/3` (not `Lotus.SQL.Validator.validate/2`); `Lotus.AI.Actions.GetTableSchema` and `GetColumnValues` call `Adapter.parse_qualified_name/2` + `Adapter.validate_identifier/3` (not `Lotus.SQL.Identifier.*`). `Lotus.AI.SQLGenerator` likewise routes validation through the adapter. Action names and tool schemas unchanged; only the internal dispatch path differs.
+
 - **Renamed `explain_plan/4` adapter callback to `query_plan/4`.** The old name read as "SQL EXPLAIN", but adapters whose engines don't expose a plan (Elasticsearch, in-memory DSLs, etc.) legitimately return `{:ok, nil}` or `{:error, :unsupported}` — the generic name fits the universal contract. Return type widened to `{:ok, String.t() | nil} | {:error, term()}` so non-SQL adapters can skip plan generation without surfacing an error. Rename applied across `Lotus.Source.Adapter` (callback + dispatch wrapper), `Lotus.Source.Adapters.Ecto.Dialect` (callback), the built-in Ecto adapter (macro + default impl), all 4 dialect implementations (Postgres, MySQL, SQLite, Default), and callers `Lotus.AI.QueryOptimizer` and `Lotus.SQL.Validator`. No alias — external adapters must rename at the same time.
 - **`Lotus.Source.Adapter.execute_query/4` typespec widened — `sql :: String.t()` → `sql :: term()`.** This is the driver boundary: adapters receive the adapter-native statement payload (SQL text for Ecto, a JSON body for Elasticsearch, a DSL AST for other engines) together with any bound `params`. Adapter authors whose Dialyzer builds pattern-matched the argument as `String.t()` should relax their spec — runtime behaviour is unchanged for the Ecto path.
 - **`param_placeholder/4` and `limit_offset_placeholders/3` are no longer on `Lotus.Source.Adapter`.** They were SQL-prepared-statement primitives masquerading as universal callbacks — non-SQL adapters had to stub them returning `""`. Moved to `Lotus.Source.Adapters.Ecto.Dialect` as Ecto-internal (they already were), with all universal dispatch wrappers and macro-injected overrides removed. Non-Ecto adapters should implement `substitute_variable/5` instead of the raw placeholder callbacks. Internal Ecto callers (`do_apply_pagination`, `do_substitute_variable`, `do_substitute_list_variable`) call the dialect directly.
@@ -76,6 +90,12 @@
 
 ### Added
 
+- **Four new universal `Lotus.Source.Adapter` callbacks** for feature-driven non-SQL parity:
+  - `validate_statement/3` — adapter validates a statement without executing (SQL: EXPLAIN; ES: `_validate`; default: `:ok` trust-on-execute).
+  - `parse_qualified_name/2` — parses a qualified resource name into an ordered hierarchy list (`"public.users"` → `["public", "users"]`; flat-namespace adapters return `[name]`).
+  - `validate_identifier/3` — adapter declares allowed characters per `:schema | :table | :column` kind (Ecto SQL: `[a-zA-Z_][a-zA-Z0-9_]*`; ES: hyphens/leading digits for indices; Mongo: dot-paths for embedded fields).
+  - `supported_filter_operators/1` — adapter declares which `Lotus.Query.Filter` operators its `apply_filters/3` handles. Core raises `Lotus.UnsupportedOperatorError` on a mismatch — no silent degradation.
+- `Lotus.UnsupportedOperatorError` exception raised when a filter operator is not in the adapter's declared support list.
 - **`:allow_unrestricted_resources` config option** — boolean (default `false`) that gates adapters returning `{:unrestricted, _}` from `extract_accessed_resources/2`. Set to `true` globally to trust all adapters, or opt in per-source via `allow_unrestricted_resources: true` in a map-configured `data_sources` entry. Per-source opt-in overrides the global flag. Accompanied by `Lotus.Config.allow_unrestricted_resources?/1` for the resolution. Designed for non-SQL adapters (Elasticsearch, Mongo) whose engines enforce visibility at a layer Lotus can't introspect.
 - `Lotus.Source.Adapters.Ecto.Dialect` behaviour for SQL-specific callbacks (`source_type/0`, `ecto_adapter/0`, plus all existing dialect callbacks) (#193)
 - `can_handle?/1` and `wrap/2` optional callbacks on `Lotus.Source.Adapter` for pluggable adapter registration (#193)

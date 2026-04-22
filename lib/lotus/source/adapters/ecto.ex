@@ -37,7 +37,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.Source.Adapters.Ecto.Dialects
-  alias Lotus.SQL.Sanitizer
+  alias Lotus.Source.Adapters.Ecto.SQL.Sanitizer
 
   @default_dialect Dialects.Default
 
@@ -263,6 +263,20 @@ defmodule Lotus.Source.Adapters.Ecto do
       @impl true
       def substitute_list_variable(_repo, statement, var_name, values, type),
         do: EctoAdapter.do_substitute_list_variable(@dialect, statement, var_name, values, type)
+
+      @impl true
+      def validate_statement(repo, statement, opts),
+        do: EctoAdapter.do_validate_statement(@dialect, repo, statement, opts)
+
+      @impl true
+      def parse_qualified_name(_repo, name), do: EctoAdapter.do_parse_qualified_name(name)
+
+      @impl true
+      def validate_identifier(_repo, kind, value),
+        do: EctoAdapter.do_validate_identifier(kind, value)
+
+      @impl true
+      def supported_filter_operators(_repo), do: EctoAdapter.do_supported_filter_operators()
     end
   end
 
@@ -579,6 +593,19 @@ defmodule Lotus.Source.Adapters.Ecto do
   def substitute_list_variable(_repo, statement, var_name, values, type),
     do: do_substitute_list_variable(@default_dialect, statement, var_name, values, type)
 
+  @impl true
+  def validate_statement(repo, statement, opts),
+    do: do_validate_statement(@default_dialect, repo, statement, opts)
+
+  @impl true
+  def parse_qualified_name(_repo, name), do: do_parse_qualified_name(name)
+
+  @impl true
+  def validate_identifier(_repo, kind, value), do: do_validate_identifier(kind, value)
+
+  @impl true
+  def supported_filter_operators(_repo), do: do_supported_filter_operators()
+
   # ---------------------------------------------------------------------------
   # Callbacks — Source Identity
   # ---------------------------------------------------------------------------
@@ -807,6 +834,51 @@ defmodule Lotus.Source.Adapters.Ecto do
     new_sql = String.replace(sql, "{{#{var_name}}}", placeholders, global: false)
     {:ok, %{statement | text: new_sql, params: params ++ values}}
   end
+
+  # Ecto adapters validate statements by running EXPLAIN (via query_plan)
+  # against the neutralized text. Callers pass a statement whose text may
+  # still contain Lotus template syntax; we strip optional clauses and
+  # replace {{var}} with NULL so the server can parse it.
+  @doc false
+  def do_validate_statement(
+        dialect,
+        repo,
+        %Statement{text: sql, params: params},
+        _opts
+      )
+      when is_binary(sql) do
+    neutralized =
+      sql
+      |> Lotus.Query.OptionalClause.strip_brackets()
+      |> Lotus.Variables.neutralize("NULL")
+
+    case dialect.query_plan(repo, neutralized, params, []) do
+      {:ok, _plan} -> :ok
+      {:error, reason} when is_binary(reason) -> {:error, reason}
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  # SQL qualified names: split on the first "." to produce `[schema, table]`
+  # or `[table]` when unqualified.
+  @doc false
+  def do_parse_qualified_name(name) when is_binary(name) do
+    {:ok, String.split(name, ".", parts: 2)}
+  end
+
+  # SQL identifier rules: `[a-zA-Z_][a-zA-Z0-9_]*` for all kinds. Dialects
+  # with stricter rules (reserved words, case sensitivity) can override
+  # via `defoverridable` in their own adapter module.
+  @doc false
+  def do_validate_identifier(kind, value) when is_binary(value) do
+    Lotus.Source.Adapters.Ecto.SQL.Identifier.validate_identifier(value, "#{kind} name")
+  end
+
+  # Ecto-backed adapters implement all `Lotus.Query.Filter` operators via
+  # `Lotus.Source.Adapters.Ecto.SQL.FilterInjector`. Dialects may override to declare a narrower
+  # set (e.g. if an engine lacks regex LIKE support).
+  @doc false
+  def do_supported_filter_operators, do: Lotus.Query.Filter.operators()
 
   # ---------------------------------------------------------------------------
   # Private helpers

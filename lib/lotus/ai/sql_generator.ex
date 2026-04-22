@@ -11,7 +11,9 @@ defmodule Lotus.AI.SQLGenerator do
   alias Lotus.AI.Conversation
   alias Lotus.AI.Prompts.SQLGeneration
   alias Lotus.AI.Tool
-  alias Lotus.SQL.Validator
+  alias Lotus.Query.Statement
+  alias Lotus.Source
+  alias Lotus.Source.Adapter
 
   @doc """
   Validate that a config contains a non-empty API key string.
@@ -86,7 +88,10 @@ defmodule Lotus.AI.SQLGenerator do
         {:ok, build_success_response(response, model_string, sql, variables)}
 
       {:error, {:unable_to_generate, candidate}} ->
-        case Validator.validate(candidate, data_source) do
+        adapter = Source.resolve!(data_source, nil)
+        statement = Statement.new(candidate)
+
+        case Adapter.validate_statement(adapter, statement, []) do
           :ok ->
             variables = SQLGeneration.extract_variables(candidate)
             {:ok, build_success_response(response, model_string, candidate, variables)}
