@@ -2,6 +2,7 @@ defmodule Lotus.MiddlewareTest do
   use Lotus.Case, async: false
 
   alias Lotus.{Middleware, Result, Runner}
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
 
   import Lotus.Fixtures
@@ -220,7 +221,7 @@ defmodule Lotus.MiddlewareTest do
         before_query: [{PassthroughPlug, []}]
       })
 
-      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "halting middleware prevents query execution" do
@@ -228,7 +229,8 @@ defmodule Lotus.MiddlewareTest do
         before_query: [{HaltPlug, [reason: "not allowed"]}]
       })
 
-      assert {:error, "not allowed"} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:error, "not allowed"} =
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "context is passed to before_query middleware" do
@@ -236,7 +238,9 @@ defmodule Lotus.MiddlewareTest do
         before_query: [{ContextCapturePlug, []}]
       })
 
-      Runner.run_statement(@pg_adapter, "SELECT 1", [], context: %{user: "alice@example.com"})
+      Runner.run_statement(@pg_adapter, Statement.new("SELECT 1", []),
+        context: %{user: "alice@example.com"}
+      )
 
       assert_received {:middleware_context, %{user: "alice@example.com"}}
     end
@@ -246,7 +250,7 @@ defmodule Lotus.MiddlewareTest do
         before_query: [{ContextCapturePlug, []}]
       })
 
-      Runner.run_statement(@pg_adapter, "SELECT 1")
+      Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
 
       assert_received {:middleware_context, nil}
     end
@@ -257,7 +261,7 @@ defmodule Lotus.MiddlewareTest do
         after_query: [{CountingPlug, []}]
       })
 
-      assert {:error, "denied"} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:error, "denied"} = Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
 
       refute_received :middleware_ran
     end
@@ -269,7 +273,8 @@ defmodule Lotus.MiddlewareTest do
         after_query: [{PassthroughPlug, []}]
       })
 
-      assert {:ok, %Result{rows: [[1]]}} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:ok, %Result{rows: [[1]]}} =
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "halting middleware in after_query returns error" do
@@ -277,7 +282,8 @@ defmodule Lotus.MiddlewareTest do
         after_query: [{HaltPlug, [reason: "post-query denied"]}]
       })
 
-      assert {:error, "post-query denied"} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:error, "post-query denied"} =
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "context flows to after_query middleware" do
@@ -285,7 +291,7 @@ defmodule Lotus.MiddlewareTest do
         after_query: [{ContextCapturePlug, []}]
       })
 
-      Runner.run_statement(@pg_adapter, "SELECT 1", [], context: %{role: :admin})
+      Runner.run_statement(@pg_adapter, Statement.new("SELECT 1", []), context: %{role: :admin})
 
       assert_received {:middleware_context, %{role: :admin}}
     end
@@ -542,7 +548,7 @@ defmodule Lotus.MiddlewareTest do
       })
 
       assert {:error, %RuntimeError{message: "boom"}} =
-               Runner.run_statement(@pg_adapter, "SELECT 1")
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "exception stops subsequent middleware from running" do
@@ -554,7 +560,7 @@ defmodule Lotus.MiddlewareTest do
       })
 
       assert {:error, %RuntimeError{message: "crash"}} =
-               Runner.run_statement(@pg_adapter, "SELECT 1")
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
 
       refute_received {:middleware_context, _}
     end
@@ -565,7 +571,7 @@ defmodule Lotus.MiddlewareTest do
       })
 
       assert {:error, %RuntimeError{message: "post-query crash"}} =
-               Runner.run_statement(@pg_adapter, "SELECT 1")
+               Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
   end
 
@@ -621,12 +627,12 @@ defmodule Lotus.MiddlewareTest do
   describe "backward compatibility" do
     test "no middleware configured has zero overhead" do
       # No compile call - persistent_term is empty
-      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "empty middleware map works" do
       Middleware.compile(%{})
-      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, "SELECT 1")
+      assert {:ok, %Result{}} = Runner.run_statement(@pg_adapter, Statement.new("SELECT 1"))
     end
 
     test "existing callers without context work unchanged" do

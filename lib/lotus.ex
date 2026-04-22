@@ -67,6 +67,7 @@ defmodule Lotus do
 
   alias Lotus.Cache.{Key, KeyBuilder}
   alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.Storage.Query
 
@@ -467,30 +468,28 @@ defmodule Lotus do
   defp execute_with_options(adapter, sql, params, opts, runner_opts, cache_identity, query_id) do
     search_path = Keyword.get(runner_opts, :search_path)
 
-    {sql, params} = Adapter.transform_bound_query(adapter, sql, params, runner_opts)
+    statement = %Statement{adapter: adapter.module, text: sql, params: params}
+    statement = Adapter.transform_bound_query(adapter, statement, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Adapter.apply_filters(adapter, sql, params, filters)
+    statement = Adapter.apply_filters(adapter, statement, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
-    sql = Adapter.apply_sorts(adapter, sql, sorts)
+    statement = Adapter.apply_sorts(adapter, statement, sorts)
 
-    {sql, params, pagination_meta, cache_bound} =
-      maybe_paginate(
-        sql,
-        params,
-        adapter,
-        search_path,
-        Keyword.get(opts, :window)
-      )
+    {statement, pagination_meta, cache_bound} =
+      maybe_paginate(statement, adapter, search_path, Keyword.get(opts, :window))
 
     scope = Keyword.get(opts, :scope)
-    key = result_key(sql, cache_bound || cache_identity, adapter.name, search_path, scope)
+
+    key =
+      result_key(statement.text, cache_bound || cache_identity, adapter.name, search_path, scope)
+
     tags = build_cache_tags(query_id, adapter.name, opts)
     profile = determine_cache_profile(opts)
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
-      with {:ok, %Result{} = res} <- Runner.run_statement(adapter, sql, params, runner_opts) do
+      with {:ok, %Result{} = res} <- Runner.run_statement(adapter, statement, runner_opts) do
         {:ok, merge_pagination_meta(res, pagination_meta)}
       end
     end)
@@ -890,10 +889,15 @@ defmodule Lotus do
     end
   end
 
-  defp maybe_paginate(sql, params, _adapter, _search_path, nil),
-    do: {sql, params, nil, nil}
+  defp maybe_paginate(%Statement{} = statement, _adapter, _search_path, nil),
+    do: {statement, nil, nil}
 
-  defp maybe_paginate(sql, params, adapter, search_path, pagination_opts)
+  defp maybe_paginate(
+         %Statement{params: params} = statement,
+         adapter,
+         search_path,
+         pagination_opts
+       )
        when is_list(pagination_opts) do
     limit = resolve_window_limit(pagination_opts)
     offset = Keyword.get(pagination_opts, :offset, 0)
@@ -901,8 +905,8 @@ defmodule Lotus do
 
     callback_opts = [limit: limit, offset: offset, count: count_mode, search_path: search_path]
 
-    {paged_sql, paged_params, count_spec} =
-      Adapter.apply_pagination(adapter, sql, params, callback_opts)
+    paged_statement = Adapter.apply_pagination(adapter, statement, callback_opts)
+    count_spec = Map.get(paged_statement.meta, :count_spec)
 
     # Assemble the internal meta with the real adapter from scope. The
     # preserved user-facing shape (Result.meta.window / .total_count /
@@ -920,7 +924,7 @@ defmodule Lotus do
       __window__: %{limit: limit, offset: offset, count: count_mode}
     }
 
-    {paged_sql, paged_params, pagination_meta, cache_bound}
+    {paged_statement, pagination_meta, cache_bound}
   end
 
   defp merge_pagination_meta(%Result{} = res, nil), do: res
@@ -952,9 +956,10 @@ defmodule Lotus do
 
   defp do_count(%{count_spec: %{query: q, params: ps}, adapter: adapter} = meta) do
     runner_opts = build_runner_opts(meta)
+    statement = %Statement{adapter: adapter.module, text: q, params: ps}
 
     adapter
-    |> Runner.run_statement(q, ps, runner_opts)
+    |> Runner.run_statement(statement, runner_opts)
     |> parse_count_result()
   end
 

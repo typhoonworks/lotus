@@ -1,6 +1,7 @@
 defmodule Lotus.Source.AdapterTest do
   use ExUnit.Case, async: true
 
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
 
   defmodule MockAdapter do
@@ -55,10 +56,12 @@ defmodule Lotus.Source.AdapterTest do
       do: {"$#{limit_idx}", "$#{offset_idx}"}
 
     @impl true
-    def apply_filters(_state, sql, params, _filters), do: {sql <> " WHERE 1=1", params}
+    def apply_filters(_state, %Statement{text: sql, params: params} = statement, _filters),
+      do: %{statement | text: sql <> " WHERE 1=1", params: params}
 
     @impl true
-    def apply_sorts(_state, sql, _sorts), do: sql <> " ORDER BY id"
+    def apply_sorts(_state, %Statement{text: sql} = statement, _sorts),
+      do: %{statement | text: sql <> " ORDER BY id"}
 
     @impl true
     def explain_plan(_state, sql, _params, _opts), do: {:ok, "Seq Scan on #{sql}"}
@@ -196,15 +199,15 @@ defmodule Lotus.Source.AdapterTest do
       assert {"$1", "$2"} == Adapter.limit_offset_placeholders(adapter, 1, 2)
     end
 
-    test "apply_filters/4 dispatches with state", %{adapter: adapter} do
-      {sql, params} = Adapter.apply_filters(adapter, "SELECT 1", [], [%{}])
-      assert sql =~ "WHERE 1=1"
-      assert params == []
+    test "apply_filters/3 dispatches with state", %{adapter: adapter} do
+      statement = Adapter.apply_filters(adapter, Statement.new("SELECT 1"), [%{}])
+      assert statement.text =~ "WHERE 1=1"
+      assert statement.params == []
     end
 
     test "apply_sorts/3 dispatches with state", %{adapter: adapter} do
-      sql = Adapter.apply_sorts(adapter, "SELECT 1", [:id])
-      assert sql =~ "ORDER BY id"
+      statement = Adapter.apply_sorts(adapter, Statement.new("SELECT 1"), [:id])
+      assert statement.text =~ "ORDER BY id"
     end
 
     test "builtin_denies/1 dispatches with state", %{adapter: adapter} do

@@ -14,6 +14,7 @@ defmodule Lotus.Storage.Query do
   require Logger
 
   alias Lotus.Config
+  alias Lotus.Query.Statement
   alias Lotus.Source
   alias Lotus.Source.Adapter
   alias Lotus.SQL.OptionalClause
@@ -106,9 +107,10 @@ defmodule Lotus.Storage.Query do
     # Process optional clauses before transformation
     processed_sql = OptionalClause.process(sql, supplied_vars)
 
-    # Rewrite the raw statement text before variables are bound (dialect or
+    # Rewrite the raw statement before variables are bound (dialect or
     # adapter-specific preprocessing — e.g., wildcard rewriting).
-    transformed_sql = Adapter.transform_statement(adapter, processed_sql)
+    transform_input = %Statement{adapter: adapter.module, text: processed_sql}
+    %Statement{text: transformed_sql} = Adapter.transform_statement(adapter, transform_input)
 
     # Extract variables from SQL
     vars_in_order = Lotus.Variables.extract_names(transformed_sql)

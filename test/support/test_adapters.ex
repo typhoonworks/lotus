@@ -3,7 +3,8 @@ defmodule Lotus.Test.NoOpAdapter do
   @behaviour Lotus.Source.Adapter
 
   @impl true
-  def extract_accessed_resources(_state, _query, _params, _opts), do: :skip
+  def extract_accessed_resources(_state, _statement),
+    do: {:unrestricted, "test no-op adapter"}
 
   @impl true
   def execute_query(_state, _sql, _params, _opts), do: {:error, "not implemented"}
@@ -24,9 +25,9 @@ defmodule Lotus.Test.NoOpAdapter do
   @impl true
   def limit_offset_placeholders(_state, li, oi), do: {"$#{li}", "$#{oi}"}
   @impl true
-  def apply_filters(_state, sql, params, _filters), do: {sql, params}
+  def apply_filters(_state, statement, _filters), do: statement
   @impl true
-  def apply_sorts(_state, sql, _sorts), do: sql
+  def apply_sorts(_state, statement, _sorts), do: statement
   @impl true
   def explain_plan(_state, _sql, _params, _opts), do: {:ok, ""}
   @impl true
@@ -79,9 +80,9 @@ defmodule Lotus.Test.StubAdapter do
   @impl true
   def limit_offset_placeholders(_state, li, oi), do: {"$#{li}", "$#{oi}"}
   @impl true
-  def apply_filters(_state, sql, params, _filters), do: {sql, params}
+  def apply_filters(_state, statement, _filters), do: statement
   @impl true
-  def apply_sorts(_state, sql, _sorts), do: sql
+  def apply_sorts(_state, statement, _sorts), do: statement
   @impl true
   def explain_plan(_state, _sql, _params, _opts), do: {:ok, ""}
   @impl true

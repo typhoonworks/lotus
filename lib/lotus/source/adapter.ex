@@ -19,14 +19,24 @@ defmodule Lotus.Source.Adapter do
     * **Query execution** — `execute_query/4`, `transaction/3`
     * **Introspection** — `list_schemas/1`, `list_tables/3`, `get_table_schema/3`,
       `resolve_table_schema/3`
-    * **SQL generation** — `quote_identifier/1`, `param_placeholder/3`,
-      `limit_offset_placeholders/2`, `apply_filters/3`, `apply_sorts/2`,
-      `explain_plan/4`
+    * **SQL generation** — `quote_identifier/2`, `param_placeholder/4`,
+      `limit_offset_placeholders/3`, `explain_plan/4`
+    * **Pipeline** — `transform_statement/2`, `transform_bound_query/3`,
+      `apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
+      `needs_preflight?/2`, `sanitize_query/3`, `extract_accessed_resources/2`
     * **Safety & visibility** — `builtin_denies/1`, `builtin_schema_denies/1`,
       `default_schemas/1`
     * **Lifecycle** — `health_check/1`, `disconnect/1`
-    * **Error handling** — `format_error/1`, `handled_errors/0`
-    * **Source identity** — `source_type/0`, `supports_feature?/1`
+    * **Error handling** — `format_error/2`, `handled_errors/1`
+    * **Source identity** — `source_type/1`, `supports_feature?/2`
+
+  ## Pipeline Statement contract
+
+  All pipeline callbacks operate on a `%Lotus.Query.Statement{}` struct that
+  carries the adapter-native payload (`:text`, opaque term), `:params`, and
+  adapter-specific `:meta`. Adapters return a new statement with the relevant
+  field updated — the pipeline is a series of pure `statement -> statement`
+  transforms.
 
   Introspection callbacks consistently return `{:ok, result} | {:error, reason}`
   tuples so callers can handle failures uniformly.
@@ -42,6 +52,8 @@ defmodule Lotus.Source.Adapter do
       Adapter.list_schemas(adapter)
       Adapter.quote_identifier(adapter, "users")
   """
+
+  alias Lotus.Query.Statement
 
   @type source_type :: :postgres | :mysql | :sqlite | :other | atom()
 
@@ -115,12 +127,13 @@ defmodule Lotus.Source.Adapter do
   @callback limit_offset_placeholders(state :: term(), pos_integer(), pos_integer()) ::
               {String.t(), String.t()}
 
-  @doc "Append WHERE clauses for the given filters, returning `{sql, params}`."
-  @callback apply_filters(state :: term(), sql :: String.t(), params :: list(), filters :: list()) ::
-              {String.t(), list()}
+  @doc "Apply filters to the statement, returning a new statement with the filters baked in."
+  @callback apply_filters(state :: term(), statement :: Statement.t(), filters :: list()) ::
+              Statement.t()
 
-  @doc "Append ORDER BY clauses for the given sorts."
-  @callback apply_sorts(state :: term(), sql :: String.t(), sorts :: list()) :: String.t()
+  @doc "Apply sorts to the statement, returning a new statement with the sort order baked in."
+  @callback apply_sorts(state :: term(), statement :: Statement.t(), sorts :: list()) ::
+              Statement.t()
 
   @doc "Return the execution plan for a SQL query."
   @callback explain_plan(state :: term(), sql :: String.t(), params :: list(), opts :: keyword()) ::
@@ -131,7 +144,7 @@ defmodule Lotus.Source.Adapter do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Validate that a query is safe to execute.
+  Validate that a statement is safe to execute.
 
   Called before execution to enforce single-statement and deny-list rules.
   Return `:ok` to allow or `{:error, reason}` to block.
@@ -140,121 +153,107 @@ defmodule Lotus.Source.Adapter do
 
     * `:read_only` — when `true`, block write operations
 
-  Default (when not implemented): `:ok` (allow all queries).
+  Default (when not implemented): `:ok` (allow all statements).
   """
-  @callback sanitize_query(state :: term(), query :: String.t(), opts :: keyword()) ::
+  @callback sanitize_query(state :: term(), statement :: Statement.t(), opts :: keyword()) ::
               :ok | {:error, String.t()}
 
   @doc """
-  Rewrite the bound query+params tuple after variable substitution.
+  Rewrite the statement after variable substitution.
 
   Pipeline position: fires inside `Lotus.execute_with_options/7` **after**
-  `{{var}}` placeholders have been resolved into `params`, and **before**
-  `apply_filters`, `apply_sorts`, and `apply_pagination` mutate the query.
+  `{{var}}` placeholders have been resolved into `statement.params`, and
+  **before** `apply_filters`, `apply_sorts`, and `apply_pagination` mutate
+  the statement.
 
-  Use when you need access to the substituted parameter values — for example,
-  to inline values into the query text for a transport that can't carry
+  Use when you need access to the bound parameter values — for example, to
+  inline values into `statement.text` for a transport that can't carry
   prepared-statement parameters, or to apply a transformation that depends on
   the bound values.
 
-  The query string is whatever the adapter understands (SQL, JSON DSL, etc.);
-  this callback is language-agnostic. For rewrites that only need the raw
-  statement text (before variables are bound), implement
+  The statement payload is whatever the adapter understands (SQL text, JSON
+  DSL, AST, etc.); this callback is language-agnostic. For rewrites that only
+  need the raw statement text (before variables are bound), implement
   `transform_statement/2` instead.
 
-  Default (when not implemented): `{query, params}` (passthrough).
+  Default (when not implemented): statement unchanged.
   """
   @callback transform_bound_query(
               state :: term(),
-              query :: String.t(),
-              params :: list(),
+              statement :: Statement.t(),
               opts :: keyword()
             ) ::
-              {String.t(), list()}
-
-  # Deprecated in favor of transform_bound_query/4. Runtime warning is emitted
-  # from the dispatch helper when an adapter still implements this callback.
-  # Kept in @optional_callbacks so external adapters compile cleanly during
-  # the deprecation window.
-  @doc false
-  @callback transform_query(
-              state :: term(),
-              query :: String.t(),
-              params :: list(),
-              opts :: keyword()
-            ) ::
-              {String.t(), list()}
+              Statement.t()
 
   @doc """
-  Extract the set of tables/relations a query will access.
+  Extract the set of tables/relations a statement will access.
 
   Used by `Lotus.Preflight` to check visibility rules before execution.
   Return `{:ok, MapSet}` with `{schema, table}` tuples, `{:error, reason}`,
-  or `:skip` to allow the query without checking.
+  or `{:unrestricted, reason}` when visibility cannot be enforced at this
+  layer (the adapter signals Lotus to consult the host-app opt-in gate
+  before allowing the statement through).
 
-  Default (when not implemented): `:skip`.
+  Default (when not implemented): `{:unrestricted, "adapter does not implement extract_accessed_resources/2"}`.
   """
-  @callback extract_accessed_resources(
-              state :: term(),
-              query :: String.t(),
-              params :: list(),
-              opts :: keyword()
-            ) ::
-              {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
+  @callback extract_accessed_resources(state :: term(), statement :: Statement.t()) ::
+              {:ok, MapSet.t({String.t() | nil, String.t()})}
+              | {:error, term()}
+              | {:unrestricted, String.t()}
 
   @typedoc """
-  Optional count-query description returned by `apply_pagination/4` when the
-  caller requested `count: :exact`. Plain data: `:query` is the count SQL (or
-  whatever the adapter's query language calls "count this result set"), and
-  `:params` are its bound parameters. Lotus core runs this through the same
-  adapter the paginated query ran through — the adapter does not need to
-  remember its own identity.
+  Optional count-query description placed in `statement.meta[:count_spec]` by
+  `apply_pagination/3` when the caller requested `count: :exact`. Plain data:
+  `:query` is the count payload (SQL text, JSON DSL, whatever the adapter's
+  language calls "count this result set"), and `:params` are its bound
+  parameters. Lotus core runs this through the same adapter the paginated
+  statement ran through — the adapter does not need to remember its own
+  identity.
   """
-  @type count_spec :: %{query: String.t(), params: list()}
+  @type count_spec :: %{query: term(), params: list()}
 
   @doc """
-  Rewrite a query to return a single page of rows, and optionally return a
-  count query for the full result set.
+  Rewrite a statement to return a single page of rows, and optionally record
+  a count query for the full result set.
 
-  Pipeline position: fires **after** `apply_filters/4` and `apply_sorts/3`,
-  so the input query already has any WHERE clauses and ORDER BY applied.
+  Pipeline position: fires **after** `apply_filters/3` and `apply_sorts/3`,
+  so the input statement already has any filters and sorts applied.
 
   ## Opts
 
     * `:limit` (required) — page size
     * `:offset` — page offset (default: `0`)
     * `:count` — `:none` (default) or `:exact`. When `:exact`, the adapter
-      should return a `count_spec` describing how to count all matching rows.
+      should place a `count_spec` in `statement.meta[:count_spec]`.
     * `:search_path` — forwarded by callers that care about schema isolation
 
   ## Return
 
-  `{paginated_query, paginated_params, count_spec | nil}` — the adapter
-  returns pure data. Lotus core assembles any surrounding metadata
-  (original adapter struct, search_path, etc.) from its own scope.
+  A paginated `%Statement{}`. When counting is requested, the returned
+  statement's `:meta` map holds `:count_spec` (a `count_spec()` value).
+  Lotus core assembles any surrounding metadata (original adapter struct,
+  search_path, etc.) from its own scope.
 
-  Default (when not implemented): `{query, params, nil}` — no pagination.
+  Default (when not implemented): statement unchanged, no pagination.
   """
   @callback apply_pagination(
               state :: term(),
-              query :: String.t(),
-              params :: list(),
+              statement :: Statement.t(),
               pagination_opts :: keyword()
             ) ::
-              {String.t(), list(), count_spec() | nil}
+              Statement.t()
 
-  # Deprecated in favor of apply_pagination/4. Runtime warning is emitted
-  # from the dispatch helper when an adapter still implements this callback.
-  # The dispatch helper also translates the old `window_meta` map return into
-  # the new `count_spec` so Lotus core sees a single shape.
-  @doc false
-  @callback apply_window(
-              state :: term(),
-              query :: String.t(),
-              params :: list(),
-              window_opts :: keyword()
-            ) ::
-              {String.t(), list(), map() | nil}
+  @doc """
+  Whether a statement needs the visibility preflight check before execution.
+
+  Implementors return `false` for read-only introspection statements that do
+  not access visible relations (e.g. SQL `EXPLAIN`, `SHOW`, `PRAGMA`) and
+  `true` for everything else. Lotus core runs preflight when this callback
+  returns `true` and skips it when `false`.
+
+  Default (when not implemented): `true` (always preflight — safer).
+  """
+  @callback needs_preflight?(state :: term(), statement :: Statement.t()) :: boolean()
 
   # ---------------------------------------------------------------------------
   # Callbacks — Safety & Visibility
@@ -329,29 +328,22 @@ defmodule Lotus.Source.Adapter do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Rewrite the raw statement text before variables are extracted and bound.
+  Rewrite the statement before variables are extracted and bound.
 
   Pipeline position: fires inside `Lotus.Storage.Query.to_sql_params/2`
-  **before** `{{var}}` placeholders are extracted from the statement and
-  before any value is bound into `params`. The callback receives only the
-  statement text — no params exist yet.
+  **before** `{{var}}` placeholders are extracted from `statement.text` and
+  before any value is bound. The statement's `:params` is `[]` at this point.
 
   Use for language-specific syntax normalization of the stored template
   (e.g., wildcard rewriting, quoted-variable stripping). Works for any
-  query language: SQL text, JSON DSL, Cypher, etc. — whatever the adapter
-  stores in `%Lotus.Storage.Query{statement: ...}`.
+  query language: SQL text, JSON DSL, Cypher, etc.
 
   For rewrites that need access to the resolved param values (post-binding),
-  implement `transform_bound_query/4` instead.
+  implement `transform_bound_query/3` instead.
 
-  Default (when not implemented): returns the statement unchanged.
+  Default (when not implemented): statement unchanged.
   """
-  @callback transform_statement(state :: term(), statement :: String.t()) :: String.t()
-
-  # Deprecated in favor of transform_statement/2. Runtime warning is emitted
-  # from the dispatch helper when an adapter still implements this callback.
-  @doc false
-  @callback transform_sql(state :: term(), sql :: String.t()) :: String.t()
+  @callback transform_statement(state :: term(), statement :: Statement.t()) :: Statement.t()
 
   @doc "Map a database column type string to a Lotus internal type atom."
   @callback db_type_to_lotus_type(state :: term(), db_type :: String.t()) :: atom()
@@ -367,18 +359,16 @@ defmodule Lotus.Source.Adapter do
 
   @optional_callbacks [
     sanitize_query: 3,
-    transform_bound_query: 4,
-    transform_query: 4,
-    extract_accessed_resources: 4,
-    apply_pagination: 4,
-    apply_window: 4,
+    transform_bound_query: 3,
+    extract_accessed_resources: 2,
+    apply_pagination: 3,
+    needs_preflight?: 2,
     query_language: 1,
     hierarchy_label: 1,
     example_query: 3,
     can_handle?: 1,
     wrap: 2,
-    transform_statement: 2,
-    transform_sql: 2
+    transform_statement: 2
   ]
 
   # Conservative fallback deny rules applied when no adapter can be resolved
@@ -518,105 +508,69 @@ defmodule Lotus.Source.Adapter do
   # Dispatch helpers — Pipeline (optional callbacks with defaults)
   # ---------------------------------------------------------------------------
 
-  @doc "Validate query safety via the adapter. Returns `:ok` if not implemented."
-  @spec sanitize_query(t(), String.t(), keyword()) :: :ok | {:error, String.t()}
-  def sanitize_query(%__MODULE__{module: mod, state: state}, query, opts) do
+  @doc "Validate statement safety via the adapter. Returns `:ok` if not implemented."
+  @spec sanitize_query(t(), Statement.t(), keyword()) :: :ok | {:error, String.t()}
+  def sanitize_query(%__MODULE__{module: mod, state: state}, %Statement{} = statement, opts) do
     if function_exported?(mod, :sanitize_query, 3),
-      do: mod.sanitize_query(state, query, opts),
+      do: mod.sanitize_query(state, statement, opts),
       else: :ok
   end
 
   @doc """
-  Rewrite the bound query+params after variable substitution, before filters
-  and sorts are applied. Returns `{query, params}` unchanged if the adapter
-  doesn't implement either `transform_bound_query/4` or the deprecated
-  `transform_query/4`.
+  Rewrite the statement after variable substitution, before filters and sorts
+  are applied. Returns the statement unchanged if the adapter doesn't
+  implement `transform_bound_query/3`.
   """
-  @spec transform_bound_query(t(), String.t(), list(), keyword()) :: {String.t(), list()}
-  def transform_bound_query(%__MODULE__{module: mod, state: state}, query, params, opts) do
-    cond do
-      function_exported?(mod, :transform_bound_query, 4) ->
-        mod.transform_bound_query(state, query, params, opts)
-
-      function_exported?(mod, :transform_query, 4) ->
-        warn_deprecated_callback_once(mod, :transform_query, :transform_bound_query)
-        mod.transform_query(state, query, params, opts)
-
-      true ->
-        {query, params}
-    end
-  end
-
-  @doc false
-  @deprecated "Use transform_bound_query/4 instead. Will be removed in v1.0"
-  @spec transform_query(t(), String.t(), list(), keyword()) :: {String.t(), list()}
-  def transform_query(adapter, query, params, opts) do
-    transform_bound_query(adapter, query, params, opts)
-  end
-
-  @doc "Extract accessed resources for preflight checks. Returns `:skip` if not implemented."
-  @spec extract_accessed_resources(t(), String.t(), list(), keyword()) ::
-          {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
-  def extract_accessed_resources(%__MODULE__{module: mod, state: state}, query, params, opts) do
-    if function_exported?(mod, :extract_accessed_resources, 4),
-      do: mod.extract_accessed_resources(state, query, params, opts),
-      else: :skip
+  @spec transform_bound_query(t(), Statement.t(), keyword()) :: Statement.t()
+  def transform_bound_query(
+        %__MODULE__{module: mod, state: state},
+        %Statement{} = statement,
+        opts
+      ) do
+    if function_exported?(mod, :transform_bound_query, 3),
+      do: mod.transform_bound_query(state, statement, opts),
+      else: statement
   end
 
   @doc """
-  Apply pagination to the query and optionally produce a count query.
-
-  Prefers the new `apply_pagination/4` callback. Falls back to the deprecated
-  `apply_window/4` — which returned a grab-bag `window_meta` map — and
-  translates its `count_sql`/`count_params` fields into the new `count_spec`
-  shape so Lotus core sees a single contract. Returns `{query, params, nil}`
-  if the adapter implements neither.
+  Extract accessed resources for preflight checks. Returns
+  `{:unrestricted, reason}` if the adapter doesn't implement the callback —
+  callers must consult the host-app `:allow_unrestricted_resources` opt-in
+  before allowing the statement through.
   """
-  @spec apply_pagination(t(), String.t(), list(), keyword()) ::
-          {String.t(), list(), count_spec() | nil}
-  def apply_pagination(%__MODULE__{module: mod, state: state}, query, params, opts) do
-    cond do
-      function_exported?(mod, :apply_pagination, 4) ->
-        mod.apply_pagination(state, query, params, opts)
-
-      function_exported?(mod, :apply_window, 4) ->
-        warn_deprecated_callback_once(mod, :apply_window, :apply_pagination)
-
-        translate_legacy_window_return(
-          mod.apply_window(state, query, params, opts),
-          query,
-          params
-        )
-
-      true ->
-        {query, params, nil}
-    end
+  @spec extract_accessed_resources(t(), Statement.t()) ::
+          {:ok, MapSet.t({String.t() | nil, String.t()})}
+          | {:error, term()}
+          | {:unrestricted, String.t()}
+  def extract_accessed_resources(%__MODULE__{module: mod, state: state}, %Statement{} = statement) do
+    if function_exported?(mod, :extract_accessed_resources, 2),
+      do: mod.extract_accessed_resources(state, statement),
+      else:
+        {:unrestricted, "adapter #{inspect(mod)} does not implement extract_accessed_resources/2"}
   end
 
-  @doc false
-  @deprecated "Use apply_pagination/4 instead. Will be removed in v1.0"
-  @spec apply_window(t(), String.t(), list(), keyword()) ::
-          {String.t(), list(), count_spec() | nil}
-  def apply_window(adapter, query, params, opts),
-    do: apply_pagination(adapter, query, params, opts)
-
-  # Map the legacy window_meta grab-bag to the new count_spec contract.
-  # The legacy shape included :count_sql/:count_params only when total_mode
-  # was :exact; :adapter was a caller-visible leak we intentionally drop.
-  defp translate_legacy_window_return({paged, paged_params, %{total_mode: :exact} = meta}, _q, _p) do
-    count_spec =
-      case meta do
-        %{count_sql: q, count_params: ps} -> %{query: q, params: ps}
-        _ -> nil
-      end
-
-    {paged, paged_params, count_spec}
+  @doc """
+  Apply pagination to the statement. The paginated statement carries any
+  count spec in `statement.meta[:count_spec]`. Returns the statement
+  unchanged if the adapter doesn't implement `apply_pagination/3`.
+  """
+  @spec apply_pagination(t(), Statement.t(), keyword()) :: Statement.t()
+  def apply_pagination(%__MODULE__{module: mod, state: state}, %Statement{} = statement, opts) do
+    if function_exported?(mod, :apply_pagination, 3),
+      do: mod.apply_pagination(state, statement, opts),
+      else: statement
   end
 
-  defp translate_legacy_window_return({paged, paged_params, _meta}, _q, _p),
-    do: {paged, paged_params, nil}
-
-  defp translate_legacy_window_return(nil, query, params), do: {query, params, nil}
+  @doc """
+  Whether the statement needs the visibility preflight check. Returns `true`
+  if the adapter doesn't implement `needs_preflight?/2` — the safer default.
+  """
+  @spec needs_preflight?(t(), Statement.t()) :: boolean()
+  def needs_preflight?(%__MODULE__{module: mod, state: state}, %Statement{} = statement) do
+    if function_exported?(mod, :needs_preflight?, 2),
+      do: mod.needs_preflight?(state, statement),
+      else: true
+  end
 
   # ---------------------------------------------------------------------------
   # Dispatch helpers — SQL generation (pass adapter.state for correct dispatch)
@@ -640,20 +594,20 @@ defmodule Lotus.Source.Adapter do
     mod.limit_offset_placeholders(state, limit_index, offset_index)
   end
 
-  @doc "Apply filters to a query via the adapter. Empty filters short-circuit."
-  @spec apply_filters(t(), String.t(), list(), list()) :: {String.t(), list()}
-  def apply_filters(_adapter, sql, params, []), do: {sql, params}
+  @doc "Apply filters to a statement via the adapter. Empty filters short-circuit."
+  @spec apply_filters(t(), Statement.t(), list()) :: Statement.t()
+  def apply_filters(_adapter, %Statement{} = statement, []), do: statement
 
-  def apply_filters(%__MODULE__{module: mod, state: state}, sql, params, filters) do
-    mod.apply_filters(state, sql, params, filters)
+  def apply_filters(%__MODULE__{module: mod, state: state}, %Statement{} = statement, filters) do
+    mod.apply_filters(state, statement, filters)
   end
 
-  @doc "Apply sorts to a query via the adapter. Empty sorts short-circuit."
-  @spec apply_sorts(t(), String.t(), list()) :: String.t()
-  def apply_sorts(_adapter, sql, []), do: sql
+  @doc "Apply sorts to a statement via the adapter. Empty sorts short-circuit."
+  @spec apply_sorts(t(), Statement.t(), list()) :: Statement.t()
+  def apply_sorts(_adapter, %Statement{} = statement, []), do: statement
 
-  def apply_sorts(%__MODULE__{module: mod, state: state}, sql, sorts) do
-    mod.apply_sorts(state, sql, sorts)
+  def apply_sorts(%__MODULE__{module: mod, state: state}, %Statement{} = statement, sorts) do
+    mod.apply_sorts(state, statement, sorts)
   end
 
   @doc "Format an error via the adapter."
@@ -717,63 +671,19 @@ defmodule Lotus.Source.Adapter do
   end
 
   @doc """
-  Rewrite the raw statement text before variable binding. Returns the
-  statement unchanged if the adapter doesn't implement either
-  `transform_statement/2` or the deprecated `transform_sql/2`.
+  Rewrite the statement before variable binding. Returns the statement
+  unchanged if the adapter doesn't implement `transform_statement/2`.
   """
-  @spec transform_statement(t(), String.t()) :: String.t()
-  def transform_statement(%__MODULE__{module: mod, state: state}, statement) do
-    cond do
-      function_exported?(mod, :transform_statement, 2) ->
-        mod.transform_statement(state, statement)
-
-      function_exported?(mod, :transform_sql, 2) ->
-        warn_deprecated_callback_once(mod, :transform_sql, :transform_statement)
-        mod.transform_sql(state, statement)
-
-      true ->
-        statement
-    end
+  @spec transform_statement(t(), Statement.t()) :: Statement.t()
+  def transform_statement(%__MODULE__{module: mod, state: state}, %Statement{} = statement) do
+    if function_exported?(mod, :transform_statement, 2),
+      do: mod.transform_statement(state, statement),
+      else: statement
   end
-
-  @doc false
-  @deprecated "Use transform_statement/2 instead. Will be removed in v1.0"
-  @spec transform_sql(t(), String.t()) :: String.t()
-  def transform_sql(adapter, sql), do: transform_statement(adapter, sql)
 
   @doc "Map a database type to a Lotus type via the adapter."
   @spec db_type_to_lotus_type(t(), String.t()) :: atom()
   def db_type_to_lotus_type(%__MODULE__{module: mod, state: state}, db_type) do
     mod.db_type_to_lotus_type(state, db_type)
   end
-
-  # Logs once per {adapter-module, deprecated-callback} per BEAM node when an
-  # external adapter still implements a deprecated callback name.
-  defp warn_deprecated_callback_once(mod, deprecated_name, new_name) do
-    key = {__MODULE__, :deprecated_callback_warned, mod, deprecated_name}
-
-    case :persistent_term.get(key, :none) do
-      :warned ->
-        :ok
-
-      :none ->
-        :persistent_term.put(key, :warned)
-
-        require Logger
-
-        Logger.warning(
-          "#{inspect(mod)} implements deprecated Lotus.Source.Adapter callback " <>
-            "#{deprecated_name}/#{callback_arity(deprecated_name)}. " <>
-            "Rename it to #{new_name}/#{callback_arity(new_name)} — the old name " <>
-            "will be removed in v1.0."
-        )
-    end
-  end
-
-  defp callback_arity(:transform_sql), do: 2
-  defp callback_arity(:transform_statement), do: 2
-  defp callback_arity(:transform_query), do: 4
-  defp callback_arity(:transform_bound_query), do: 4
-  defp callback_arity(:apply_window), do: 4
-  defp callback_arity(:apply_pagination), do: 4
 end

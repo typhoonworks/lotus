@@ -19,8 +19,8 @@ defmodule Lotus.Middleware do
 
   | Event | Triggered | Payload keys |
   |-------|-----------|--------------|
-  | `:before_query` | After preflight visibility check, before SQL execution | `:sql`, `:params`, `:source`, `:context` |
-  | `:after_query` | After execution, before result returned to caller | `:result`, `:sql`, `:params`, `:source`, `:context` |
+  | `:before_query` | After preflight visibility check, before execution | `:statement` (`%Lotus.Query.Statement{}`), `:source`, `:context` |
+  | `:after_query` | After execution, before result returned to caller | `:result`, `:statement` (`%Lotus.Query.Statement{}`), `:source`, `:context` |
   | `:after_list_schemas` | After schema discovery and visibility filtering | `:schemas`, `:source`, `:scope`, `:context` |
   | `:after_list_tables` | After table discovery and visibility filtering | `:tables`, `:source`, `:scope`, `:context` |
   | `:after_get_table_schema` | After table schema introspection and column visibility | `:columns`, `:table_name`, `:schema`, `:source`, `:scope`, `:context` |

@@ -43,6 +43,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   require Logger
 
   alias __MODULE__.EditorConfig
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.SortInjector
@@ -178,13 +179,16 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   end
 
   @impl true
-  def apply_filters(sql, params, filters) do
-    FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
+  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+    {new_sql, new_params} =
+      FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
+
+    %{statement | text: new_sql, params: new_params}
   end
 
   @impl true
-  def apply_sorts(sql, sorts) do
-    SortInjector.apply(sql, sorts, &quote_identifier/1)
+  def apply_sorts(%Statement{text: sql} = statement, sorts) do
+    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   @impl true

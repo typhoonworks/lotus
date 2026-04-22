@@ -45,9 +45,9 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     @impl true
     def limit_offset_placeholders(_, l, o), do: {"$#{l}", "$#{o}"}
     @impl true
-    def apply_filters(_, sql, params, _), do: {sql, params}
+    def apply_filters(_, statement, _), do: statement
     @impl true
-    def apply_sorts(_, sql, _), do: sql
+    def apply_sorts(_, statement, _), do: statement
     @impl true
     def explain_plan(_, _, _, _), do: {:ok, "plan"}
     @impl true
@@ -218,11 +218,16 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     @impl true
     def limit_offset_placeholders(_, l, o), do: {"$#{l}", "$#{o}"}
     @impl true
-    def apply_filters(_, sql, params, _), do: {sql, params}
+    def apply_filters(_, statement, _), do: statement
     @impl true
-    def apply_sorts(_, sql, _), do: sql
+    def apply_sorts(_, statement, _), do: statement
     @impl true
     def explain_plan(_, _, _, _), do: {:ok, "echo-plan"}
+
+    # Echo adapter has no real relations — return an empty set so preflight
+    # passes without needing the :allow_unrestricted_resources opt-in.
+    @impl true
+    def extract_accessed_resources(_, _statement), do: {:ok, MapSet.new()}
     @impl true
     def builtin_denies(_), do: []
     @impl true

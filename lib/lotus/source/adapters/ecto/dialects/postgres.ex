@@ -4,6 +4,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   @behaviour Lotus.Source.Adapters.Ecto.Dialect
 
   alias __MODULE__.EditorConfig
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.Identifier
@@ -291,20 +292,23 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def apply_filters(sql, params, filters) do
-    FilterInjector.apply(sql, params, filters, &quote_identifier/1, &placeholder/1)
+  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+    {new_sql, new_params} =
+      FilterInjector.apply(sql, params, filters, &quote_identifier/1, &placeholder/1)
+
+    %{statement | text: new_sql, params: new_params}
   end
 
   defp placeholder(idx), do: "$#{idx}"
 
   @impl true
-  def apply_sorts(sql, sorts) do
-    SortInjector.apply(sql, sorts, &quote_identifier/1)
+  def apply_sorts(%Statement{text: sql} = statement, sorts) do
+    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   @impl true
-  def extract_accessed_resources(repo, sql, params, opts) do
-    search_path = Keyword.get(opts, :search_path)
+  def extract_accessed_resources(repo, %Statement{text: sql, params: params, meta: meta}) do
+    search_path = Map.get(meta, :search_path)
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
 
     result =
@@ -389,13 +393,16 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   defp format_postgres_type(type, _, _, _), do: type
 
   @impl true
-  def transform_statement(sql) do
+  def transform_statement(%Statement{text: sql} = statement) do
     alias Lotus.SQL.Transformer
 
-    sql
-    |> Transformer.transform_pg_intervals()
-    |> Transformer.transform_wildcards(:pipe)
-    |> Transformer.strip_quoted_variables()
+    new_sql =
+      sql
+      |> Transformer.transform_pg_intervals()
+      |> Transformer.transform_wildcards(:pipe)
+      |> Transformer.strip_quoted_variables()
+
+    %{statement | text: new_sql}
   end
 
   @impl true

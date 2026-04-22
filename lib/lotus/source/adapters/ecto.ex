@@ -34,6 +34,7 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @behaviour Lotus.Source.Adapter
 
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.Source.Adapters.Ecto.Dialects
   alias Lotus.SQL.Sanitizer
@@ -199,11 +200,11 @@ defmodule Lotus.Source.Adapters.Ecto do
         do: @dialect.limit_offset_placeholders(limit_index, offset_index)
 
       @impl true
-      def apply_filters(_repo, sql, params, filters),
-        do: @dialect.apply_filters(sql, params, filters)
+      def apply_filters(_repo, statement, filters),
+        do: @dialect.apply_filters(statement, filters)
 
       @impl true
-      def apply_sorts(_repo, sql, sorts), do: @dialect.apply_sorts(sql, sorts)
+      def apply_sorts(_repo, statement, sorts), do: @dialect.apply_sorts(statement, sorts)
 
       @impl true
       def explain_plan(repo, sql, params, opts),
@@ -243,20 +244,25 @@ defmodule Lotus.Source.Adapters.Ecto do
   defp pipeline_callbacks do
     quote do
       @impl true
-      def sanitize_query(_repo, query, opts), do: EctoAdapter.do_sanitize_query(query, opts)
+      def sanitize_query(_repo, statement, opts),
+        do: EctoAdapter.do_sanitize_query(statement, opts)
 
       @impl true
-      def transform_bound_query(_repo, query, params, _opts), do: {query, params}
+      def transform_bound_query(_repo, statement, _opts), do: statement
 
       @impl true
-      def extract_accessed_resources(repo, query, params, opts) do
-        EctoAdapter.do_extract_accessed_resources(__MODULE__, @dialect, repo, query, params, opts)
+      def extract_accessed_resources(repo, statement) do
+        EctoAdapter.do_extract_accessed_resources(@dialect, repo, statement)
       end
 
       @impl true
-      def apply_pagination(repo, query, params, pagination_opts) do
-        EctoAdapter.do_apply_pagination(@dialect, repo, query, params, pagination_opts)
+      def apply_pagination(repo, statement, pagination_opts) do
+        EctoAdapter.do_apply_pagination(@dialect, repo, statement, pagination_opts)
       end
+
+      @impl true
+      def needs_preflight?(_repo, statement),
+        do: EctoAdapter.do_needs_preflight?(@dialect, statement)
     end
   end
 
@@ -309,7 +315,9 @@ defmodule Lotus.Source.Adapters.Ecto do
     quote do
       @impl true
       def transform_statement(_repo, statement) do
-        EctoAdapter.dispatch_transform_statement(@dialect, statement)
+        if function_exported?(@dialect, :transform_statement, 1),
+          do: @dialect.transform_statement(statement),
+          else: statement
       end
 
       @impl true
@@ -485,13 +493,13 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @impl true
-  def apply_filters(_repo, sql, params, filters) do
-    @default_dialect.apply_filters(sql, params, filters)
+  def apply_filters(_repo, statement, filters) do
+    @default_dialect.apply_filters(statement, filters)
   end
 
   @impl true
-  def apply_sorts(_repo, sql, sorts) do
-    @default_dialect.apply_sorts(sql, sorts)
+  def apply_sorts(_repo, statement, sorts) do
+    @default_dialect.apply_sorts(statement, sorts)
   end
 
   @impl true
@@ -554,20 +562,24 @@ defmodule Lotus.Source.Adapters.Ecto do
   @deny ~r/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|VACUUM|ANALYZE|CALL|LOCK)\b/i
 
   @impl true
-  def sanitize_query(_repo, query, opts), do: do_sanitize_query(query, opts)
+  def sanitize_query(_repo, statement, opts), do: do_sanitize_query(statement, opts)
 
   @impl true
-  def transform_bound_query(_repo, query, params, _opts), do: {query, params}
+  def transform_bound_query(_repo, statement, _opts), do: statement
 
   @impl true
-  def extract_accessed_resources(repo, query, params, opts) do
-    do_extract_accessed_resources(__MODULE__, @default_dialect, repo, query, params, opts)
+  def extract_accessed_resources(repo, statement) do
+    do_extract_accessed_resources(@default_dialect, repo, statement)
   end
 
   @impl true
-  def apply_pagination(repo, query, params, pagination_opts) do
-    do_apply_pagination(@default_dialect, repo, query, params, pagination_opts)
+  def apply_pagination(repo, statement, pagination_opts) do
+    do_apply_pagination(@default_dialect, repo, statement, pagination_opts)
   end
+
+  @impl true
+  def needs_preflight?(_repo, statement),
+    do: do_needs_preflight?(@default_dialect, statement)
 
   # ---------------------------------------------------------------------------
   # Callbacks — Source Identity
@@ -617,45 +629,6 @@ defmodule Lotus.Source.Adapters.Ecto do
   # Shared helpers (called by __using__ macro and this module's own callbacks)
   # ---------------------------------------------------------------------------
 
-  # Resolves a dialect's statement-rewrite callback. Prefers the new name
-  # (`transform_statement/1`) and falls back to the deprecated `transform_sql/1`
-  # with a one-time runtime warning so existing dialects keep working during
-  # the deprecation window. Returns the input unchanged if neither exists.
-  @doc false
-  def dispatch_transform_statement(dialect, statement) do
-    cond do
-      function_exported?(dialect, :transform_statement, 1) ->
-        dialect.transform_statement(statement)
-
-      function_exported?(dialect, :transform_sql, 1) ->
-        warn_deprecated_dialect_callback_once(dialect, :transform_sql, :transform_statement)
-        dialect.transform_sql(statement)
-
-      true ->
-        statement
-    end
-  end
-
-  defp warn_deprecated_dialect_callback_once(dialect, deprecated_name, new_name) do
-    key = {__MODULE__, :deprecated_dialect_warned, dialect, deprecated_name}
-
-    case :persistent_term.get(key, :none) do
-      :warned ->
-        :ok
-
-      :none ->
-        :persistent_term.put(key, :warned)
-
-        require Logger
-
-        Logger.warning(
-          "#{inspect(dialect)} implements deprecated " <>
-            "Lotus.Source.Adapters.Ecto.Dialect callback #{deprecated_name}/1. " <>
-            "Rename it to #{new_name}/1 — the old name will be removed in v1.0."
-        )
-    end
-  end
-
   @doc false
   def do_execute_query(dialect, repo, sql, params, opts) do
     timeout = Keyword.get(opts, :timeout, 15_000)
@@ -702,24 +675,31 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @doc false
-  def do_sanitize_query(query, opts) do
+  def do_sanitize_query(%Statement{text: sql}, opts) do
     read_only = Keyword.get(opts, :read_only, true)
 
-    with :ok <- assert_single_statement(query) do
-      assert_not_denied(query, read_only)
+    with :ok <- assert_single_statement(sql) do
+      assert_not_denied(sql, read_only)
     end
   end
 
   @doc false
-  def do_extract_accessed_resources(_adapter_mod, dialect, repo, query, params, opts) do
-    if function_exported?(dialect, :extract_accessed_resources, 4),
-      do: dialect.extract_accessed_resources(repo, query, params, opts),
-      else: :skip
+  def do_extract_accessed_resources(dialect, repo, %Statement{} = statement) do
+    if function_exported?(dialect, :extract_accessed_resources, 2),
+      do: dialect.extract_accessed_resources(repo, statement),
+      else:
+        {:unrestricted,
+         "dialect #{inspect(dialect)} does not implement extract_accessed_resources/2"}
   end
 
   @doc false
-  def do_apply_pagination(dialect, _repo, query, params, pagination_opts) do
-    base_sql = Sanitizer.strip_trailing_semicolon(query)
+  def do_apply_pagination(
+        dialect,
+        _repo,
+        %Statement{text: sql, params: params, meta: meta} = statement,
+        pagination_opts
+      ) do
+    base_sql = Sanitizer.strip_trailing_semicolon(sql)
     limit = Keyword.fetch!(pagination_opts, :limit)
     offset = Keyword.get(pagination_opts, :offset, 0)
     count_mode = Keyword.get(pagination_opts, :count, :none)
@@ -747,7 +727,44 @@ defmodule Lotus.Source.Adapters.Ecto do
           nil
       end
 
-    {paged_sql, paged_params, count_spec}
+    new_meta =
+      case count_spec do
+        nil -> Map.delete(meta, :count_spec)
+        spec -> Map.put(meta, :count_spec, spec)
+      end
+
+    %{statement | text: paged_sql, params: paged_params, meta: new_meta}
+  end
+
+  # SQL-specific preflight heuristic. Skips introspection statements
+  # (EXPLAIN, SHOW, PRAGMA) that do not touch visible relations. Dialects
+  # can override by implementing `needs_preflight?/1`.
+  @doc false
+  def do_needs_preflight?(dialect, %Statement{text: sql} = statement) do
+    cond do
+      function_exported?(dialect, :needs_preflight?, 1) ->
+        dialect.needs_preflight?(statement)
+
+      is_binary(sql) ->
+        s =
+          sql
+          |> String.replace(~r/--.*$/m, "")
+          |> String.replace(~r/\/\*[\s\S]*?\*\//, "")
+          |> String.trim_leading()
+          |> upcase_head(12)
+
+        not (String.starts_with?(s, "EXPLAIN") or
+               String.starts_with?(s, "PRAGMA") or
+               String.starts_with?(s, "SHOW"))
+
+      true ->
+        true
+    end
+  end
+
+  defp upcase_head(s, n) do
+    {head, tail} = String.split_at(s, n)
+    String.upcase(head) <> tail
   end
 
   # ---------------------------------------------------------------------------

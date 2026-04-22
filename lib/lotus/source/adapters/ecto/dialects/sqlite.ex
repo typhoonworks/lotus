@@ -6,6 +6,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   require Logger
 
   alias __MODULE__.EditorConfig
+  alias Lotus.Query.Statement
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.SortInjector
@@ -227,19 +228,23 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   end
 
   @impl true
-  def apply_filters(sql, params, filters) do
-    FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
+  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+    {new_sql, new_params} =
+      FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
+
+    %{statement | text: new_sql, params: new_params}
   end
 
   @impl true
-  def apply_sorts(sql, sorts) do
-    SortInjector.apply(sql, sorts, &quote_identifier/1)
+  def apply_sorts(%Statement{text: sql} = statement, sorts) do
+    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
 
   @impl true
-  def extract_accessed_resources(repo, sql, params, opts) do
+  def extract_accessed_resources(repo, %Statement{text: sql, params: params, meta: meta}) do
+    opts = Map.to_list(meta)
     alias_map = EctoHelpers.parse_alias_map(sql)
     explain = "EXPLAIN QUERY PLAN " <> sql
 
@@ -306,12 +311,15 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   end
 
   @impl true
-  def transform_statement(sql) do
+  def transform_statement(%Statement{text: sql} = statement) do
     alias Lotus.SQL.Transformer
 
-    sql
-    |> Transformer.transform_wildcards(:pipe)
-    |> Transformer.strip_quoted_variables()
+    new_sql =
+      sql
+      |> Transformer.transform_wildcards(:pipe)
+      |> Transformer.strip_quoted_variables()
+
+    %{statement | text: new_sql}
   end
 
   # SQLite accepts any declared type string; prefix-match on the type name so
