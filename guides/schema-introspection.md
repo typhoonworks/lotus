@@ -459,7 +459,7 @@ end
 ```elixir
 def safe_query_table(repo_name, table_name, schema_name \\ "public") do
   with {:ok, _schema} <- Lotus.get_table_schema(repo_name, table_name, schema: schema_name),
-       {:ok, result} <- Lotus.run_sql("SELECT * FROM #{schema_name}.#{table_name} LIMIT 10", 
+       {:ok, result} <- Lotus.run_statement("SELECT * FROM #{schema_name}.#{table_name} LIMIT 10", 
                           [], repo: repo_name) do
     {:ok, result}
   else

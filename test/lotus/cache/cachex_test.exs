@@ -20,6 +20,19 @@ defmodule Lotus.Cache.CachexTest do
       }
     end)
 
+    # The app-level Lotus.Cache.ETS adapter owns the :lotus_cache /
+    # :lotus_cache_tags ETS tables at all times. Cachex's Eternal manager
+    # wants to create those same named tables — so we terminate the ETS
+    # adapter for the duration of this module, then restart it on exit so
+    # sibling modules that expect the ETS adapter still work.
+    :ok = Supervisor.terminate_child(Lotus.Supervisor, Lotus.Cache.ETS)
+
+    on_exit(fn ->
+      # Cachex's supervised children are stopped by ExUnit before this
+      # runs, so the tables are free for ETS to re-claim.
+      {:ok, _pid} = Supervisor.restart_child(Lotus.Supervisor, Lotus.Cache.ETS)
+    end)
+
     for spec <- Cache.Cachex.spec_config() do
       start_link_supervised!(spec)
     end

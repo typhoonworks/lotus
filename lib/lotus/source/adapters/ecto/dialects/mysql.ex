@@ -1,26 +1,41 @@
-defmodule Lotus.Sources.MySQL do
+defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   @moduledoc false
 
-  @behaviour Lotus.Source
+  @behaviour Lotus.Source.Adapters.Ecto.Dialect
   require Logger
 
-  alias Lotus.Sources.Default
+  alias __MODULE__.EditorConfig
+  alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.SortInjector
 
-  @myxql_error Module.concat([:MyXQL, :Error])
+  @default_statement_timeout_ms 5_000
+
+  @impl true
+  def source_type, do: :mysql
+
+  @impl true
+  def ecto_adapter, do: Ecto.Adapters.MyXQL
 
   @impl true
   def execute_in_transaction(repo, fun, opts) do
-    session_state = capture_session_state(repo)
     config = parse_transaction_config(opts)
 
-    try do
-      setup_transaction_session(repo, config)
-      repo.transaction(fun, timeout: config.timeout)
-    after
-      restore_session_state(repo, session_state)
-    end
+    # checkout/1 pins one pool connection for capture + setup + tx + restore;
+    # without it, each query outside repo.transaction can land on a different
+    # member and leave SET SESSION state stranded. Setup must run before
+    # repo.transaction because MySQL rejects SET SESSION TRANSACTION inside
+    # an active tx ("Transaction characteristics can't be changed…").
+    repo.checkout(fn ->
+      session_state = capture_session_state(repo)
+
+      try do
+        setup_transaction_session(repo, config)
+        repo.transaction(fun, timeout: config.timeout)
+      after
+        restore_session_state(repo, session_state)
+      end
+    end)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -51,9 +66,9 @@ defmodule Lotus.Sources.MySQL do
     read_only? = Keyword.get(opts, :read_only, true)
 
     stmt_ms =
-      case Keyword.get(opts, :statement_timeout_ms, 5_000) do
+      case Keyword.get(opts, :statement_timeout_ms, @default_statement_timeout_ms) do
         v when is_integer(v) and v >= 0 -> v
-        _ -> 5_000
+        _ -> @default_statement_timeout_ms
       end
 
     timeout = Keyword.get(opts, :timeout, 15_000)
@@ -67,9 +82,15 @@ defmodule Lotus.Sources.MySQL do
   end
 
   defp restore_session_state(repo, session_state) do
+    # Cleanup runs in an `after` block — if a restore query itself fails
+    # (connection already dropped, etc.) we swallow the secondary error so
+    # the caller still sees the original exception. Matches SQLite's
+    # restore_pragma_state semantics.
     restore_read_only_state(repo, session_state.read_only)
     if session_state.isolation, do: restore_iso(repo, session_state.isolation)
     restore_max_execution_time(repo, session_state.max_execution_time)
+  rescue
+    _ -> :ok
   end
 
   defp restore_read_only_state(repo, prev_ro) do
@@ -86,13 +107,11 @@ defmodule Lotus.Sources.MySQL do
   end
 
   defp read_iso_var(repo) do
-    # Try 8.0+ name first
     case repo.query("SELECT @@session.transaction_isolation") do
       {:ok, %{rows: [[iso]]}} ->
         {:ok, iso}
 
       {:error, _} ->
-        # Fallback for older versions
         case repo.query("SELECT @@session.tx_isolation") do
           {:ok, %{rows: [[iso]]}} -> {:ok, iso}
           {:error, err} -> {:error, err}
@@ -120,19 +139,18 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
-  def set_statement_timeout(repo, timeout_ms) do
+  def set_statement_timeout(repo, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
     repo.query!("SET SESSION max_execution_time = #{timeout_ms}")
     :ok
   end
 
   @impl true
-  # No-op: MySQL does not have search_path concept
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
-  def format_error(%{__struct__: mod} = e) when mod == @myxql_error do
+  def format_error(%{__struct__: mod} = e) when mod == MyXQL.Error do
     case e do
-      %{mysql: %{code: code, message: message}} when is_binary(message) ->
+      %{mysql: %{code: code, message: message}} when is_integer(code) and is_binary(message) ->
         "MySQL Error (#{code}): #{message}"
 
       %{message: message} when is_binary(message) ->
@@ -146,7 +164,6 @@ defmodule Lotus.Sources.MySQL do
   def format_error(other), do: Default.format_error(other)
 
   @impl true
-  # MySQL auto-converts strings to CHAR/BINARY
   def param_placeholder(_idx, _var, :uuid), do: "?"
   def param_placeholder(_idx, _var, :date), do: "CAST(? AS DATE)"
   def param_placeholder(_idx, _var, :datetime), do: "CAST(? AS DATETIME)"
@@ -163,7 +180,6 @@ defmodule Lotus.Sources.MySQL do
 
   @impl true
   def limit_offset_placeholders(_limit_idx, _offset_idx) do
-    # MySQL doesn't support CAST in LIMIT/OFFSET clauses
     {"?", "?"}
   end
 
@@ -197,7 +213,6 @@ defmodule Lotus.Sources.MySQL do
       {nil, "lotus_dashboard_card_filter_mappings"}
     ]
 
-    # Also deny these tables in the current database
     if database do
       base_denies ++
         [
@@ -279,13 +294,14 @@ defmodule Lotus.Sources.MySQL do
 
   @impl true
   def get_table_schema(repo, schema, table) do
+    # COLUMN_TYPE carries the full declaration (e.g. "tinyint(1)", "binary(16)",
+    # "varchar(255)", "decimal(10,2)") that db_type_to_lotus_type/1 pattern-matches
+    # on. DATA_TYPE strips the precision/length, which would silently make the
+    # "tinyint(1) -> :boolean" and "binary(16) -> :uuid" mappings unreachable.
     sql = """
     SELECT
       c.column_name,
-      c.data_type,
-      c.character_maximum_length,
-      c.numeric_precision,
-      c.numeric_scale,
+      c.column_type,
       c.is_nullable,
       c.column_default,
       IF(c.column_key = 'PRI', 1, 0) as is_primary_key
@@ -296,10 +312,10 @@ defmodule Lotus.Sources.MySQL do
 
     %{rows: rows} = repo.query!(sql, [schema, table])
 
-    Enum.map(rows, fn [name, type, char_len, num_prec, num_scale, nullable, default, is_pk] ->
+    Enum.map(rows, fn [name, type, nullable, default, is_pk] ->
       %{
         name: name,
-        type: format_mysql_type(type, char_len, num_prec, num_scale),
+        type: type,
         nullable: nullable == "YES",
         default: default,
         primary_key: is_pk == 1
@@ -321,6 +337,8 @@ defmodule Lotus.Sources.MySQL do
   end
 
   @impl true
+  def resolve_table_schema(_repo, _table, []), do: nil
+
   def resolve_table_schema(repo, table, schemas) do
     placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
 
@@ -332,7 +350,6 @@ defmodule Lotus.Sources.MySQL do
     LIMIT 1
     """
 
-    # Need to pass schemas twice - once for IN clause, once for FIELD ordering
     params = [table] ++ schemas ++ schemas
 
     case repo.query(sql, params) do
@@ -357,18 +374,157 @@ defmodule Lotus.Sources.MySQL do
     SortInjector.apply(sql, sorts, &quote_identifier/1)
   end
 
-  defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
-    do: "varchar(#{char_len})"
+  alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
 
-  defp format_mysql_type("char", char_len, _, _) when not is_nil(char_len),
-    do: "char(#{char_len})"
+  @impl true
+  def extract_accessed_resources(repo, sql, params, opts) do
+    alias_map = EctoHelpers.parse_alias_map(sql)
+    explain = "EXPLAIN FORMAT=JSON " <> sql
 
-  defp format_mysql_type("decimal", _, num_prec, num_scale)
-       when not is_nil(num_prec) and not is_nil(num_scale),
-       do: "decimal(#{num_prec},#{num_scale})"
+    # Route through execute_in_transaction so EXPLAIN runs under
+    # SET SESSION TRANSACTION READ ONLY + SET SESSION max_execution_time.
+    # MySQL's SESSION setting only takes effect at the next START TRANSACTION,
+    # so the SETs must happen before repo.transaction — which is what
+    # execute_in_transaction already guarantees.
+    result =
+      execute_in_transaction(
+        repo,
+        fn ->
+          case repo.query(explain, params) do
+            {:ok, %{rows: [[json]]}} ->
+              explain_rels =
+                json
+                |> Lotus.JSON.decode!()
+                |> collect_mysql_relations(MapSet.new())
+                |> MapSet.to_list()
+                |> Enum.map(fn {schema, table_name} ->
+                  {schema, EctoHelpers.resolve_alias(table_name, alias_map)}
+                end)
+                |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
 
-  defp format_mysql_type("decimal", _, num_prec, _) when not is_nil(num_prec),
-    do: "decimal(#{num_prec})"
+              sql_rels = extract_tables_from_sql(sql)
+              choose_relations(explain_rels, sql_rels, sql) |> MapSet.new()
 
-  defp format_mysql_type(type, _, _, _), do: type
+            {:error, err} ->
+              repo.rollback(format_error(err))
+          end
+        end,
+        opts
+      )
+
+    case result do
+      {:ok, relations} -> {:ok, relations}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp collect_mysql_relations(%{"query_block" => query_block}, acc) do
+    collect_query_block(query_block, acc)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_list(data) do
+    Enum.reduce(data, acc, &collect_mysql_relations/2)
+  end
+
+  defp collect_mysql_relations(data, acc) when is_map(data) do
+    case Map.get(data, "query_block") do
+      nil -> acc
+      query_block -> collect_query_block(query_block, acc)
+    end
+  end
+
+  defp collect_mysql_relations(_, acc), do: acc
+
+  defp collect_query_block(%{"table" => table_info}, acc) when is_map(table_info) do
+    case Map.get(table_info, "table_name") do
+      table_name when is_binary(table_name) ->
+        schema = Map.get(table_info, "schema")
+        MapSet.put(acc, {schema, table_name})
+
+      _ ->
+        acc
+    end
+  end
+
+  defp collect_query_block(%{"nested_loop" => nested_loop}, acc) when is_list(nested_loop) do
+    Enum.reduce(nested_loop, acc, fn item, acc_inner ->
+      collect_query_block(item, acc_inner)
+    end)
+  end
+
+  defp collect_query_block(data, acc) when is_map(data) do
+    Enum.reduce(data, acc, fn {_key, value}, acc_inner ->
+      collect_mysql_relations(value, acc_inner)
+    end)
+  end
+
+  defp collect_query_block(_, acc), do: acc
+
+  defp extract_tables_from_sql(sql) do
+    table_regex =
+      ~r/(?:FROM|JOIN)\s+(?:(`?)([a-zA-Z_][a-zA-Z0-9_]*)\1\.)?(`?)([a-zA-Z_][a-zA-Z0-9_]*)\3(?:\s+(?:AS\s+)?[a-zA-Z_][a-zA-Z0-9_]*)?/i
+
+    Regex.scan(table_regex, sql)
+    |> Enum.map(fn
+      [_, _, schema, _, table] when schema != "" -> {schema, table}
+      [_, "", "", _, table] -> {nil, table}
+      # Regex future-proofing: if the capture groups change (e.g. someone adds
+      # an optional alias capture), unmatched shapes fall through to nil and
+      # are filtered out rather than crashing preflight.
+      _ -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp choose_relations(explain_rels, sql_rels, sql) do
+    if should_use_sql_relations?(explain_rels, sql),
+      do: sql_rels,
+      else: explain_rels
+  end
+
+  defp should_use_sql_relations?(explain_rels, sql) do
+    Enum.empty?(explain_rels) or
+      Enum.all?(explain_rels, fn {_, name} -> String.length(name) <= 4 end) or
+      String.contains?(sql, "information_schema") or
+      String.contains?(sql, "performance_schema") or
+      String.contains?(sql, "mysql.") or
+      String.contains?(sql, "sys.")
+  end
+
+  @impl true
+  def transform_statement(sql) do
+    alias Lotus.SQL.Transformer
+
+    sql
+    |> Transformer.transform_wildcards(:concat_fn)
+    |> Transformer.strip_quoted_variables()
+  end
+
+  @impl true
+  def db_type_to_lotus_type(db_type) do
+    mysql_scalar_type(String.downcase(db_type))
+  end
+
+  defp mysql_scalar_type("char(36)"), do: :uuid
+  defp mysql_scalar_type("char(32)"), do: :uuid
+  defp mysql_scalar_type("binary(16)"), do: :uuid
+  defp mysql_scalar_type("tinyint(1)"), do: :boolean
+  defp mysql_scalar_type("date"), do: :date
+  defp mysql_scalar_type("json"), do: :json
+
+  defp mysql_scalar_type("int" <> _), do: :integer
+  defp mysql_scalar_type("bigint" <> _), do: :integer
+  defp mysql_scalar_type("smallint" <> _), do: :integer
+  defp mysql_scalar_type("tinyint" <> _), do: :integer
+  defp mysql_scalar_type("decimal" <> _), do: :decimal
+  defp mysql_scalar_type("numeric" <> _), do: :decimal
+  defp mysql_scalar_type("float" <> _), do: :float
+  defp mysql_scalar_type("double" <> _), do: :float
+  defp mysql_scalar_type("datetime" <> _), do: :datetime
+  defp mysql_scalar_type("timestamp" <> _), do: :datetime
+  defp mysql_scalar_type(_), do: :text
+
+  @impl true
+  def editor_config, do: EditorConfig.config()
 end

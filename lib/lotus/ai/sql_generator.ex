@@ -62,7 +62,7 @@ defmodule Lotus.AI.SQLGenerator do
     api_key = Keyword.fetch!(opts, :api_key)
     temperature = Keyword.get(opts, :temperature, 0.1)
 
-    database_type = Lotus.Sources.source_type(data_source)
+    database_type = Lotus.Source.source_type(data_source)
 
     {:ok, all_schemas} = Lotus.Schema.list_schemas(data_source)
     {:ok, tables} = Lotus.Schema.list_tables(data_source, schemas: all_schemas)

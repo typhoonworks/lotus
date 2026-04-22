@@ -13,7 +13,8 @@ defmodule Lotus.ConfigTest do
     :data_sources,
     :data_repos,
     :default_source,
-    :default_repo
+    :default_repo,
+    :source_adapters
   ]
 
   setup do
@@ -142,10 +143,29 @@ defmodule Lotus.ConfigTest do
     end
   end
 
+  describe "data_sources config validation" do
+    test "accepts map data source values alongside module atoms" do
+      Application.put_env(:lotus, :data_sources, %{
+        "postgres" => Lotus.Test.Repo,
+        "search" => %{adapter: :elasticsearch, url: "http://localhost:9200"}
+      })
+
+      Config.reload!()
+
+      sources = Config.data_sources()
+      assert sources["postgres"] == Lotus.Test.Repo
+      assert sources["search"] == %{adapter: :elasticsearch, url: "http://localhost:9200"}
+    end
+  end
+
   describe "deprecated config key backward compatibility" do
     test "data_repos config key still works and resolves correctly" do
       original_sources = Application.get_env(:lotus, :data_sources)
+      original_default = Application.get_env(:lotus, :default_source)
       Application.delete_env(:lotus, :data_sources)
+      # Cross-validation requires :default_source to be a key in :data_sources,
+      # so align both when we swap the source map for this test.
+      Application.put_env(:lotus, :default_source, "test")
       Application.put_env(:lotus, :data_repos, %{"test" => Lotus.Test.Repo})
 
       log =
@@ -160,6 +180,13 @@ defmodule Lotus.ConfigTest do
 
       Application.delete_env(:lotus, :data_repos)
       Application.put_env(:lotus, :data_sources, original_sources)
+
+      if original_default do
+        Application.put_env(:lotus, :default_source, original_default)
+      else
+        Application.delete_env(:lotus, :default_source)
+      end
+
       Config.reload!()
     end
 
@@ -208,6 +235,40 @@ defmodule Lotus.ConfigTest do
 
       Application.delete_env(:lotus, :default_repo)
       Config.reload!()
+    end
+  end
+
+  describe "source_adapters config validation" do
+    test "accepts modules that implement Lotus.Source.Adapter behaviour" do
+      # Use a built-in adapter as the "known valid" module so the test exercises
+      # the real behaviour contract without needing a stub.
+      Application.put_env(:lotus, :source_adapters, [Lotus.Source.Adapters.Postgres])
+      assert Config.reload!()
+      assert Lotus.Source.Adapters.Postgres in Config.source_adapters()
+    end
+
+    test "rejects unloaded modules with a descriptive error" do
+      Application.put_env(:lotus, :source_adapters, [:NotAModule])
+
+      assert_raise ArgumentError,
+                   ~r/expected a loaded module implementing Lotus.Source.Adapter/,
+                   fn -> Config.reload!() end
+    end
+
+    test "rejects loaded modules that do not implement the behaviour" do
+      Application.put_env(:lotus, :source_adapters, [String])
+
+      assert_raise ArgumentError,
+                   ~r/String does not implement the Lotus.Source.Adapter behaviour/,
+                   fn -> Config.reload!() end
+    end
+
+    test "rejects non-atom values" do
+      Application.put_env(:lotus, :source_adapters, ["not_an_atom"])
+
+      assert_raise ArgumentError, ~r/expected a module atom/, fn ->
+        Config.reload!()
+      end
     end
   end
 

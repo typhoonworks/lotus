@@ -63,8 +63,8 @@ end
 # config/config.exs
 config :lotus,
   ecto_repo: MyApp.Repo,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo
   }
 ```
@@ -124,7 +124,7 @@ For the complete setup guide (caching, multiple databases, visibility controls),
 - **AI query explanation** — get plain-language explanations of what a query does, including selected fragments; understands Lotus `{{variable}}` and `[[optional]]` syntax
 - **AI query optimization** — get actionable optimization suggestions (indexes, rewrites, schema changes) powered by EXPLAIN plan analysis
 - **Read-only by default** — all queries run in read-only transactions with automatic timeout controls and session state management (opt out per-query with `read_only: false`)
-- **Pluggable adapters** — data sources are wrapped in a uniform `Lotus.Source.Adapter` behaviour, decoupling the execution pipeline from Ecto. The default `Ecto` adapter works out of the box with your existing `data_repos` config. Custom adapters can target non-Ecto sources, and custom resolvers can load sources dynamically from a database or external service. See the [source adapters guide](guides/source-adapters.md).
+- **Pluggable adapters** — data sources are wrapped in a uniform `Lotus.Source.Adapter` behaviour, decoupling the execution pipeline from Ecto. The default `Ecto` adapter works out of the box with your existing `data_sources` config. Custom adapters can target non-Ecto sources, and custom resolvers can load sources dynamically from a database or external service. See the [source adapters guide](guides/source-adapters.md).
 
 ## Production Ready
 
@@ -145,22 +145,18 @@ Lotus works great as a standalone library without the web UI. Use it to run quer
 ```elixir
 config :lotus,
   ecto_repo: MyApp.Repo,
-  default_repo: "main",
-  data_repos: %{
+  default_source: "main",
+  data_sources: %{
     "main" => MyApp.Repo,
     "analytics" => MyApp.AnalyticsRepo
   }
 
 # Optional: Configure caching
 config :lotus,
-  cache: [
+  cache: %{
     adapter: Lotus.Cache.ETS,
-    profiles: %{
-      results: [ttl: 60_000],
-      schema: [ttl: 3_600_000],
-      options: [ttl: 300_000]
-    }
-  ]
+    namespace: "myapp"
+  }
 ```
 
 ### Creating and Running Queries
@@ -176,10 +172,10 @@ config :lotus,
 {:ok, results} = Lotus.run_query(query)
 
 # Execute SQL directly (read-only)
-{:ok, results} = Lotus.run_sql("SELECT * FROM products WHERE price > $1", [100])
+{:ok, results} = Lotus.run_statement("SELECT * FROM products WHERE price > $1", [100])
 
-# Execute against a specific data repository
-{:ok, results} = Lotus.run_sql("SELECT COUNT(*) FROM events", [], repo: "analytics")
+# Execute against a specific data source
+{:ok, results} = Lotus.run_statement("SELECT COUNT(*) FROM events", [], repo: "analytics")
 ```
 
 ### AI Query Generation

@@ -12,7 +12,7 @@ defmodule Lotus.AI.Actions.ListDataSourcesTest do
     test "returns available data sources with types" do
       stub(Lotus, :list_data_source_names, fn -> ["primary", "analytics"] end)
 
-      stub(Lotus.Sources, :source_type, fn
+      stub(Lotus.Source, :source_type, fn
         "primary" -> :postgres
         "analytics" -> :postgres
       end)

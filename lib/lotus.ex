@@ -66,7 +66,7 @@ defmodule Lotus do
         ]
 
   alias Lotus.Cache.{Key, KeyBuilder}
-  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Sources, Storage, Viz}
+  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
   alias Lotus.Source.Adapter
   alias Lotus.Storage.Query
 
@@ -457,7 +457,7 @@ defmodule Lotus do
   end
 
   defp execute_query(q, sql, params, vars, opts) do
-    adapter = Sources.resolve!(Keyword.get(opts, :repo), q.data_source)
+    adapter = Source.resolve!(Keyword.get(opts, :repo), q.data_source)
     search_path = Keyword.get(opts, :search_path) || q.search_path
     runner_opts = prepare_final_opts(opts, search_path)
 
@@ -467,16 +467,16 @@ defmodule Lotus do
   defp execute_with_options(adapter, sql, params, opts, runner_opts, cache_identity, query_id) do
     search_path = Keyword.get(runner_opts, :search_path)
 
-    {sql, params} = Adapter.transform_query(adapter, sql, params, runner_opts)
+    {sql, params} = Adapter.transform_bound_query(adapter, sql, params, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
-    {sql, params} = Lotus.Source.apply_filters(adapter, sql, params, filters)
+    {sql, params} = Adapter.apply_filters(adapter, sql, params, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
-    sql = Lotus.Source.apply_sorts(adapter, sql, sorts)
+    sql = Adapter.apply_sorts(adapter, sql, sorts)
 
-    {sql, params, window_meta, cache_bound} =
-      maybe_apply_window(
+    {sql, params, pagination_meta, cache_bound} =
+      maybe_paginate(
         sql,
         params,
         adapter,
@@ -491,7 +491,7 @@ defmodule Lotus do
 
     exec_with_cache(opts[:cache], profile, key, tags, fn ->
       with {:ok, %Result{} = res} <- Runner.run_statement(adapter, sql, params, runner_opts) do
-        {:ok, merge_window_meta(res, window_meta)}
+        {:ok, merge_pagination_meta(res, pagination_meta)}
       end
     end)
   end
@@ -612,7 +612,7 @@ defmodule Lotus do
         ]) ::
           {:ok, Result.t()} | {:error, term()}
   def run_statement(statement, params \\ [], opts \\ []) do
-    adapter = Sources.resolve!(Keyword.get(opts, :repo), nil)
+    adapter = Source.resolve!(Keyword.get(opts, :repo), nil)
 
     runner_opts =
       opts
@@ -890,36 +890,47 @@ defmodule Lotus do
     end
   end
 
-  defp maybe_apply_window(sql, params, _adapter, _search_path, nil),
+  defp maybe_paginate(sql, params, _adapter, _search_path, nil),
     do: {sql, params, nil, nil}
 
-  defp maybe_apply_window(sql, params, adapter, search_path, window_opts)
-       when is_list(window_opts) do
-    limit = resolve_window_limit(window_opts)
-    offset = Keyword.get(window_opts, :offset, 0)
-    count_mode = Keyword.get(window_opts, :count, :none)
+  defp maybe_paginate(sql, params, adapter, search_path, pagination_opts)
+       when is_list(pagination_opts) do
+    limit = resolve_window_limit(pagination_opts)
+    offset = Keyword.get(pagination_opts, :offset, 0)
+    count_mode = Keyword.get(pagination_opts, :count, :none)
 
-    full_opts = [limit: limit, offset: offset, count: count_mode, search_path: search_path]
+    callback_opts = [limit: limit, offset: offset, count: count_mode, search_path: search_path]
 
-    {paged_sql, paged_params, window_meta} =
-      Adapter.apply_window(adapter, sql, params, full_opts)
+    {paged_sql, paged_params, count_spec} =
+      Adapter.apply_pagination(adapter, sql, params, callback_opts)
+
+    # Assemble the internal meta with the real adapter from scope. The
+    # preserved user-facing shape (Result.meta.window / .total_count /
+    # .total_mode) is built by merge_pagination_meta/2 below.
+    pagination_meta = %{
+      window: %{limit: limit, offset: offset},
+      total_mode: if(count_spec, do: :exact, else: :none),
+      count_spec: count_spec,
+      adapter: adapter,
+      search_path: search_path
+    }
 
     cache_bound = %{
       __params__: params,
       __window__: %{limit: limit, offset: offset, count: count_mode}
     }
 
-    {paged_sql, paged_params, window_meta, cache_bound}
+    {paged_sql, paged_params, pagination_meta, cache_bound}
   end
 
-  defp merge_window_meta(%Result{} = res, nil), do: res
+  defp merge_pagination_meta(%Result{} = res, nil), do: res
 
-  defp merge_window_meta(%Result{} = res, %{total_mode: :none, window: win} = _meta) do
+  defp merge_pagination_meta(%Result{} = res, %{total_mode: :none, window: win}) do
     updated_meta = Map.merge(res.meta, %{window: win})
     %Result{res | num_rows: length(res.rows), meta: updated_meta}
   end
 
-  defp merge_window_meta(%Result{} = res, %{total_mode: :exact} = meta) do
+  defp merge_pagination_meta(%Result{} = res, %{total_mode: :exact} = meta) do
     win = Map.fetch!(meta, :window)
 
     # Try to compute exact count synchronously. If it fails, fall back with no total.
@@ -939,11 +950,11 @@ defmodule Lotus do
     }
   end
 
-  defp do_count(%{count_sql: count_sql, count_params: count_params, adapter: adapter} = meta) do
+  defp do_count(%{count_spec: %{query: q, params: ps}, adapter: adapter} = meta) do
     runner_opts = build_runner_opts(meta)
 
     adapter
-    |> Runner.run_statement(count_sql, count_params, runner_opts)
+    |> Runner.run_statement(q, ps, runner_opts)
     |> parse_count_result()
   end
 

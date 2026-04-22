@@ -14,9 +14,10 @@ defmodule Lotus.Storage.Query do
   require Logger
 
   alias Lotus.Config
-  alias Lotus.Sources
-  alias Lotus.SQL.{OptionalClause, Transformer}
-  alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, TypeMapper, VariableResolver}
+  alias Lotus.Source
+  alias Lotus.Source.Adapter
+  alias Lotus.SQL.OptionalClause
+  alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, VariableResolver}
 
   @type t :: %__MODULE__{
           id: term(),
@@ -90,15 +91,24 @@ defmodule Lotus.Storage.Query do
   @spec to_sql_params(t(), map()) ::
           {:ok, String.t(), [term()]} | {:error, String.t()}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
-    repo = get_repo(q.data_source)
-    source_type = get_source_type(q.data_source)
-    source_module = get_source_module(repo)
+    # A stored query's `data_source` can become stale when the source is
+    # renamed or removed. Fall back to the default source so compilation
+    # still succeeds — the caller (Runner/Preflight) will surface a clear
+    # error at execution if the default source doesn't match the query's
+    # dialect expectations.
+    adapter =
+      try do
+        Source.resolve!(q.data_source, nil)
+      rescue
+        ArgumentError -> Source.resolve!(nil, nil)
+      end
 
     # Process optional clauses before transformation
     processed_sql = OptionalClause.process(sql, supplied_vars)
 
-    # Transform SQL for database-specific syntax
-    transformed_sql = Transformer.transform(processed_sql, source_type)
+    # Rewrite the raw statement text before variables are bound (dialect or
+    # adapter-specific preprocessing — e.g., wildcard rewriting).
+    transformed_sql = Adapter.transform_statement(adapter, processed_sql)
 
     # Extract variables from SQL
     vars_in_order = Lotus.Variables.extract_names(transformed_sql)
@@ -106,7 +116,7 @@ defmodule Lotus.Storage.Query do
     variable_bindings = VariableResolver.resolve_variables(transformed_sql)
 
     enriched_bindings =
-      enrich_bindings_with_types(variable_bindings, repo, q.search_path, source_module)
+      enrich_bindings_with_types(variable_bindings, adapter, q.search_path)
 
     # Build SQL with parameters, using automatic type casting
     init = {:ok, {transformed_sql, [], 1}}
@@ -118,7 +128,7 @@ defmodule Lotus.Storage.Query do
                vars,
                supplied_vars,
                enriched_bindings,
-               q,
+               adapter,
                acc_sql,
                acc_params,
                idx
@@ -150,7 +160,7 @@ defmodule Lotus.Storage.Query do
          vars,
          supplied_vars,
          enriched_bindings,
-         q,
+         adapter,
          acc_sql,
          acc_params,
          idx
@@ -163,9 +173,27 @@ defmodule Lotus.Storage.Query do
       is_list = Map.get(meta, :list, false)
 
       if is_list do
-        substitute_list_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx)
+        substitute_list_variable(
+          var,
+          value,
+          manual_type,
+          binding,
+          adapter,
+          acc_sql,
+          acc_params,
+          idx
+        )
       else
-        substitute_scalar_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx)
+        substitute_scalar_variable(
+          var,
+          value,
+          manual_type,
+          binding,
+          adapter,
+          acc_sql,
+          acc_params,
+          idx
+        )
       end
     end
   end
@@ -185,7 +213,16 @@ defmodule Lotus.Storage.Query do
     end
   end
 
-  defp substitute_list_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx) do
+  defp substitute_list_variable(
+         var,
+         value,
+         manual_type,
+         binding,
+         adapter,
+         acc_sql,
+         acc_params,
+         idx
+       ) do
     case normalize_list_value(value) do
       [] ->
         {:error, "List variable '#{var}' must have at least one value"}
@@ -197,7 +234,7 @@ defmodule Lotus.Storage.Query do
           Enum.reduce_while(values, init, fn v, {:ok, {phs, cvs, i}} ->
             case determine_type_and_cast(v, manual_type, binding) do
               {:ok, {final_type, casted}} ->
-                ph = Lotus.Source.param_placeholder(q.data_source, i, var, final_type)
+                ph = Adapter.param_placeholder(adapter, i, var, final_type)
                 {:cont, {:ok, {[ph | phs], [casted | cvs], i + 1}}}
 
               {:error, _} = err ->
@@ -215,9 +252,18 @@ defmodule Lotus.Storage.Query do
     end
   end
 
-  defp substitute_scalar_variable(var, value, manual_type, binding, q, acc_sql, acc_params, idx) do
+  defp substitute_scalar_variable(
+         var,
+         value,
+         manual_type,
+         binding,
+         adapter,
+         acc_sql,
+         acc_params,
+         idx
+       ) do
     with {:ok, {final_type, casted_value}} <- determine_type_and_cast(value, manual_type, binding) do
-      placeholder = Lotus.Source.param_placeholder(q.data_source, idx, var, final_type)
+      placeholder = Adapter.param_placeholder(adapter, idx, var, final_type)
       new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder, global: false)
       {:ok, {new_sql, acc_params ++ [casted_value], idx + 1}}
     end
@@ -258,48 +304,13 @@ defmodule Lotus.Storage.Query do
     OptionalClause.extract_optional_variable_names(statement)
   end
 
-  defp get_repo(nil) do
-    {_name, repo} = Config.default_data_source()
-    repo
-  end
-
-  defp get_repo(source_name) when is_binary(source_name) do
-    Config.data_sources()
-    |> Map.get(source_name)
-    |> case do
-      nil -> raise ArgumentError, "Unknown data source: #{source_name}"
-      repo -> repo
-    end
-  end
-
-  defp get_repo(repo) when is_atom(repo), do: repo
-
-  defp get_source_type(nil) do
-    {_name, repo} = Config.default_data_source()
-    Sources.source_type(repo)
-  end
-
-  defp get_source_type(repo_name) when is_binary(repo_name),
-    do: Sources.source_type(repo_name)
-
-  defp get_source_type(repo) when is_atom(repo), do: Sources.source_type(repo)
-
-  defp get_source_module(repo) do
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> Lotus.Sources.Postgres
-      Ecto.Adapters.SQLite3 -> Lotus.Sources.SQLite3
-      Ecto.Adapters.MyXQL -> Lotus.Sources.MySQL
-      _ -> nil
-    end
-  end
-
-  defp enrich_bindings_with_types(bindings, repo, search_path, source_module) do
+  defp enrich_bindings_with_types(bindings, %Adapter{} = adapter, search_path) do
     Enum.map(bindings, fn binding ->
       schema = resolve_schema(binding.table, search_path)
 
-      case SchemaCache.get_column_type(repo, schema, binding.table, binding.column) do
+      case SchemaCache.get_column_type(adapter, schema, binding.table, binding.column) do
         {:ok, db_type} ->
-          lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_module)
+          lotus_type = Adapter.db_type_to_lotus_type(adapter, db_type)
           Map.put(binding, :lotus_type, lotus_type)
 
         :not_found ->
@@ -312,7 +323,11 @@ defmodule Lotus.Storage.Query do
       end
     end)
   rescue
-    error in [ArgumentError, FunctionClauseError, DBConnection.ConnectionError] ->
+    # Narrowly rescue only transient connection failures so type enrichment
+    # degrades gracefully when the DB is unreachable. Other exceptions
+    # (ArgumentError from bad config, FunctionClauseError from callback
+    # mismatches) indicate real bugs — let them propagate to the caller.
+    error in DBConnection.ConnectionError ->
       Logger.warning(
         "Type enrichment failed: #{Exception.message(error)}, " <>
           "defaulting all bindings to :text"

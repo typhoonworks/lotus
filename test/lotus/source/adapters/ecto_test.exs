@@ -11,7 +11,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
 
       assert %Adapter{} = adapter
       assert adapter.name == "main"
-      assert adapter.module == EctoAdapter
+      assert adapter.module == Lotus.Source.Adapters.Postgres
       assert adapter.state == Repo
       assert adapter.source_type == :postgres
     end
@@ -215,10 +215,19 @@ defmodule Lotus.Source.Adapters.EctoTest do
     end
   end
 
-  describe "transform_query/4" do
+  describe "transform_bound_query/4" do
     test "passes through query and params unchanged" do
       adapter = EctoAdapter.wrap("main", Repo)
-      assert {"SELECT 1", [42]} = Adapter.transform_query(adapter, "SELECT 1", [42], [])
+      assert {"SELECT 1", [42]} = Adapter.transform_bound_query(adapter, "SELECT 1", [42], [])
+    end
+  end
+
+  describe "transform_statement/2" do
+    test "applies dialect-level statement rewriting" do
+      # Postgres's transform_statement rewrites interval syntax, among other things.
+      adapter = EctoAdapter.wrap("main", Repo)
+      out = Adapter.transform_statement(adapter, "SELECT 1")
+      assert is_binary(out)
     end
   end
 
@@ -245,44 +254,44 @@ defmodule Lotus.Source.Adapters.EctoTest do
     end
   end
 
-  describe "apply_window/4" do
+  describe "apply_pagination/4" do
     test "wraps query with LIMIT/OFFSET for postgres" do
       adapter = EctoAdapter.wrap("main", Repo)
 
-      {paged_sql, paged_params, window_meta} =
-        Adapter.apply_window(adapter, "SELECT * FROM users", [], limit: 10, offset: 0)
+      {paged_sql, paged_params, count_spec} =
+        Adapter.apply_pagination(adapter, "SELECT * FROM users", [], limit: 10, offset: 0)
 
       assert paged_sql =~ "LIMIT"
       assert paged_sql =~ "OFFSET"
       assert paged_params == [10, 0]
-      assert %{window: %{limit: 10, offset: 0}} = window_meta
+      assert count_spec == nil
     end
 
-    test "includes count metadata when count: :exact" do
+    test "returns a count_spec when count: :exact" do
       adapter = EctoAdapter.wrap("main", Repo)
 
-      {_paged_sql, _paged_params, window_meta} =
-        Adapter.apply_window(adapter, "SELECT * FROM users", [],
+      {_paged_sql, _paged_params, count_spec} =
+        Adapter.apply_pagination(adapter, "SELECT * FROM users", [],
           limit: 10,
           offset: 0,
           count: :exact
         )
 
-      assert %{total_mode: :exact, count_sql: count_sql} = window_meta
-      assert count_sql =~ "COUNT(*)"
+      assert %{query: count_query, params: []} = count_spec
+      assert count_query =~ "COUNT(*)"
     end
 
-    test "returns nil total_count when count: :none" do
+    test "returns nil count_spec when count: :none" do
       adapter = EctoAdapter.wrap("main", Repo)
 
-      {_paged_sql, _paged_params, window_meta} =
-        Adapter.apply_window(adapter, "SELECT * FROM users", [],
+      {_paged_sql, _paged_params, count_spec} =
+        Adapter.apply_pagination(adapter, "SELECT * FROM users", [],
           limit: 10,
           offset: 0,
           count: :none
         )
 
-      assert %{total_mode: :none, total_count: nil} = window_meta
+      assert count_spec == nil
     end
   end
 
@@ -298,7 +307,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
       assert :ok = Adapter.sanitize_query(adapter, "anything", [])
     end
 
-    test "transform_query passes through for adapter without the callback" do
+    test "transform_bound_query passes through for adapter without the callback" do
       adapter = %Adapter{
         name: "stub",
         module: Lotus.Test.StubAdapter,
@@ -306,7 +315,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
         source_type: :other
       }
 
-      assert {"SELECT 1", []} = Adapter.transform_query(adapter, "SELECT 1", [], [])
+      assert {"SELECT 1", []} = Adapter.transform_bound_query(adapter, "SELECT 1", [], [])
     end
 
     test "extract_accessed_resources returns :skip for adapter without the callback" do
@@ -320,7 +329,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
       assert :skip = Adapter.extract_accessed_resources(adapter, "SELECT 1", [], [])
     end
 
-    test "apply_window passes through for adapter without the callback" do
+    test "apply_pagination passes through for adapter without the callback" do
       adapter = %Adapter{
         name: "stub",
         module: Lotus.Test.StubAdapter,
@@ -328,7 +337,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
         source_type: :other
       }
 
-      assert {"SELECT 1", [], nil} = Adapter.apply_window(adapter, "SELECT 1", [], [])
+      assert {"SELECT 1", [], nil} = Adapter.apply_pagination(adapter, "SELECT 1", [], [])
     end
   end
 

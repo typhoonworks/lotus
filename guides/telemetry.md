@@ -18,7 +18,7 @@ Duration is measured in native time units. Use `System.convert_time_unit/3` to
 convert to milliseconds or microseconds.
 
 The `context` field carries whatever value the caller passed as the `:context`
-option to `Lotus.run_sql/3` or `Lotus.run_query/2`. It defaults to `nil` when
+option to `Lotus.run_statement/3` or `Lotus.run_query/2`. It defaults to `nil` when
 not provided. Typical uses include request IDs, controller names, or
 OpenTelemetry span contexts for trace correlation.
 

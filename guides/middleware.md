@@ -86,7 +86,7 @@ A `:context` key carries opaque user data (e.g. the current user) through to mid
 
 ```elixir
 # Pass context when running a query
-Lotus.run_sql("SELECT * FROM orders", [], context: %{user_id: current_user.id})
+Lotus.run_statement("SELECT * FROM orders", [], context: %{user_id: current_user.id})
 ```
 
 ```elixir

@@ -39,7 +39,7 @@ defmodule Lotus.Preflight do
         check_relations_visibility(rels, adapter.name)
 
       {:error, e} ->
-        {:error, normalize_preflight_error(e)}
+        {:error, normalize_preflight_error(e, adapter)}
 
       :skip ->
         :ok
@@ -65,13 +65,13 @@ defmodule Lotus.Preflight do
     end)
   end
 
-  defp normalize_preflight_error(e) when is_binary(e) do
+  defp normalize_preflight_error(e, _adapter) when is_binary(e) do
     strip_explain_query_tail(e)
   end
 
-  defp normalize_preflight_error(e) do
+  defp normalize_preflight_error(e, adapter) do
     e
-    |> Lotus.Source.format_error()
+    |> then(&Adapter.format_error(adapter, &1))
     |> strip_explain_query_tail()
   end
 

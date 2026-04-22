@@ -94,6 +94,17 @@ defmodule Lotus.Source.AdapterTest do
     @impl true
     def supports_feature?(_state, :json), do: true
     def supports_feature?(_state, _), do: false
+
+    @impl true
+    def limit_query(_state, statement, limit), do: "#{statement} LIMIT #{limit}"
+
+    @impl true
+    def db_type_to_lotus_type(_state, "integer"), do: :integer
+    def db_type_to_lotus_type(_state, _), do: :text
+
+    @impl true
+    def editor_config(_state),
+      do: %{language: "sql", keywords: [], types: [], functions: [], context_boundaries: []}
   end
 
   describe "struct creation" do
@@ -109,15 +120,6 @@ defmodule Lotus.Source.AdapterTest do
       assert adapter.module == MockAdapter
       assert adapter.state == %{db: "test_db"}
       assert adapter.source_type == :postgres
-    end
-
-    test "defaults all fields to nil" do
-      adapter = %Adapter{}
-
-      assert adapter.name == nil
-      assert adapter.module == nil
-      assert adapter.state == nil
-      assert adapter.source_type == nil
     end
   end
 

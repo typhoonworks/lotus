@@ -34,7 +34,7 @@ defmodule Lotus.AI.QueryExplainer do
     api_key = Keyword.fetch!(opts, :api_key)
     temperature = Keyword.get(opts, :temperature, 0.2)
 
-    database_type = Lotus.Sources.source_type(data_source)
+    database_type = Lotus.Source.source_type(data_source)
 
     system_prompt = Explanation.system_prompt(database_type)
 

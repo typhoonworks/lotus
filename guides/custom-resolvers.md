@@ -70,7 +70,7 @@ A source resolver turns query options (`repo_opt`, `fallback`) into `%Lotus.Sour
 
 | Callback | Returns | Used By |
 |---|---|---|
-| `resolve/2` | `{:ok, %Adapter{}}` or `{:error, term()}` | Query execution (`Lotus.run_sql/3`, `Lotus.run_query/2`) |
+| `resolve/2` | `{:ok, %Adapter{}}` or `{:error, term()}` | Query execution (`Lotus.run_statement/3`, `Lotus.run_query/2`) |
 | `list_sources/0` | `[%Adapter{}]` | Schema discovery, admin UIs |
 | `get_source!/1` | `%Adapter{}` (raises on missing) | Ad-hoc lookups |
 | `list_source_names/0` | `[String.t()]` | Error messages, admin UIs |
@@ -87,7 +87,7 @@ The default resolver (`Lotus.Source.Resolvers.Static`) follows this priority ins
 5. Both `nil` — use the configured `default_source`
 6. Not found — `{:error, :not_found}`
 
-Custom implementations are free to adopt a different priority but should accept the same arguments so the public API (`Lotus.run_sql/3`, `Lotus.run_query/2`, etc.) continues to work without changes.
+Custom implementations are free to adopt a different priority but should accept the same arguments so the public API (`Lotus.run_statement/3`, `Lotus.run_query/2`, etc.) continues to work without changes.
 
 ### Example: Agent-backed `Source.Resolver`
 
@@ -227,7 +227,7 @@ Now you can register sources at runtime:
 ```elixir
 MyApp.AgentSourceResolver.put("warehouse", MyApp.WarehouseRepo)
 
-Lotus.run_sql("SELECT COUNT(*) FROM orders", [], repo: "warehouse")
+Lotus.run_statement("SELECT COUNT(*) FROM orders", [], repo: "warehouse")
 ```
 
 ## The `Visibility.Resolver` Behaviour
@@ -484,7 +484,7 @@ end
 
 ### Integration Tests
 
-Configure Lotus to use your resolver and exercise the public API (`Lotus.run_sql/3`, `Lotus.list_tables/2`, etc.). A common pattern is to toggle the resolver per-test with `Application.put_env/3` and call `Lotus.Config.reload!/0` so the new value is picked up immediately:
+Configure Lotus to use your resolver and exercise the public API (`Lotus.run_statement/3`, `Lotus.list_tables/2`, etc.). A common pattern is to toggle the resolver per-test with `Application.put_env/3` and call `Lotus.Config.reload!/0` so the new value is picked up immediately:
 
 ```elixir
 setup do
@@ -505,10 +505,10 @@ setup do
   :ok
 end
 
-test "Lotus.run_sql/3 uses the configured resolver" do
+test "Lotus.run_statement/3 uses the configured resolver" do
   MyApp.AgentSourceResolver.put("main", MyApp.Repo)
 
-  assert {:ok, _result} = Lotus.run_sql("SELECT 1", [], repo: "main")
+  assert {:ok, _result} = Lotus.run_statement("SELECT 1", [], repo: "main")
 end
 ```
 

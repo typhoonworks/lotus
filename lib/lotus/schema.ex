@@ -47,7 +47,7 @@ defmodule Lotus.Schema do
   """
 
   alias Lotus.Cache.KeyBuilder
-  alias Lotus.{Config, Middleware, Sources, Telemetry, Visibility}
+  alias Lotus.{Config, Middleware, Source, Telemetry, Visibility}
   alias Lotus.Source.Adapter
   alias Lotus.Visibility.Policy
 
@@ -82,7 +82,7 @@ defmodule Lotus.Schema do
   @spec list_schemas(module() | String.t(), keyword()) ::
           {:ok, [String.t()]} | {:error, term()}
   def list_schemas(repo_or_name, opts \\ []) do
-    adapter = Sources.resolve!(repo_or_name, nil)
+    adapter = Source.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
     scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_schemas, adapter.name)
@@ -175,7 +175,7 @@ defmodule Lotus.Schema do
   @spec list_tables(module() | String.t(), keyword()) ::
           {:ok, [{String.t(), String.t()}] | [String.t()]} | {:error, term()}
   def list_tables(repo_or_name, opts \\ []) do
-    adapter = Sources.resolve!(repo_or_name, nil)
+    adapter = Source.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
     scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_tables, adapter.name)
@@ -286,7 +286,7 @@ defmodule Lotus.Schema do
   @spec get_table_schema(module() | String.t(), String.t(), keyword()) ::
           {:ok, [map()]} | {:error, term()}
   def get_table_schema(repo_or_name, table_name, opts \\ []) do
-    adapter = Sources.resolve!(repo_or_name, nil)
+    adapter = Source.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
     scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:get_table_schema, adapter.name)
@@ -437,7 +437,7 @@ defmodule Lotus.Schema do
   @spec get_table_stats(module() | String.t(), String.t(), keyword()) ::
           {:ok, %{row_count: non_neg_integer()}} | {:error, binary()}
   def get_table_stats(repo_or_name, table_name, opts \\ []) do
-    adapter = Sources.resolve!(repo_or_name, nil)
+    adapter = Source.resolve!(repo_or_name, nil)
     scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:get_table_stats, adapter.name)
     schemas = effective_schemas(adapter, opts)
@@ -545,7 +545,7 @@ defmodule Lotus.Schema do
   @spec list_relations(module() | String.t(), keyword()) ::
           {:ok, [{String.t() | nil, String.t()}]} | {:error, term()}
   def list_relations(repo_or_name, opts \\ []) do
-    adapter = Sources.resolve!(repo_or_name, nil)
+    adapter = Source.resolve!(repo_or_name, nil)
     context = Keyword.get(opts, :context)
     scope = Keyword.get(opts, :scope)
     start_time = Telemetry.schema_introspection_start(:list_relations, adapter.name)

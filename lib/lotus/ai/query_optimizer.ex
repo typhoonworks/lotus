@@ -9,6 +9,7 @@ defmodule Lotus.AI.QueryOptimizer do
   alias Lotus.AI.Actions
   alias Lotus.AI.Prompts.Optimization
   alias Lotus.AI.Tool
+  alias Lotus.Source.Adapter
   alias Lotus.SQL.OptionalClause
   alias Lotus.Variables
 
@@ -52,10 +53,10 @@ defmodule Lotus.AI.QueryOptimizer do
     search_path = Keyword.get(opts, :search_path)
     temperature = Keyword.get(opts, :temperature, 0.1)
 
-    database_type = Lotus.Sources.source_type(data_source)
-    repo = Lotus.Config.get_data_source!(data_source)
+    adapter = Lotus.Source.get_source!(data_source)
+    database_type = Adapter.source_type(adapter)
 
-    execution_plan = get_execution_plan(repo, sql, params, search_path: search_path)
+    execution_plan = get_execution_plan(adapter, sql, params, search_path: search_path)
 
     system_prompt = Optimization.system_prompt(database_type)
     user_prompt = Optimization.user_prompt(sql, execution_plan)
@@ -68,10 +69,10 @@ defmodule Lotus.AI.QueryOptimizer do
     |> handle_response(model_string)
   end
 
-  defp get_execution_plan(repo, sql, params, opts) do
+  defp get_execution_plan(adapter, sql, params, opts) do
     explainable_sql = prepare_sql_for_explain(sql)
 
-    case Lotus.Source.explain_plan(repo, explainable_sql, params, opts) do
+    case Adapter.explain_plan(adapter, explainable_sql, params, opts) do
       {:ok, plan} -> plan
       {:error, _} -> nil
     end

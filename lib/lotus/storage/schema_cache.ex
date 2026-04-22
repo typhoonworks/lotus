@@ -6,6 +6,10 @@ defmodule Lotus.Storage.SchemaCache do
   Uses Lotus's existing ETS-based cache infrastructure to store table/column metadata
   and avoid repeated `information_schema` queries.
 
+  All functions take a resolved `%Lotus.Source.Adapter{}` struct. Cache keys
+  are derived from `adapter.name`, which is always a string and independent of
+  the adapter's internal `state` shape (repo module, keyword list, etc.).
+
   ## Features
 
   - **Table-level caching**: Caches all columns for a table together for efficiency
@@ -15,17 +19,21 @@ defmodule Lotus.Storage.SchemaCache do
 
   ## Usage
 
+      adapter = Lotus.Source.resolve!("main", nil)
+
       # Get all columns for a table
-      {:ok, schema} = SchemaCache.get_table_schema(MyApp.Repo, "public", "users")
+      {:ok, schema} = SchemaCache.get_table_schema(adapter, "public", "users")
       # => %{"id" => %{type: "uuid", nullable: false, ...}, ...}
 
       # Get specific column type
-      {:ok, type} = SchemaCache.get_column_type(MyApp.Repo, "public", "users", "id")
+      {:ok, type} = SchemaCache.get_column_type(adapter, "public", "users", "id")
       # => "uuid"
 
       # Invalidate cache after migrations
-      SchemaCache.invalidate(MyApp.Repo, "public", "users")
+      SchemaCache.invalidate(adapter, "public", "users")
   """
+
+  alias Lotus.Source.Adapter
 
   require Logger
 
@@ -44,33 +52,33 @@ defmodule Lotus.Storage.SchemaCache do
 
   ## Examples
 
-      {:ok, schema} = SchemaCache.get_table_schema(MyApp.Repo, "public", "users")
+      {:ok, schema} = SchemaCache.get_table_schema(adapter, "public", "users")
       schema["id"]
       # => %{type: "uuid", nullable: false, default: nil, primary_key: true}
   """
   @spec get_table_schema(
-          repo :: module(),
+          adapter :: Adapter.t(),
           schema :: String.t() | nil,
           table :: String.t()
         ) :: {:ok, %{String.t() => column_info()}} | {:error, term()}
-  def get_table_schema(repo, schema, table) do
-    cache_key = cache_key(repo, schema, table)
+  def get_table_schema(%Adapter{} = adapter, schema, table) do
+    cache_key = cache_key(adapter, schema, table)
     ttl_ms = get_ttl_ms()
 
     try do
       case Lotus.Cache.get_or_store(cache_key, ttl_ms, fn ->
-             fetch_schema_from_db(repo, schema, table)
+             fetch_schema_from_db(adapter, schema, table)
            end) do
         {:ok, schema_map, _cache_status} ->
           {:ok, schema_map}
 
         {:error, reason} ->
           Logger.warning(
-            "Failed to get/cache schema for #{inspect(repo)}.#{schema}.#{table}: #{inspect(reason)}"
+            "Failed to get/cache schema for #{adapter.name}.#{schema}.#{table}: #{inspect(reason)}"
           )
 
           # Fallback to direct fetch if cache fails
-          {:ok, fetch_schema_from_db(repo, schema, table)}
+          {:ok, fetch_schema_from_db(adapter, schema, table)}
       end
     rescue
       error in [ArgumentError, DBConnection.ConnectionError, Ecto.QueryError] ->
@@ -83,20 +91,20 @@ defmodule Lotus.Storage.SchemaCache do
 
   ## Examples
 
-      {:ok, type} = SchemaCache.get_column_type(MyApp.Repo, "public", "users", "id")
+      {:ok, type} = SchemaCache.get_column_type(adapter, "public", "users", "id")
       # => "uuid"
 
-      SchemaCache.get_column_type(MyApp.Repo, "public", "users", "nonexistent")
+      SchemaCache.get_column_type(adapter, "public", "users", "nonexistent")
       # => :not_found
   """
   @spec get_column_type(
-          repo :: module(),
+          adapter :: Adapter.t(),
           schema :: String.t() | nil,
           table :: String.t(),
           column :: String.t()
         ) :: {:ok, String.t()} | :not_found
-  def get_column_type(repo, schema, table, column) do
-    case get_table_schema(repo, schema, table) do
+  def get_column_type(%Adapter{} = adapter, schema, table, column) do
+    case get_table_schema(adapter, schema, table) do
       {:ok, table_schema} ->
         case Map.get(table_schema, column) do
           nil -> :not_found
@@ -113,12 +121,12 @@ defmodule Lotus.Storage.SchemaCache do
 
   ## Examples
 
-      SchemaCache.invalidate(MyApp.Repo, "public", "users")
+      SchemaCache.invalidate(adapter, "public", "users")
       # => :ok
   """
-  @spec invalidate(repo :: module(), schema :: String.t() | nil, table :: String.t()) :: :ok
-  def invalidate(repo, schema, table) do
-    cache_key = cache_key(repo, schema, table)
+  @spec invalidate(adapter :: Adapter.t(), schema :: String.t() | nil, table :: String.t()) :: :ok
+  def invalidate(%Adapter{} = adapter, schema, table) do
+    cache_key = cache_key(adapter, schema, table)
     Lotus.Cache.delete(cache_key)
     :ok
   end
@@ -128,25 +136,25 @@ defmodule Lotus.Storage.SchemaCache do
 
   ## Examples
 
-      SchemaCache.warm_cache(MyApp.Repo, [
+      SchemaCache.warm_cache(adapter, [
         {"public", "users"},
         {"public", "orders"}
       ])
       # => :ok
   """
   @spec warm_cache(
-          repo :: module(),
+          adapter :: Adapter.t(),
           tables :: [{schema :: String.t() | nil, table :: String.t()}]
         ) :: :ok
-  def warm_cache(repo, tables) do
+  def warm_cache(%Adapter{} = adapter, tables) do
     Enum.each(tables, fn {schema, table} ->
-      case get_table_schema(repo, schema, table) do
+      case get_table_schema(adapter, schema, table) do
         {:ok, _} ->
-          Logger.debug("Warmed schema cache for #{inspect(repo)}.#{schema}.#{table}")
+          Logger.debug("Warmed schema cache for #{adapter.name}.#{schema}.#{table}")
 
         {:error, reason} ->
           Logger.warning(
-            "Failed to warm schema cache for #{inspect(repo)}.#{schema}.#{table}: #{inspect(reason)}"
+            "Failed to warm schema cache for #{adapter.name}.#{schema}.#{table}: #{inspect(reason)}"
           )
       end
     end)
@@ -154,22 +162,25 @@ defmodule Lotus.Storage.SchemaCache do
     :ok
   end
 
-  defp cache_key(repo, schema, table) do
-    repo_name = repo |> Module.split() |> List.last()
+  defp cache_key(%Adapter{name: name}, schema, table) do
     schema_part = if schema, do: ":#{schema}", else: ""
-    "schema_cache:#{repo_name}#{schema_part}:#{table}"
+    "schema_cache:#{name}#{schema_part}:#{table}"
   end
 
-  defp fetch_schema_from_db(repo, schema, table) do
-    columns = Lotus.Source.get_table_schema(repo, schema, table)
+  defp fetch_schema_from_db(%Adapter{} = adapter, schema, table) do
+    case Adapter.get_table_schema(adapter, schema, table) do
+      {:ok, columns} ->
+        Enum.into(columns, %{}, fn column ->
+          {column.name, Map.take(column, [:type, :nullable, :default, :primary_key])}
+        end)
 
-    Enum.into(columns, %{}, fn column ->
-      {column.name, Map.take(column, [:type, :nullable, :default, :primary_key])}
-    end)
+      {:error, reason} ->
+        raise "Failed to fetch schema: #{inspect(reason)}"
+    end
   rescue
-    error in [ArgumentError, DBConnection.ConnectionError, Ecto.QueryError] ->
+    error ->
       Logger.error(
-        "Failed to fetch schema for #{inspect(repo)}.#{schema}.#{table}: #{Exception.message(error)}"
+        "Failed to fetch schema for #{adapter.name}.#{schema}.#{table}: #{Exception.message(error)}"
       )
 
       reraise error, __STACKTRACE__

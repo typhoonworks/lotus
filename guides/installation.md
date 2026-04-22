@@ -100,7 +100,7 @@ Test that Lotus is working correctly:
 
 ```elixir
 # In iex -S mix
-iex> Lotus.run_sql("SELECT 1 as test")
+iex> Lotus.run_statement("SELECT 1 as test")
 {:ok, %Lotus.Result{rows: [[1]], columns: ["test"], num_rows: 1}}
 ```
 
@@ -219,11 +219,11 @@ Without proper session management, Lotus queries could leave database connection
 
 ```elixir
 # Without session management (problematic):
-Lotus.run_sql("SELECT * FROM users")  # Sets read-only mode
+Lotus.run_statement("SELECT * FROM users")  # Sets read-only mode
 MyApp.create_user(%{name: "John"})    # FAILS - connection still read-only!
 
 # With Lotus session management (safe):
-Lotus.run_sql("SELECT * FROM users")  # Sets + restores session state
+Lotus.run_statement("SELECT * FROM users")  # Sets + restores session state
 MyApp.create_user(%{name: "John"})    # ✅ Works normally
 ```
 

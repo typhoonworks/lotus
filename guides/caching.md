@@ -44,16 +44,20 @@ config :lotus,
 
 Lotus is an OTP application: as long as `:lotus` is in your `mix.exs` dependencies, its supervisor starts automatically with your app and boots the cache backend declared under `config :lotus, :cache`. No supervision-tree wiring is required on your end.
 
+The `Lotus.Cache.ETS` GenServer is always started by the supervisor to ensure cache tables are available. If you configure a different cache adapter (e.g., `Lotus.Cache.Cachex`), it is started in addition to the ETS tables.
+
+> **Note:** If you accidentally include `Lotus` as a child in your own supervision tree, the double-start is handled gracefully — `Lotus.Supervisor` returns `{:ok, pid}` for an already-running instance.
+
 ### Using Cache in Queries
 
 Once configured and started, caching works automatically:
 
 ```elixir
 # First call - executes query and caches result
-{:ok, result1} = Lotus.run_sql("SELECT COUNT(*) FROM users")
+{:ok, result1} = Lotus.run_statement("SELECT COUNT(*) FROM users")
 
 # Second call - returns cached result (much faster!)
-{:ok, result2} = Lotus.run_sql("SELECT COUNT(*) FROM users")
+{:ok, result2} = Lotus.run_statement("SELECT COUNT(*) FROM users")
 ```
 
 ## Configuration
@@ -62,7 +66,7 @@ Once configured and started, caching works automatically:
 
 Currently, Lotus supports two cache adapters:
 
-1. `Lotus.Cache.ETS` - Local-only in-memory caching using ETS
+1. `Lotus.Cache.ETS` - Local-only in-memory caching using ETS, implemented as a GenServer with automatic expiration cleanup
 2. `Lotus.Cache.Cachex` - Distributed caching using [Cachex](https://hexdocs.pm/cachex)
 
 #### ETS Adapter
@@ -176,7 +180,7 @@ When no cache mode is specified, Lotus automatically caches results:
 
 ```elixir
 # Uses cache if available, otherwise queries database and caches result
-{:ok, result} = Lotus.run_sql("SELECT * FROM products")
+{:ok, result} = Lotus.run_statement("SELECT * FROM products")
 ```
 
 ### Bypass Mode
@@ -185,7 +189,7 @@ Skip cache entirely - always query the database:
 
 ```elixir
 # Always hits database, never reads from or writes to cache
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [], cache: :bypass)
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [], cache: :bypass)
 ```
 
 **Use cases:**
@@ -200,7 +204,7 @@ Execute query and update cache with fresh results:
 
 ```elixir
 # Executes query AND updates cache with new result
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [], cache: :refresh)
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [], cache: :refresh)
 ```
 
 **Use cases:**
@@ -217,7 +221,7 @@ Choose a specific cache profile for a query:
 
 ```elixir
 # Use the 'schema' profile (longer TTL)
-{:ok, tables} = Lotus.run_sql("SELECT name FROM sqlite_master", [], cache: [profile: :schema])
+{:ok, tables} = Lotus.run_statement("SELECT name FROM sqlite_master", [], cache: [profile: :schema])
 ```
 
 ### TTL Override
@@ -226,7 +230,7 @@ Override the default TTL for specific queries:
 
 ```elixir
 # Cache for exactly 2 minutes regardless of profile
-{:ok, result} = Lotus.run_sql("SELECT * FROM users", [], cache: [ttl_ms: 120_000])
+{:ok, result} = Lotus.run_statement("SELECT * FROM users", [], cache: [ttl_ms: 120_000])
 ```
 
 ### Tag-Based Caching
@@ -235,7 +239,7 @@ Tag cache entries for selective invalidation:
 
 ```elixir
 # Tag this cache entry
-{:ok, user} = Lotus.run_sql("SELECT * FROM users WHERE id = $1", [123],
+{:ok, user} = Lotus.run_statement("SELECT * FROM users WHERE id = $1", [123],
   cache: [tags: ["user:123", "user_data"]])
 
 # Later, invalidate all entries with these tags
@@ -247,7 +251,7 @@ Lotus.Cache.invalidate_tags(["user:123"])
 You can combine multiple cache options:
 
 ```elixir
-{:ok, result} = Lotus.run_sql("SELECT * FROM products", [],
+{:ok, result} = Lotus.run_statement("SELECT * FROM products", [],
   cache: [
     profile: :reports,
     ttl_ms: 600_000,  # Override profile TTL
@@ -403,7 +407,7 @@ This is useful when visibility rules change for a specific scope (e.g. a tenant'
 
 `invalidate_scope/1` accepts any non-nil term and returns `:ok`. Passing `nil` is a no-op (there is no scope tag to invalidate).
 
-When passing `:scope` to query execution (`run_query/2`, `run_sql/3`), the scope is hashed into the result cache key so different scopes produce independent cached results. This is important when the database uses row-level security (RLS) policies, middleware rewrites queries per-scope, or a `SET ROLE` / session variable changes what data the query sees.
+When passing `:scope` to query execution (`run_query/2`, `run_statement/3`), the scope is hashed into the result cache key so different scopes produce independent cached results. This is important when the database uses row-level security (RLS) policies, middleware rewrites queries per-scope, or a `SET ROLE` / session variable changes what data the query sees.
 
 ## Working with run_query
 
@@ -473,7 +477,7 @@ Pre-populate cache with commonly used queries:
 
 ```elixir
 # During application startup or scheduled jobs
-{:ok, _} = Lotus.run_sql("SELECT * FROM lookup_tables", [], cache: :refresh)
+{:ok, _} = Lotus.run_statement("SELECT * FROM lookup_tables", [], cache: :refresh)
 {:ok, _} = Lotus.run_query(dashboard_query_id, cache: :refresh)
 ```
 
@@ -557,7 +561,7 @@ Lotus.invalidate_scope(%{tenant_id: tenant.id})
 3. **Verify identical queries**: Cache keys are generated from exact SQL + params
 4. **Check TTL**: Ensure cache hasn't expired between calls
 
-**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually mean the `:cache` adapter isn't configured (so no backend was started) or the `:lotus` application failed to boot.
+**Common Error**: `** (ArgumentError) argument error` or `:noproc` errors usually mean the `:lotus` application failed to boot. Since the ETS cache GenServer is always started by the supervisor, cache tables should be available as long as `:lotus` is running.
 
 ### Memory Issues
 

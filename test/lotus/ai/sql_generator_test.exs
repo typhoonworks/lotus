@@ -7,7 +7,7 @@ defmodule Lotus.AI.SQLGeneratorTest do
     setup do
       setup_mocks()
 
-      stub(Lotus.Sources, :source_type, fn _ -> :postgres end)
+      stub(Lotus.Source, :source_type, fn _ -> :postgres end)
       stub(Lotus.Schema, :list_tables, fn _ -> {:ok, table_list()} end)
 
       :ok

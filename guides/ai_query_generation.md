@@ -236,7 +236,7 @@ IO.puts("Generated SQL:")
 IO.puts(result.sql)
 
 # Review before executing:
-Lotus.run_sql(result.sql, [], repo: repo)
+Lotus.run_statement(result.sql, [], repo: repo)
 ```
 
 ## Visibility and Security
@@ -367,7 +367,7 @@ conversation = Conversation.add_assistant_response(
 )
 
 # If the query fails, add the error
-case Lotus.run_sql(result.sql, [], repo: "postgres") do
+case Lotus.run_statement(result.sql, [], repo: "postgres") do
   {:ok, _} ->
     :success
   {:error, error} ->

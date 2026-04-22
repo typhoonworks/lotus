@@ -55,7 +55,7 @@ defmodule Lotus.MiddlewareCacheInteractionTest do
 
   setup do
     Mimic.copy(Lotus.Config)
-    Mimic.copy(Lotus.Sources)
+    Mimic.copy(Lotus.Source)
     Mimic.copy(Lotus.Source.Adapter)
     Mimic.copy(Lotus.Visibility)
 
@@ -71,7 +71,7 @@ defmodule Lotus.MiddlewareCacheInteractionTest do
     |> stub(:cache_key_builder, fn -> Lotus.Cache.KeyBuilder.Default end)
 
     # Resolve source name to our fake adapter
-    Lotus.Sources
+    Lotus.Source
     |> stub(:resolve!, fn _repo, _fallback -> @fake_adapter end)
 
     # Default schemas

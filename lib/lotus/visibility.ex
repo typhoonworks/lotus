@@ -192,7 +192,6 @@ defmodule Lotus.Visibility do
 
   alias Lotus.Config
   alias Lotus.Source.Adapter
-  alias Lotus.Sources.Default
   alias Lotus.Visibility.Policy
 
   @doc """
@@ -277,7 +276,7 @@ defmodule Lotus.Visibility do
 
   defp builtin_schema_denies(repo_name) do
     case resolve_adapter(repo_name) do
-      nil -> Default.builtin_schema_denies(nil)
+      nil -> Adapter.builtin_schema_denies()
       adapter -> Adapter.builtin_schema_denies(adapter)
     end
   end
@@ -313,7 +312,7 @@ defmodule Lotus.Visibility do
 
   defp builtin_table_denies(repo_name) do
     case resolve_adapter(repo_name) do
-      nil -> Default.builtin_denies(nil)
+      nil -> Adapter.builtin_denies()
       adapter -> Adapter.builtin_denies(adapter)
     end
   end

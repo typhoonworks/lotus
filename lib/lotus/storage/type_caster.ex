@@ -34,8 +34,6 @@ defmodule Lotus.Storage.TypeCaster do
 
   require Logger
 
-  alias Lotus.Storage.TypeMapper
-
   @doc """
   Cast a value to match the expected column type.
 
@@ -68,7 +66,7 @@ defmodule Lotus.Storage.TypeCaster do
   """
   @spec cast_value(
           value :: term(),
-          lotus_type :: TypeMapper.lotus_type() | String.t(),
+          lotus_type :: atom() | {:array, atom()} | String.t(),
           column_info :: %{column: String.t(), table: String.t()}
         ) :: {:ok, term()} | {:error, String.t()}
 
@@ -79,9 +77,15 @@ defmodule Lotus.Storage.TypeCaster do
         handler.cast(value, column_info)
 
       :not_found ->
-        # Map to Lotus type and use built-in casting
-        source_module = Map.get(column_info, :source_module)
-        lotus_type = TypeMapper.db_type_to_lotus_type(db_type, source_module)
+        alias Lotus.Source.Adapter
+
+        # Map to Lotus type via adapter and use built-in casting
+        lotus_type =
+          case Map.get(column_info, :adapter) do
+            %Adapter{} = adapter -> Adapter.db_type_to_lotus_type(adapter, db_type)
+            _ -> :text
+          end
+
         cast_value(value, lotus_type, column_info)
     end
   end
