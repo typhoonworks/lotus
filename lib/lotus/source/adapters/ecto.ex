@@ -192,14 +192,6 @@ defmodule Lotus.Source.Adapters.Ecto do
       def quote_identifier(_repo, identifier), do: @dialect.quote_identifier(identifier)
 
       @impl true
-      def param_placeholder(_repo, index, var, type),
-        do: @dialect.param_placeholder(index, var, type)
-
-      @impl true
-      def limit_offset_placeholders(_repo, limit_index, offset_index),
-        do: @dialect.limit_offset_placeholders(limit_index, offset_index)
-
-      @impl true
       def apply_filters(_repo, statement, filters),
         do: @dialect.apply_filters(statement, filters)
 
@@ -263,6 +255,14 @@ defmodule Lotus.Source.Adapters.Ecto do
       @impl true
       def needs_preflight?(_repo, statement),
         do: EctoAdapter.do_needs_preflight?(@dialect, statement)
+
+      @impl true
+      def substitute_variable(_repo, statement, var_name, value, type),
+        do: EctoAdapter.do_substitute_variable(@dialect, statement, var_name, value, type)
+
+      @impl true
+      def substitute_list_variable(_repo, statement, var_name, values, type),
+        do: EctoAdapter.do_substitute_list_variable(@dialect, statement, var_name, values, type)
     end
   end
 
@@ -483,16 +483,6 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @impl true
-  def param_placeholder(_repo, index, var, type) do
-    @default_dialect.param_placeholder(index, var, type)
-  end
-
-  @impl true
-  def limit_offset_placeholders(_repo, limit_index, offset_index) do
-    @default_dialect.limit_offset_placeholders(limit_index, offset_index)
-  end
-
-  @impl true
   def apply_filters(_repo, statement, filters) do
     @default_dialect.apply_filters(statement, filters)
   end
@@ -580,6 +570,14 @@ defmodule Lotus.Source.Adapters.Ecto do
   @impl true
   def needs_preflight?(_repo, statement),
     do: do_needs_preflight?(@default_dialect, statement)
+
+  @impl true
+  def substitute_variable(_repo, statement, var_name, value, type),
+    do: do_substitute_variable(@default_dialect, statement, var_name, value, type)
+
+  @impl true
+  def substitute_list_variable(_repo, statement, var_name, values, type),
+    do: do_substitute_list_variable(@default_dialect, statement, var_name, values, type)
 
   # ---------------------------------------------------------------------------
   # Callbacks — Source Identity
@@ -765,6 +763,49 @@ defmodule Lotus.Source.Adapters.Ecto do
   defp upcase_head(s, n) do
     {head, tail} = String.split_at(s, n)
     String.upcase(head) <> tail
+  end
+
+  # Scalar substitution for Ecto-backed adapters: append value to
+  # `statement.params`, replace the first `{{var_name}}` occurrence in
+  # `statement.text` with the dialect's placeholder at position `idx + 1`.
+  # Subsequent occurrences of the same variable are handled by further
+  # calls from the caller's reduce loop.
+  @doc false
+  def do_substitute_variable(
+        dialect,
+        %Statement{text: sql, params: params} = statement,
+        var_name,
+        value,
+        type
+      )
+      when is_binary(sql) do
+    idx = length(params) + 1
+    placeholder = dialect.param_placeholder(idx, var_name, type)
+    new_sql = String.replace(sql, "{{#{var_name}}}", placeholder, global: false)
+    {:ok, %{statement | text: new_sql, params: params ++ [value]}}
+  end
+
+  # List substitution: generate one placeholder per value, join with `, `,
+  # replace the first `{{var_name}}` occurrence with the group, and append
+  # all values to `statement.params` in order.
+  @doc false
+  def do_substitute_list_variable(
+        dialect,
+        %Statement{text: sql, params: params} = statement,
+        var_name,
+        values,
+        type
+      )
+      when is_binary(sql) and is_list(values) do
+    start_idx = length(params) + 1
+
+    placeholders =
+      values
+      |> Enum.with_index(start_idx)
+      |> Enum.map_join(", ", fn {_value, i} -> dialect.param_placeholder(i, var_name, type) end)
+
+    new_sql = String.replace(sql, "{{#{var_name}}}", placeholders, global: false)
+    {:ok, %{statement | text: new_sql, params: params ++ values}}
   end
 
   # ---------------------------------------------------------------------------

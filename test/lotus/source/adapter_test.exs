@@ -49,19 +49,50 @@ defmodule Lotus.Source.AdapterTest do
     def quote_identifier(_state, identifier), do: ~s("#{identifier}")
 
     @impl true
-    def param_placeholder(_state, index, _var, _type), do: "$#{index}"
-
-    @impl true
-    def limit_offset_placeholders(_state, limit_idx, offset_idx),
-      do: {"$#{limit_idx}", "$#{offset_idx}"}
-
-    @impl true
     def apply_filters(_state, %Statement{text: sql, params: params} = statement, _filters),
       do: %{statement | text: sql <> " WHERE 1=1", params: params}
 
     @impl true
     def apply_sorts(_state, %Statement{text: sql} = statement, _sorts),
       do: %{statement | text: sql <> " ORDER BY id"}
+
+    @impl true
+    def substitute_variable(
+          _state,
+          %Statement{text: sql, params: params} = statement,
+          var,
+          value,
+          type
+        ) do
+      send(self(), {:mock_substitute_variable, var, value, type})
+      placeholder = "<<#{var}:#{type}>>"
+
+      {:ok,
+       %{
+         statement
+         | text: String.replace(sql, "{{#{var}}}", placeholder),
+           params: params ++ [value]
+       }}
+    end
+
+    @impl true
+    def substitute_list_variable(
+          _state,
+          %Statement{text: sql, params: params} = statement,
+          var,
+          values,
+          type
+        ) do
+      send(self(), {:mock_substitute_list_variable, var, values, type})
+      placeholder = "<<#{var}[]:#{type}>>"
+
+      {:ok,
+       %{
+         statement
+         | text: String.replace(sql, "{{#{var}}}", placeholder),
+           params: params ++ values
+       }}
+    end
 
     @impl true
     def explain_plan(_state, sql, _params, _opts), do: {:ok, "Seq Scan on #{sql}"}
@@ -191,14 +222,6 @@ defmodule Lotus.Source.AdapterTest do
       assert result == :done
     end
 
-    test "param_placeholder/4 dispatches with state", %{adapter: adapter} do
-      assert "$1" == Adapter.param_placeholder(adapter, 1, "id", nil)
-    end
-
-    test "limit_offset_placeholders/3 dispatches with state", %{adapter: adapter} do
-      assert {"$1", "$2"} == Adapter.limit_offset_placeholders(adapter, 1, 2)
-    end
-
     test "apply_filters/3 dispatches with state", %{adapter: adapter} do
       statement = Adapter.apply_filters(adapter, Statement.new("SELECT 1"), [%{}])
       assert statement.text =~ "WHERE 1=1"
@@ -208,6 +231,60 @@ defmodule Lotus.Source.AdapterTest do
     test "apply_sorts/3 dispatches with state", %{adapter: adapter} do
       statement = Adapter.apply_sorts(adapter, Statement.new("SELECT 1"), [:id])
       assert statement.text =~ "ORDER BY id"
+    end
+
+    test "substitute_variable/5 dispatches with state", %{adapter: adapter} do
+      {:ok, statement} =
+        Adapter.substitute_variable(
+          adapter,
+          Statement.new("SELECT * FROM t WHERE id = {{id}}"),
+          "id",
+          42,
+          :integer
+        )
+
+      assert_received {:mock_substitute_variable, "id", 42, :integer}
+      assert statement.text == "SELECT * FROM t WHERE id = <<id:integer>>"
+      assert statement.params == [42]
+    end
+
+    test "substitute_list_variable/5 dispatches with state", %{adapter: adapter} do
+      {:ok, statement} =
+        Adapter.substitute_list_variable(
+          adapter,
+          Statement.new("SELECT * FROM t WHERE id IN ({{ids}})"),
+          "ids",
+          [1, 2, 3],
+          :integer
+        )
+
+      assert_received {:mock_substitute_list_variable, "ids", [1, 2, 3], :integer}
+      assert statement.text == "SELECT * FROM t WHERE id IN (<<ids[]:integer>>)"
+      assert statement.params == [1, 2, 3]
+    end
+
+    test "substitute_variable/5 returns {:error, :unsupported} when callback absent" do
+      stub = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert {:error, :unsupported} =
+               Adapter.substitute_variable(stub, Statement.new("x"), "v", 1, nil)
+    end
+
+    test "substitute_list_variable/5 returns {:error, :unsupported} when callback absent" do
+      stub = %Adapter{
+        name: "stub",
+        module: Lotus.Test.StubAdapter,
+        state: nil,
+        source_type: :other
+      }
+
+      assert {:error, :unsupported} =
+               Adapter.substitute_list_variable(stub, Statement.new("x"), "v", [1], nil)
     end
 
     test "builtin_denies/1 dispatches with state", %{adapter: adapter} do

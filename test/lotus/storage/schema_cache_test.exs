@@ -24,10 +24,8 @@ defmodule Lotus.Storage.SchemaCacheTest do
     def list_tables(_, _, _), do: {:ok, []}
     def resolve_table_schema(_, _, _), do: {:ok, nil}
     def quote_identifier(_, id), do: ~s("#{id}")
-    def param_placeholder(_, i, _, _), do: "$#{i}"
-    def limit_offset_placeholders(_, l, o), do: {"$#{l}", "$#{o}"}
-    def apply_filters(_, sql, params, _), do: {sql, params}
-    def apply_sorts(_, sql, _), do: sql
+    def apply_filters(_, statement, _), do: statement
+    def apply_sorts(_, statement, _), do: statement
     def explain_plan(_, _, _, _), do: {:ok, "plan"}
     def builtin_denies(_), do: []
     def builtin_schema_denies(_), do: []

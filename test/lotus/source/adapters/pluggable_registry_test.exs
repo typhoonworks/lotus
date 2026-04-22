@@ -41,10 +41,6 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     @impl true
     def quote_identifier(_, id), do: ~s("#{id}")
     @impl true
-    def param_placeholder(_, i, _, _), do: "$#{i}"
-    @impl true
-    def limit_offset_placeholders(_, l, o), do: {"$#{l}", "$#{o}"}
-    @impl true
     def apply_filters(_, statement, _), do: statement
     @impl true
     def apply_sorts(_, statement, _), do: statement
@@ -213,10 +209,6 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     # non-SQL adapters when no filters/sorts are supplied.
     @impl true
     def quote_identifier(_, id), do: id
-    @impl true
-    def param_placeholder(_, i, _, _), do: "$#{i}"
-    @impl true
-    def limit_offset_placeholders(_, l, o), do: {"$#{l}", "$#{o}"}
     @impl true
     def apply_filters(_, statement, _), do: statement
     @impl true

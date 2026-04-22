@@ -21,10 +21,6 @@ defmodule Lotus.Test.NoOpAdapter do
   @impl true
   def quote_identifier(_state, id), do: ~s("#{id}")
   @impl true
-  def param_placeholder(_state, index, _var, _type), do: "$#{index}"
-  @impl true
-  def limit_offset_placeholders(_state, li, oi), do: {"$#{li}", "$#{oi}"}
-  @impl true
   def apply_filters(_state, statement, _filters), do: statement
   @impl true
   def apply_sorts(_state, statement, _sorts), do: statement
@@ -75,10 +71,6 @@ defmodule Lotus.Test.StubAdapter do
   def resolve_table_schema(_state, _table, _schemas), do: {:ok, nil}
   @impl true
   def quote_identifier(_state, id), do: ~s("#{id}")
-  @impl true
-  def param_placeholder(_state, index, _var, _type), do: "$#{index}"
-  @impl true
-  def limit_offset_placeholders(_state, li, oi), do: {"$#{li}", "$#{oi}"}
   @impl true
   def apply_filters(_state, statement, _filters), do: statement
   @impl true

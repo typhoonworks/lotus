@@ -93,16 +93,6 @@ defmodule Lotus.Source.Adapters.EctoTest do
       adapter = EctoAdapter.wrap("main", Repo)
       assert ~s("users") == Adapter.quote_identifier(adapter, "users")
     end
-
-    test "param_placeholder/3 uses Postgres positional params" do
-      adapter = EctoAdapter.wrap("main", Repo)
-      assert "$1" == Adapter.param_placeholder(adapter, 1, "id", nil)
-    end
-
-    test "limit_offset_placeholders/2 uses Postgres positional params" do
-      adapter = EctoAdapter.wrap("main", Repo)
-      assert {"$1", "$2"} == Adapter.limit_offset_placeholders(adapter, 1, 2)
-    end
   end
 
   describe "safety callbacks" do

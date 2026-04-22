@@ -19,11 +19,12 @@ defmodule Lotus.Source.Adapter do
     * **Query execution** — `execute_query/4`, `transaction/3`
     * **Introspection** — `list_schemas/1`, `list_tables/3`, `get_table_schema/3`,
       `resolve_table_schema/3`
-    * **SQL generation** — `quote_identifier/2`, `param_placeholder/4`,
-      `limit_offset_placeholders/3`, `explain_plan/4`
+    * **SQL generation** — `quote_identifier/2`, `explain_plan/4`
     * **Pipeline** — `transform_statement/2`, `transform_bound_query/3`,
       `apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
-      `needs_preflight?/2`, `sanitize_query/3`, `extract_accessed_resources/2`
+      `needs_preflight?/2`, `sanitize_query/3`,
+      `substitute_variable/5`, `substitute_list_variable/5`,
+      `extract_accessed_resources/2`
     * **Safety & visibility** — `builtin_denies/1`, `builtin_schema_denies/1`,
       `default_schemas/1`
     * **Lifecycle** — `health_check/1`, `disconnect/1`
@@ -113,19 +114,6 @@ defmodule Lotus.Source.Adapter do
 
   @doc "Quote a SQL identifier (column, table, schema name) using source-specific syntax."
   @callback quote_identifier(state :: term(), String.t()) :: String.t()
-
-  @doc "Return the parameter placeholder for a variable at the given 1-based index."
-  @callback param_placeholder(
-              state :: term(),
-              index :: pos_integer(),
-              var :: String.t(),
-              type :: atom() | nil
-            ) ::
-              String.t()
-
-  @doc "Return `{limit_placeholder, offset_placeholder}` for LIMIT/OFFSET clauses."
-  @callback limit_offset_placeholders(state :: term(), pos_integer(), pos_integer()) ::
-              {String.t(), String.t()}
 
   @doc "Apply filters to the statement, returning a new statement with the filters baked in."
   @callback apply_filters(state :: term(), statement :: Statement.t(), filters :: list()) ::
@@ -255,6 +243,66 @@ defmodule Lotus.Source.Adapter do
   """
   @callback needs_preflight?(state :: term(), statement :: Statement.t()) :: boolean()
 
+  @doc """
+  Substitute a `{{var_name}}` placeholder in the statement with the given
+  value, returning a new statement.
+
+  Adapters own their substitution strategy because it depends on the query
+  language:
+
+    * SQL (prepared-statement) drivers add a placeholder (`$1`, `?`, ...) to
+      `statement.text`, append the value to `statement.params`, and leave
+      binding to the driver.
+    * JSON / DSL adapters (Elasticsearch, Mongo) inline the value as a
+      properly-escaped literal inside `statement.text`.
+
+  `value` has already been type-cast by Lotus core. `type` is the resolved
+  Lotus internal type atom (e.g. `:integer`, `:uuid`) — adapters that care
+  about type-specific placeholders use it; others may ignore it.
+
+  Return `{:error, :unsupported}` when the adapter has no `{{var}}` mental
+  model (e.g. an adapter whose statement is a fully pre-built term and does
+  not accept user variables at all).
+
+  **Security note.** Adapters that inline values are the only defense
+  against injection at this layer. Never interpolate raw strings —
+  delegate to `Lotus.JSON.encode!/1` or an equivalent escaper for the target
+  language.
+
+  Default (when not implemented): `{:error, :unsupported}`.
+  """
+  @callback substitute_variable(
+              state :: term(),
+              statement :: Statement.t(),
+              var_name :: String.t(),
+              value :: term(),
+              type :: atom() | nil
+            ) ::
+              {:ok, Statement.t()} | {:error, term()}
+
+  @doc """
+  Substitute a `{{var_name}}` list-variable placeholder with the given list
+  of values, returning a new statement.
+
+  Adapters choose the natural shape for their query language: SQL expands
+  into a placeholder group (`$1, $2, $3`); JSON DSLs emit a JSON array.
+  Callers must not rely on the substituted text form beyond "the variable
+  has been expanded into the statement's native list representation".
+
+  `values` is a non-empty list of already-cast values. `type` is the
+  resolved Lotus internal type atom shared by all list elements.
+
+  Default (when not implemented): `{:error, :unsupported}`.
+  """
+  @callback substitute_list_variable(
+              state :: term(),
+              statement :: Statement.t(),
+              var_name :: String.t(),
+              values :: [term()],
+              type :: atom() | nil
+            ) ::
+              {:ok, Statement.t()} | {:error, term()}
+
   # ---------------------------------------------------------------------------
   # Callbacks — Safety & Visibility
   # ---------------------------------------------------------------------------
@@ -363,6 +411,8 @@ defmodule Lotus.Source.Adapter do
     extract_accessed_resources: 2,
     apply_pagination: 3,
     needs_preflight?: 2,
+    substitute_variable: 5,
+    substitute_list_variable: 5,
     query_language: 1,
     hierarchy_label: 1,
     example_query: 3,
@@ -582,16 +632,41 @@ defmodule Lotus.Source.Adapter do
     mod.quote_identifier(state, identifier)
   end
 
-  @doc "Return the parameter placeholder via the adapter."
-  @spec param_placeholder(t(), pos_integer(), String.t(), atom() | nil) :: String.t()
-  def param_placeholder(%__MODULE__{module: mod, state: state}, index, var, type) do
-    mod.param_placeholder(state, index, var, type)
+  @doc """
+  Substitute a `{{var}}` scalar variable via the adapter. Returns
+  `{:error, :unsupported}` when the adapter does not implement the callback.
+  """
+  @spec substitute_variable(t(), Statement.t(), String.t(), term(), atom() | nil) ::
+          {:ok, Statement.t()} | {:error, term()}
+  def substitute_variable(
+        %__MODULE__{module: mod, state: state},
+        %Statement{} = statement,
+        var_name,
+        value,
+        type
+      ) do
+    if function_exported?(mod, :substitute_variable, 5),
+      do: mod.substitute_variable(state, statement, var_name, value, type),
+      else: {:error, :unsupported}
   end
 
-  @doc "Return LIMIT/OFFSET placeholders via the adapter."
-  @spec limit_offset_placeholders(t(), pos_integer(), pos_integer()) :: {String.t(), String.t()}
-  def limit_offset_placeholders(%__MODULE__{module: mod, state: state}, limit_index, offset_index) do
-    mod.limit_offset_placeholders(state, limit_index, offset_index)
+  @doc """
+  Substitute a `{{var}}` list variable via the adapter. Returns
+  `{:error, :unsupported}` when the adapter does not implement the callback.
+  """
+  @spec substitute_list_variable(t(), Statement.t(), String.t(), [term()], atom() | nil) ::
+          {:ok, Statement.t()} | {:error, term()}
+  def substitute_list_variable(
+        %__MODULE__{module: mod, state: state},
+        %Statement{} = statement,
+        var_name,
+        values,
+        type
+      )
+      when is_list(values) do
+    if function_exported?(mod, :substitute_list_variable, 5),
+      do: mod.substitute_list_variable(state, statement, var_name, values, type),
+      else: {:error, :unsupported}
   end
 
   @doc "Apply filters to a statement via the adapter. Empty filters short-circuit."
