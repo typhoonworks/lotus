@@ -67,7 +67,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   @callback list_tables(repo, schemas :: [String.t()], include_views? :: boolean()) ::
               [{schema :: String.t() | nil, table :: String.t()}]
 
-  @callback get_table_schema(repo, schema :: String.t() | nil, table :: String.t()) ::
+  @callback describe_table(repo, schema :: String.t() | nil, table :: String.t()) ::
               [
                 %{
                   name: String.t(),
@@ -78,7 +78,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
                 }
               ]
 
-  @callback resolve_table_schema(repo, table :: String.t(), schemas :: [String.t()]) ::
+  @callback resolve_table_namespace(repo, table :: String.t(), schemas :: [String.t()]) ::
               String.t() | nil
 
   # ---------------------------------------------------------------------------

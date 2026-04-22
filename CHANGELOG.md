@@ -43,6 +43,14 @@
 
 ### Breaking
 
+- **Introspection callback renames — eliminate the "schema" double meaning.** The word "schema" was used with two different meanings in the introspection callback set (namespace vs. table column definitions). Hard renames, no alias:
+  - `@callback get_table_schema/3` → `@callback describe_table/3` on `Lotus.Source.Adapter`. Callback, dispatch wrapper, all 4 Ecto dialect impls, and the middle-layer `Lotus.Schema.get_table_schema/3` all renamed.
+  - `@callback resolve_table_schema/3` → `@callback resolve_table_namespace/3` — "schema" was the namespace here, and the new name makes that explicit (distinct from the table-description callback).
+  - Top-level facade `Lotus.get_table_schema/3` → `Lotus.describe_table/3`.
+  - AI action module `Lotus.AI.Actions.GetTableSchema` → `Lotus.AI.Actions.DescribeTable` (tool name + file + references). LLM prompts + docs updated to match.
+  - Middleware event `:after_get_table_schema` → `:after_describe_table`. Host middleware plugs subscribing to the old event name must update.
+  - Private helpers `get_table_schema_cached` → `describe_table_cached`, `resolve_table_schema_with_cache` → `resolve_table_namespace_with_cache`.
+  - `list_schemas/1` and `list_tables/3` are **unchanged** — "schemas" = namespaces is widely understood adapter terminology and renaming those would lose familiarity without the same disambiguation gain.
 - **Deprecations removed. No more `:data_repos` / `:default_repo` config keys, no more `*_repo*` helpers.** `Lotus.data_repos/0`, `get_data_repo!/1`, `list_data_repo_names/0`, `default_data_repo/0`, `Lotus.Config.data_repos/0`, `get_data_repo!/1`, `list_data_repo_names/0`, `default_data_repo/0`, `rules_for_repo_name/1`, `schema_rules_for_repo_name/1`, `column_rules_for_repo_name/1` all removed. `Lotus.Config.normalize_deprecated_keys/1` also removed — passing `:data_repos` or `:default_repo` now fails validation instead of emitting a warning. `Lotus.run_sql/3` removed (use `Lotus.run_statement/3`).
 - **Config key renamed: `:ecto_repo` → `:storage_repo`.** Update your `config :lotus, ...` block. Accessor names (`Lotus.repo/0`, `Lotus.Config.repo!/0`) unchanged. No deprecation alias.
 - **Cache tag prefix renamed: `"repo:<name>"` → `"source:<name>"`.** Pre-v1 cached entries (discovery + result) won't be found after upgrade. This is not a correctness bug — stale entries simply miss and get re-seeded on the next read. Custom `Lotus.Cache.KeyBuilder` implementations and middleware that tag cache entries must update their prefix.

@@ -127,7 +127,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
          %{
            pattern: ~r/no such column/i,
            hint:
-             "Column doesn't exist. Use get_table_schema() to list real columns before retrying."
+             "Column doesn't exist. Use describe_table() to list real columns before retrying."
          },
          %{
            pattern: ~r/near ".*": syntax error/i,
@@ -205,7 +205,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   end
 
   @impl true
-  def get_table_schema(repo, _schema, table_name) do
+  def describe_table(repo, _schema, table_name) do
     # Use quote_identifier/1 (double-quote + escaped internal quotes) rather
     # than the strict identifier validator — list_tables/3 returns SQLite
     # names verbatim from sqlite_master, which accepts legal names the
@@ -246,7 +246,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   end
 
   @impl true
-  def resolve_table_schema(_repo, _table, _schemas) do
+  def resolve_table_namespace(_repo, _table, _schemas) do
     nil
   end
 

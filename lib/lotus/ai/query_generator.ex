@@ -131,7 +131,7 @@ defmodule Lotus.AI.QueryGenerator do
     [
       Tool.from_action(Actions.ListSchemas, bind: bind),
       Tool.from_action(Actions.ListTables, bind: bind),
-      Tool.from_action(Actions.GetTableSchema, bind: bind),
+      Tool.from_action(Actions.DescribeTable, bind: bind),
       Tool.from_action(Actions.GetColumnValues, bind: bind),
       Tool.from_action(Actions.ValidateSQL, bind: bind)
     ]

@@ -380,13 +380,13 @@ defmodule Lotus.MiddlewareTest do
     end
 
     @tag :sqlite
-    test "get_table_schema passes context through" do
+    test "describe_table passes context through" do
       Middleware.compile(%{
-        after_get_table_schema: [{ContextCapturePlug, []}]
+        after_describe_table: [{ContextCapturePlug, []}]
       })
 
       assert {:ok, _} =
-               Lotus.get_table_schema("sqlite", "products", context: %{user: "dave@example.com"})
+               Lotus.describe_table("sqlite", "products", context: %{user: "dave@example.com"})
 
       assert_received {:middleware_context, %{user: "dave@example.com"}}
     end
@@ -422,13 +422,13 @@ defmodule Lotus.MiddlewareTest do
     end
 
     @tag :sqlite
-    test "fires for :get_table_schema with kind and result in payload" do
+    test "fires for :describe_table with kind and result in payload" do
       Middleware.compile(%{
         after_discover: [{KindDispatchPlug, []}]
       })
 
-      assert {:ok, columns} = Lotus.get_table_schema("sqlite", "products")
-      assert_received {:dispatched, :get_table_schema, ^columns}
+      assert {:ok, columns} = Lotus.describe_table("sqlite", "products")
+      assert_received {:dispatched, :describe_table, ^columns}
     end
 
     test "fires for :list_relations with kind and result in payload" do

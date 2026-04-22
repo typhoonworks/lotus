@@ -56,7 +56,7 @@ defmodule Lotus.AI.Prompts.QueryGenerationTest do
       prompt = QueryGeneration.system_prompt(pg_context(), [])
 
       assert prompt =~ "list_tables()"
-      assert prompt =~ "get_table_schema(table_name)"
+      assert prompt =~ "describe_table(table_name)"
     end
 
     test "instructs on handling non-SQL questions" do

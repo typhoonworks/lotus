@@ -27,7 +27,7 @@ defmodule Lotus.AI.ErrorDetector do
       # => :column_not_found
 
       error_context.suggestions
-      # => ["Use get_table_schema() to see available columns", ...]
+      # => ["Use describe_table() to see available columns", ...]
   """
 
   @type error_type ::
@@ -72,7 +72,7 @@ defmodule Lotus.AI.ErrorDetector do
       "column 'status' does not exist"
       iex> result.failed_sql
       "SELECT status FROM users"
-      iex> Enum.any?(result.suggestions, &String.contains?(&1, "get_table_schema"))
+      iex> Enum.any?(result.suggestions, &String.contains?(&1, "describe_table"))
       true
 
   ## Adapter-supplied hints
@@ -180,12 +180,12 @@ defmodule Lotus.AI.ErrorDetector do
         table_list = Enum.join(tables, "', '")
 
         [
-          "Use get_table_schema('#{Enum.at(tables, 0)}') to see the actual column names for tables you've analyzed: '#{table_list}'",
+          "Use describe_table('#{Enum.at(tables, 0)}') to see the actual column names for tables you've analyzed: '#{table_list}'",
           "The column might have a different name (check for similar names, pluralization, or prefixes)"
         ]
       else
         [
-          "Use get_table_schema() to see the actual column names for the table you're querying",
+          "Use describe_table() to see the actual column names for the table you're querying",
           "The column name might be different (e.g., with underscores, different spelling, or a prefix)"
         ]
       end

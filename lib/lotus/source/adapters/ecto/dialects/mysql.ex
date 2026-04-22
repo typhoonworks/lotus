@@ -208,7 +208,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
          %{
            pattern: ~r/Unknown column '[^']+' in/i,
            hint:
-             "Column doesn't exist. Use get_table_schema() to list real columns before retrying."
+             "Column doesn't exist. Use describe_table() to list real columns before retrying."
          },
          %{
            pattern: ~r/You have an error in your SQL syntax/i,
@@ -323,7 +323,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
-  def get_table_schema(repo, schema, table) do
+  def describe_table(repo, schema, table) do
     # COLUMN_TYPE carries the full declaration (e.g. "tinyint(1)", "binary(16)",
     # "varchar(255)", "decimal(10,2)") that db_type_to_lotus_type/1 pattern-matches
     # on. DATA_TYPE strips the precision/length, which would silently make the
@@ -367,9 +367,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
-  def resolve_table_schema(_repo, _table, []), do: nil
+  def resolve_table_namespace(_repo, _table, []), do: nil
 
-  def resolve_table_schema(repo, table, schemas) do
+  def resolve_table_namespace(repo, table, schemas) do
     placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
 
     sql = """

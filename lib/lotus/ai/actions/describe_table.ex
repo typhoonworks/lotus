@@ -1,4 +1,4 @@
-defmodule Lotus.AI.Actions.GetTableSchema do
+defmodule Lotus.AI.Actions.DescribeTable do
   @moduledoc """
   Retrieves column details for a specific table.
 
@@ -12,7 +12,7 @@ defmodule Lotus.AI.Actions.GetTableSchema do
   alias Lotus.Source.Adapter
 
   @impl true
-  def name, do: "get_table_schema"
+  def name, do: "describe_table"
 
   @impl true
   def description,
@@ -68,12 +68,12 @@ defmodule Lotus.AI.Actions.GetTableSchema do
   end
 
   defp fetch_schema(data_source, nil, table, original_name) do
-    format_result(Lotus.Schema.get_table_schema(data_source, table), original_name)
+    format_result(Lotus.Schema.describe_table(data_source, table), original_name)
   end
 
   defp fetch_schema(data_source, schema, table, original_name) do
     format_result(
-      Lotus.Schema.get_table_schema(data_source, table, schema: schema),
+      Lotus.Schema.describe_table(data_source, table, schema: schema),
       original_name
     )
   end

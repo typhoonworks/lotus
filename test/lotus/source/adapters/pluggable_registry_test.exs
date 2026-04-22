@@ -35,9 +35,9 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     @impl true
     def list_tables(_, _, _), do: {:ok, []}
     @impl true
-    def get_table_schema(_, _, _), do: {:ok, []}
+    def describe_table(_, _, _), do: {:ok, []}
     @impl true
-    def resolve_table_schema(_, _, _), do: {:ok, nil}
+    def resolve_table_namespace(_, _, _), do: {:ok, nil}
     @impl true
     def quote_identifier(_, id), do: ~s("#{id}")
     @impl true
@@ -201,9 +201,9 @@ defmodule Lotus.Source.Adapters.PluggableRegistryTest do
     @impl true
     def list_tables(_, _, _), do: {:ok, [{nil, "messages"}]}
     @impl true
-    def get_table_schema(_, _, _), do: {:ok, []}
+    def describe_table(_, _, _), do: {:ok, []}
     @impl true
-    def resolve_table_schema(_, _, _), do: {:ok, nil}
+    def resolve_table_namespace(_, _, _), do: {:ok, nil}
 
     # SQL-generation stubs — trivial because the pipeline runs them even for
     # non-SQL adapters when no filters/sorts are supplied.

@@ -17,7 +17,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
     * `extract_accessed_resources/4` is not implemented, so
       `Lotus.Preflight.authorize/4` short-circuits to `:ok` — visibility rules
       are **not** checked against the tables the query touches.
-    * `list_schemas/1`, `list_tables/3`, and `get_table_schema/3` return
+    * `list_schemas/1`, `list_tables/3`, and `describe_table/3` return
       empty lists — the schema browser will be blank.
     * `default_schemas/1` returns `["public"]` (Postgres-specific) and
       `builtin_denies/1` is a shotgun union of Postgres + MySQL + SQLite
@@ -158,7 +158,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   end
 
   @impl true
-  def get_table_schema(_repo, _schema, _table) do
+  def describe_table(_repo, _schema, _table) do
     []
   end
 
@@ -168,7 +168,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   end
 
   @impl true
-  def resolve_table_schema(_repo, _table, _schemas) do
+  def resolve_table_namespace(_repo, _table, _schemas) do
     nil
   end
 

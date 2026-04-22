@@ -183,7 +183,7 @@ defmodule Lotus.TelemetryTest do
     end
 
     @tag :sqlite
-    test "emits start and stop events for get_table_schema" do
+    test "emits start and stop events for describe_table" do
       ref = make_ref()
       pid = self()
 
@@ -199,13 +199,13 @@ defmodule Lotus.TelemetryTest do
         nil
       )
 
-      {:ok, _schema} = Lotus.Schema.get_table_schema("sqlite", "products")
+      {:ok, _schema} = Lotus.Schema.describe_table("sqlite", "products")
 
       assert_received {:telemetry, [:lotus, :schema, :introspection, :start], _,
-                       %{operation: :get_table_schema, repo: "sqlite"}}
+                       %{operation: :describe_table, repo: "sqlite"}}
 
       assert_received {:telemetry, [:lotus, :schema, :introspection, :stop], %{duration: _},
-                       %{operation: :get_table_schema, repo: "sqlite", result: :ok}}
+                       %{operation: :describe_table, repo: "sqlite", result: :ok}}
 
       :telemetry.detach("#{inspect(ref)}")
     end

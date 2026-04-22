@@ -176,15 +176,15 @@ defmodule Lotus.Source.Adapters.Ecto do
       end
 
       @impl true
-      def get_table_schema(repo, schema, table) do
-        {:ok, @dialect.get_table_schema(repo, schema, table)}
+      def describe_table(repo, schema, table) do
+        {:ok, @dialect.describe_table(repo, schema, table)}
       rescue
         e -> {:error, Exception.message(e)}
       end
 
       @impl true
-      def resolve_table_schema(repo, table, schemas) do
-        {:ok, @dialect.resolve_table_schema(repo, table, schemas)}
+      def resolve_table_namespace(repo, table, schemas) do
+        {:ok, @dialect.resolve_table_namespace(repo, table, schemas)}
       rescue
         e -> {:error, Exception.message(e)}
       end
@@ -490,15 +490,15 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @impl true
-  def get_table_schema(repo, schema, table) do
-    {:ok, @default_dialect.get_table_schema(repo, schema, table)}
+  def describe_table(repo, schema, table) do
+    {:ok, @default_dialect.describe_table(repo, schema, table)}
   rescue
     e -> {:error, Exception.message(e)}
   end
 
   @impl true
-  def resolve_table_schema(repo, table, schemas) do
-    {:ok, @default_dialect.resolve_table_schema(repo, table, schemas)}
+  def resolve_table_namespace(repo, table, schemas) do
+    {:ok, @default_dialect.resolve_table_namespace(repo, table, schemas)}
   rescue
     e -> {:error, Exception.message(e)}
   end

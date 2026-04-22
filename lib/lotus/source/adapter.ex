@@ -17,8 +17,8 @@ defmodule Lotus.Source.Adapter do
   required callbacks. Callbacks fall into several groups:
 
     * **Query execution** — `execute_query/4`, `transaction/3`
-    * **Introspection** — `list_schemas/1`, `list_tables/3`, `get_table_schema/3`,
-      `resolve_table_schema/3`
+    * **Introspection** — `list_schemas/1`, `list_tables/3`, `describe_table/3`,
+      `resolve_table_namespace/3`
     * **SQL generation** — `quote_identifier/2`, `query_plan/4`
     * **Pipeline** — `transform_statement/2`, `transform_bound_query/3`,
       `apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
@@ -112,11 +112,11 @@ defmodule Lotus.Source.Adapter do
               {:ok, [{schema :: String.t() | nil, table :: String.t()}]} | {:error, term()}
 
   @doc "Return column definitions for a specific table."
-  @callback get_table_schema(state :: term(), schema :: String.t() | nil, table :: String.t()) ::
+  @callback describe_table(state :: term(), schema :: String.t() | nil, table :: String.t()) ::
               {:ok, [column_def()]} | {:error, term()}
 
   @doc "Resolve which schema contains the named table."
-  @callback resolve_table_schema(state :: term(), table :: String.t(), schemas :: [String.t()]) ::
+  @callback resolve_table_namespace(state :: term(), table :: String.t(), schemas :: [String.t()]) ::
               {:ok, String.t() | nil} | {:error, term()}
 
   # ---------------------------------------------------------------------------
@@ -744,17 +744,17 @@ defmodule Lotus.Source.Adapter do
   end
 
   @doc "Get column definitions for a table via the adapter."
-  @spec get_table_schema(t(), String.t() | nil, String.t()) ::
+  @spec describe_table(t(), String.t() | nil, String.t()) ::
           {:ok, [column_def()]} | {:error, term()}
-  def get_table_schema(%__MODULE__{module: mod, state: state}, schema, table) do
-    mod.get_table_schema(state, schema, table)
+  def describe_table(%__MODULE__{module: mod, state: state}, schema, table) do
+    mod.describe_table(state, schema, table)
   end
 
   @doc "Resolve which schema contains a table via the adapter."
-  @spec resolve_table_schema(t(), String.t(), [String.t()]) ::
+  @spec resolve_table_namespace(t(), String.t(), [String.t()]) ::
           {:ok, String.t() | nil} | {:error, term()}
-  def resolve_table_schema(%__MODULE__{module: mod, state: state}, table, schemas) do
-    mod.resolve_table_schema(state, table, schemas)
+  def resolve_table_namespace(%__MODULE__{module: mod, state: state}, table, schemas) do
+    mod.resolve_table_namespace(state, table, schemas)
   end
 
   @doc "Get the execution plan for a query via the adapter."

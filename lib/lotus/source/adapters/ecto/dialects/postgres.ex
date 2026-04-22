@@ -121,7 +121,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
          %{
            pattern: ~r/column "[^"]+" does not exist/i,
            hint:
-             "The referenced column doesn't exist. Use get_table_schema() to list real columns before retrying."
+             "The referenced column doesn't exist. Use describe_table() to list real columns before retrying."
          },
          %{
            pattern: ~r/syntax error at or near/i,
@@ -223,7 +223,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def get_table_schema(repo, schema, table) do
+  def describe_table(repo, schema, table) do
     # Use EXISTS for the PK check rather than LEFT JOIN against
     # key_column_usage: a column participating in multiple constraints
     # (PK + UNIQUE index, FK + unique composite, etc.) would appear once
@@ -304,7 +304,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def resolve_table_schema(repo, table, schemas) do
+  def resolve_table_namespace(repo, table, schemas) do
     sql = """
     SELECT table_schema
     FROM information_schema.tables

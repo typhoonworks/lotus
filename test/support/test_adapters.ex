@@ -15,9 +15,9 @@ defmodule Lotus.Test.NoOpAdapter do
   @impl true
   def list_tables(_state, _schemas, _opts), do: {:ok, []}
   @impl true
-  def get_table_schema(_state, _schema, _table), do: {:ok, []}
+  def describe_table(_state, _schema, _table), do: {:ok, []}
   @impl true
-  def resolve_table_schema(_state, _table, _schemas), do: {:ok, nil}
+  def resolve_table_namespace(_state, _table, _schemas), do: {:ok, nil}
   @impl true
   def quote_identifier(_state, id), do: ~s("#{id}")
   @impl true
@@ -66,9 +66,9 @@ defmodule Lotus.Test.StubAdapter do
   @impl true
   def list_tables(_state, _schemas, _opts), do: {:ok, []}
   @impl true
-  def get_table_schema(_state, _schema, _table), do: {:ok, []}
+  def describe_table(_state, _schema, _table), do: {:ok, []}
   @impl true
-  def resolve_table_schema(_state, _table, _schemas), do: {:ok, nil}
+  def resolve_table_namespace(_state, _table, _schemas), do: {:ok, nil}
   @impl true
   def quote_identifier(_state, id), do: ~s("#{id}")
   @impl true

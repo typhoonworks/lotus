@@ -73,7 +73,7 @@ defmodule Lotus.AI.ErrorDetectorTest do
       assert result.error_message == "column 'status' does not exist"
       assert result.failed_sql == "SELECT status FROM users"
       assert result.suggestions != []
-      assert Enum.any?(result.suggestions, &String.contains?(&1, "get_table_schema"))
+      assert Enum.any?(result.suggestions, &String.contains?(&1, "describe_table"))
     end
 
     test "provides context for table not found errors" do
@@ -146,7 +146,7 @@ defmodule Lotus.AI.ErrorDetectorTest do
           %{tables_analyzed: ["users", "orders"]}
         )
 
-      assert Enum.any?(suggestions, &String.contains?(&1, "get_table_schema('users')"))
+      assert Enum.any?(suggestions, &String.contains?(&1, "describe_table('users')"))
       assert Enum.any?(suggestions, &String.contains?(&1, "different name"))
     end
 
@@ -159,7 +159,7 @@ defmodule Lotus.AI.ErrorDetectorTest do
           %{}
         )
 
-      assert Enum.any?(suggestions, &String.contains?(&1, "get_table_schema()"))
+      assert Enum.any?(suggestions, &String.contains?(&1, "describe_table()"))
       assert Enum.any?(suggestions, &String.contains?(&1, "might not exist"))
     end
 
@@ -264,7 +264,7 @@ defmodule Lotus.AI.ErrorDetectorTest do
         error_patterns: [
           %{
             pattern: ~r/column "(.+)" does not exist/i,
-            hint: "Adapter hint: run get_table_schema before retrying"
+            hint: "Adapter hint: run describe_table before retrying"
           }
         ]
       }
@@ -277,8 +277,8 @@ defmodule Lotus.AI.ErrorDetectorTest do
           ai_context
         )
 
-      assert hd(result.suggestions) == "Adapter hint: run get_table_schema before retrying"
-      assert Enum.any?(result.suggestions, &String.contains?(&1, "get_table_schema"))
+      assert hd(result.suggestions) == "Adapter hint: run describe_table before retrying"
+      assert Enum.any?(result.suggestions, &String.contains?(&1, "describe_table"))
     end
 
     test "falls back to generic suggestions when no pattern matches" do
@@ -319,7 +319,7 @@ defmodule Lotus.AI.ErrorDetectorTest do
       refute result.suggestions == []
 
       assert Enum.all?(result.suggestions, fn s ->
-               String.contains?(s, "get_table_schema") or
+               String.contains?(s, "describe_table") or
                  String.contains?(s, "column") or
                  String.contains?(s, "table") or
                  String.contains?(s, "Verify")

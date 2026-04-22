@@ -76,15 +76,15 @@ defmodule Lotus.Source.Adapters.EctoTest do
       assert is_list(tables)
     end
 
-    test "get_table_schema/3 returns {:ok, _} tuple" do
+    test "describe_table/3 returns {:ok, _} tuple" do
       adapter = EctoAdapter.wrap("main", Repo)
-      assert {:ok, columns} = Adapter.get_table_schema(adapter, "public", "lotus_queries")
+      assert {:ok, columns} = Adapter.describe_table(adapter, "public", "lotus_queries")
       assert is_list(columns)
     end
 
-    test "resolve_table_schema/3 returns {:ok, _} tuple" do
+    test "resolve_table_namespace/3 returns {:ok, _} tuple" do
       adapter = EctoAdapter.wrap("main", Repo)
-      assert {:ok, schema} = Adapter.resolve_table_schema(adapter, "lotus_queries", ["public"])
+      assert {:ok, schema} = Adapter.resolve_table_namespace(adapter, "lotus_queries", ["public"])
       assert schema == "public"
     end
   end

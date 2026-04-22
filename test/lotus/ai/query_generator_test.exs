@@ -77,7 +77,7 @@ defmodule Lotus.AI.QueryGeneratorTest do
         tool_names = Enum.map(tools, & &1.name)
         assert "list_schemas" in tool_names
         assert "list_tables" in tool_names
-        assert "get_table_schema" in tool_names
+        assert "describe_table" in tool_names
         assert "get_column_values" in tool_names
         assert "validate_sql" in tool_names
       end)

@@ -673,19 +673,19 @@ defmodule Lotus do
 
   ## Options
 
-  - `:context` — opaque value threaded into the `:after_get_table_schema`
+  - `:context` — opaque value threaded into the `:after_describe_table`
     and `:after_discover` middleware events.
   - `:scope` — opaque value passed to the visibility resolver and hashed
     into the cache key. See `Lotus.Visibility.Resolver`.
 
   ## Examples
 
-      {:ok, schema} = Lotus.get_table_schema("primary", "users")
-      {:ok, schema} = Lotus.get_table_schema("postgres", "customers", schema: "reporting")
-      {:ok, schema} = Lotus.get_table_schema(MyApp.DataRepo, "products", search_path: "analytics, public")
+      {:ok, schema} = Lotus.describe_table("primary", "users")
+      {:ok, schema} = Lotus.describe_table("postgres", "customers", schema: "reporting")
+      {:ok, schema} = Lotus.describe_table(MyApp.DataRepo, "products", search_path: "analytics, public")
   """
-  def get_table_schema(repo_or_name, table_name, opts \\ []),
-    do: Schema.get_table_schema(repo_or_name, table_name, opts)
+  def describe_table(repo_or_name, table_name, opts \\ []),
+    do: Schema.describe_table(repo_or_name, table_name, opts)
 
   @doc """
   Gets statistics for a specific table.

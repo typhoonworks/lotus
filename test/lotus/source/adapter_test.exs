@@ -32,7 +32,7 @@ defmodule Lotus.Source.AdapterTest do
     end
 
     @impl true
-    def get_table_schema(_state, _schema, _table) do
+    def describe_table(_state, _schema, _table) do
       {:ok,
        [
          %{name: "id", type: "integer", nullable: false, default: nil, primary_key: true},
@@ -41,7 +41,7 @@ defmodule Lotus.Source.AdapterTest do
     end
 
     @impl true
-    def resolve_table_schema(_state, _table, _schemas) do
+    def resolve_table_namespace(_state, _table, _schemas) do
       {:ok, "public"}
     end
 
@@ -208,14 +208,14 @@ defmodule Lotus.Source.AdapterTest do
       assert plan =~ "Seq Scan"
     end
 
-    test "get_table_schema/3 dispatches to module with state", %{adapter: adapter} do
-      assert {:ok, columns} = Adapter.get_table_schema(adapter, "public", "users")
+    test "describe_table/3 dispatches to module with state", %{adapter: adapter} do
+      assert {:ok, columns} = Adapter.describe_table(adapter, "public", "users")
       assert length(columns) == 2
       assert hd(columns).name == "id"
     end
 
-    test "resolve_table_schema/3 dispatches to module with state", %{adapter: adapter} do
-      assert {:ok, "public"} = Adapter.resolve_table_schema(adapter, "users", ["public"])
+    test "resolve_table_namespace/3 dispatches to module with state", %{adapter: adapter} do
+      assert {:ok, "public"} = Adapter.resolve_table_namespace(adapter, "users", ["public"])
     end
 
     test "transaction/3 dispatches to module with state", %{adapter: adapter} do
@@ -329,9 +329,9 @@ defmodule Lotus.Source.AdapterTest do
       @impl true
       def list_tables(_, _, _), do: {:ok, []}
       @impl true
-      def get_table_schema(_, _, _), do: {:ok, []}
+      def describe_table(_, _, _), do: {:ok, []}
       @impl true
-      def resolve_table_schema(_, _, _), do: {:ok, nil}
+      def resolve_table_namespace(_, _, _), do: {:ok, nil}
       @impl true
       def quote_identifier(_, id), do: id
       @impl true
@@ -448,9 +448,9 @@ defmodule Lotus.Source.AdapterTest do
       @impl true
       def list_tables(_, _, _), do: {:ok, []}
       @impl true
-      def get_table_schema(_, _, _), do: {:ok, []}
+      def describe_table(_, _, _), do: {:ok, []}
       @impl true
-      def resolve_table_schema(_, _, _), do: {:ok, nil}
+      def resolve_table_namespace(_, _, _), do: {:ok, nil}
       @impl true
       def quote_identifier(_, id), do: id
       @impl true
@@ -546,9 +546,9 @@ defmodule Lotus.Source.AdapterTest do
       @impl true
       def list_tables(_, _, _), do: {:ok, []}
       @impl true
-      def get_table_schema(_, _, _), do: {:ok, []}
+      def describe_table(_, _, _), do: {:ok, []}
       @impl true
-      def resolve_table_schema(_, _, _), do: {:ok, nil}
+      def resolve_table_namespace(_, _, _), do: {:ok, nil}
       @impl true
       def quote_identifier(_, id), do: id
       @impl true
@@ -656,9 +656,9 @@ defmodule Lotus.Source.AdapterTest do
         @impl true
         def list_tables(_, _, _), do: {:ok, []}
         @impl true
-        def get_table_schema(_, _, _), do: {:ok, []}
+        def describe_table(_, _, _), do: {:ok, []}
         @impl true
-        def resolve_table_schema(_, _, _), do: {:ok, nil}
+        def resolve_table_namespace(_, _, _), do: {:ok, nil}
         @impl true
         def quote_identifier(_, id), do: id
         @impl true

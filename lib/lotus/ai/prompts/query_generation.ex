@@ -60,13 +60,13 @@ defmodule Lotus.AI.Prompts.QueryGeneration do
     ## Tools:
     - `list_schemas()` - Get list of all database schemas
     - `list_tables()` - Get full table list with schema names
-    - `get_table_schema(table_name)` - Get columns for a table (use schema-qualified name if available)
+    - `describe_table(table_name)` - Get columns for a table (use schema-qualified name if available)
     - `get_column_values(table_name, column_name)` - Get distinct values for a column (e.g., status codes, categories)
     - `validate_sql(sql)` - Check statement syntax against the data source without executing it
 
     ## Workflow:
     1. Identify relevant tables for the question
-    2. Use `get_table_schema()` for those tables (with schema-qualified names)
+    2. Use `describe_table()` for those tables (with schema-qualified names)
     3. **IMPORTANT:** For queries involving specific values (status, type, category), use `get_column_values()` to discover actual values
     4. Validate required data exists
     5. Generate the statement and use `validate_sql()` to verify syntax before returning
