@@ -53,7 +53,7 @@ defmodule Lotus.AI.ErrorDetector do
 
   - `error_message` - The error message from the database
   - `sql` - The SQL query that failed (optional)
-  - `schema_context` - Context about tables analyzed (optional)
+  - `source_context` - Context about tables analyzed (optional)
 
   ## Returns
 
@@ -88,9 +88,9 @@ defmodule Lotus.AI.ErrorDetector do
   is the generic classification + suggestion flow.
   """
   @spec analyze_error(String.t(), String.t() | nil, map(), map() | nil) :: error_context()
-  def analyze_error(error_message, sql \\ nil, schema_context \\ %{}, ai_context \\ nil) do
+  def analyze_error(error_message, sql \\ nil, source_context \\ %{}, ai_context \\ nil) do
     error_type = classify_error(error_message)
-    generic_suggestions = suggest_fixes(error_type, error_message, sql, schema_context)
+    generic_suggestions = suggest_fixes(error_type, error_message, sql, source_context)
     adapter_hints = match_adapter_error_patterns(ai_context, error_message)
 
     %{
@@ -157,19 +157,19 @@ defmodule Lotus.AI.ErrorDetector do
   - `error_type` - Classified error type
   - `error_message` - Original error message
   - `sql` - Failed SQL query (optional)
-  - `schema_context` - Schema context map (optional)
+  - `source_context` - Source context map (optional)
 
   ## Returns
 
   List of actionable suggestion strings.
   """
   @spec suggest_fixes(error_type(), String.t(), String.t() | nil, map()) :: [String.t()]
-  def suggest_fixes(error_type, error_message, sql, schema_context)
+  def suggest_fixes(error_type, error_message, sql, source_context)
 
-  def suggest_fixes(:column_not_found, error_message, _sql, schema_context) do
+  def suggest_fixes(:column_not_found, error_message, _sql, source_context) do
     # Try to extract column name from error
     column_name = extract_identifier(error_message, "column")
-    tables = schema_context[:tables_analyzed] || []
+    tables = source_context[:tables_analyzed] || []
 
     base_suggestions = [
       "The column name in the error message might not exist in the table"
@@ -206,7 +206,7 @@ defmodule Lotus.AI.ErrorDetector do
     |> Enum.reject(&is_nil/1)
   end
 
-  def suggest_fixes(:table_not_found, error_message, _sql, _schema_context) do
+  def suggest_fixes(:table_not_found, error_message, _sql, _source_context) do
     table_name = extract_identifier(error_message, "table", "relation")
 
     base_suggestions = [
@@ -228,7 +228,7 @@ defmodule Lotus.AI.ErrorDetector do
     base_suggestions ++ table_suggestions
   end
 
-  def suggest_fixes(:syntax_error, error_message, sql, _schema_context) do
+  def suggest_fixes(:syntax_error, error_message, sql, _source_context) do
     base_suggestions = [
       "There's a SQL syntax error in the query",
       "Review the SQL syntax carefully - check for missing/extra commas, parentheses, or keywords"
@@ -255,7 +255,7 @@ defmodule Lotus.AI.ErrorDetector do
     |> Enum.reject(&is_nil/1)
   end
 
-  def suggest_fixes(:type_mismatch, _error_message, _sql, _schema_context) do
+  def suggest_fixes(:type_mismatch, _error_message, _sql, _source_context) do
     [
       "There's a data type mismatch in the query",
       "Check that you're comparing compatible types (e.g., don't compare strings to numbers without casting)",
@@ -264,7 +264,7 @@ defmodule Lotus.AI.ErrorDetector do
     ]
   end
 
-  def suggest_fixes(:ambiguous_column, error_message, _sql, _schema_context) do
+  def suggest_fixes(:ambiguous_column, error_message, _sql, _source_context) do
     column_name = extract_identifier(error_message, "column")
 
     base_suggestions = [
@@ -284,7 +284,7 @@ defmodule Lotus.AI.ErrorDetector do
     base_suggestions ++ column_suggestions
   end
 
-  def suggest_fixes(:permission_denied, _error_message, _sql, _schema_context) do
+  def suggest_fixes(:permission_denied, _error_message, _sql, _source_context) do
     [
       "You don't have permission to access this table or column",
       "Use list_tables() to see which tables are accessible",
@@ -293,7 +293,7 @@ defmodule Lotus.AI.ErrorDetector do
     ]
   end
 
-  def suggest_fixes(:unknown, error_message, _sql, _schema_context) do
+  def suggest_fixes(:unknown, error_message, _sql, _source_context) do
     [
       "An unexpected error occurred: #{error_message}",
       "Review the error message carefully and adjust the query accordingly",

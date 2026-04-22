@@ -51,15 +51,15 @@ defmodule Lotus.AI.Prompts.OptimizationTest do
       refute prompt =~ "## Execution Plan"
     end
 
-    test "includes schema context when provided" do
+    test "includes source context when provided" do
       prompt = Optimization.user_prompt("SELECT * FROM users", nil, "users: id, name, email")
-      assert prompt =~ "## Schema Context"
+      assert prompt =~ "## Source Context"
       assert prompt =~ "users: id, name, email"
     end
 
-    test "omits schema context when nil" do
+    test "omits source context when nil" do
       prompt = Optimization.user_prompt("SELECT * FROM users", nil, nil)
-      refute prompt =~ "## Schema Context"
+      refute prompt =~ "## Source Context"
     end
   end
 

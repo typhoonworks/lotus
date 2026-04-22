@@ -39,7 +39,7 @@ defmodule Lotus.AI.Prompts.Optimization do
     ## Response Format
 
     Respond with a JSON array of suggestion objects. Each suggestion must have:
-    - `"type"` — one of: `"index"`, `"rewrite"`, `"schema"`, `"configuration"`
+    - `"type"` — one of: `"index"`, `"rewrite"`, `"structure"`, `"configuration"`
     - `"impact"` — one of: `"high"`, `"medium"`, `"low"`
     - `"title"` — short summary (under 100 characters)
     - `"suggestion"` — detailed explanation of what to change and why
@@ -87,14 +87,14 @@ defmodule Lotus.AI.Prompts.Optimization do
 
   - `sql` - The SQL query to optimize
   - `execution_plan` - The execution plan string (from EXPLAIN)
-  - `schema_context` - Optional schema context string
+  - `source_context` - Optional source context string
   """
   @spec user_prompt(String.t(), String.t() | nil, String.t() | nil) :: String.t()
-  def user_prompt(sql, execution_plan, schema_context \\ nil) do
+  def user_prompt(sql, execution_plan, source_context \\ nil) do
     [
       "## SQL Query\n\n```sql\n#{sql}\n```",
       if(execution_plan, do: "\n\n## Execution Plan\n\n```\n#{execution_plan}\n```"),
-      if(schema_context, do: "\n\n## Schema Context\n\n#{schema_context}")
+      if(source_context, do: "\n\n## Source Context\n\n#{source_context}")
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join()
@@ -127,7 +127,7 @@ defmodule Lotus.AI.Prompts.Optimization do
     end
   end
 
-  @valid_types ~w(index rewrite schema configuration)
+  @valid_types ~w(index rewrite structure configuration)
   @valid_impacts ~w(high medium low)
 
   defp validate_suggestions(suggestions) do

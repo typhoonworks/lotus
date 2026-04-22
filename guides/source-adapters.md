@@ -542,18 +542,53 @@ For large function lists, extract into a dedicated `EditorConfig` submodule
 
 ## A Note on the "schema" Word
 
-Lotus's callback names use "schema" for two distinct concepts:
+Lotus's surface uses "schema" for two distinct concepts historically — in
+v1.0 we swept the column-definition sense out of public docs and
+identifiers, keeping only the namespace sense in callback names where the
+SQL-ecosystem convention is load-bearing.
 
-- `list_schemas/1`, `list_tables/3`, `default_schemas/1` — **namespaces**
-  (SQL `information_schema.schemata`). Non-SQL adapters that don't have a
-  namespace layer return `[]` from `list_schemas/1`.
-- `describe_table/3` — **column definitions** / table structure (Ecto sense).
+### What "schema" now means in Lotus
 
-The name clash is historical. In v1.0 we renamed `get_table_schema/3` to
-`describe_table/3` to reduce the collision; `list_schemas/1` and
-`list_tables/3` keep their SQL-centric names because they're widely
-understood. Non-SQL adapters treat `list_schemas/1` as "list namespaces"
-(which for a flat-namespace source is just `[]`).
+- **Namespace** — the SQL "database schema" (`information_schema.schemata`).
+  Callback names `list_schemas/1`, `list_tables/3`, `default_schemas/1`,
+  `resolve_table_namespace/3`, the `{schema, table}` tuple returned from
+  `list_tables/3`, and the `schema` parameter on `example_query/3` all use
+  this sense. Non-SQL adapters with a flat namespace return `[]` from
+  `list_schemas/1`.
+
+### Deliberately retained "schema" uses
+
+These are **not** the column-definition sense — they are a different
+established meaning and are kept for recognizability:
+
+- `@callback schema() :: keyword()` on `Lotus.AI.Action` and
+  `nimble_to_json_schema` on `Lotus.AI.Tool` — JSON Schema / NimbleOptions
+  sense.
+- Telemetry events `[:lotus, :schema, :introspection, :*]` — industry-
+  standard "schema introspection" terminology.
+- `:schema` cache profile on `Lotus.Config` — refers to the introspection-
+  cache namespace (namespace sense).
+- `Lotus.AI.SchemaOptimizer` module — internal; conventional DB-tooling
+  terminology for the routine that picks which tables to analyze.
+- `Lotus.Schema` module — introspection facade (list / describe / resolve).
+
+### What got renamed
+
+- `get_table_schema/3` → `describe_table/3` (public + callback). This
+  callback's "schema" meant column definitions — renamed for clarity.
+- `resolve_table_schema/3` → `resolve_table_namespace/3` (callback). The
+  "schema" here was the namespace; the new name makes the intent explicit
+  and avoids collision with the column-definitions reading.
+- `Lotus.AI.Conversation.schema_context` field → `source_context`
+  (internal). The field stores tables the AI has analyzed — "source
+  context" is the accurate term now that non-SQL sources are first-class.
+- `Lotus.AI.Conversation.update_schema_context/2` →
+  `update_source_context/2` (internal).
+- Optimization prompt type enum: `"schema"` → `"structure"` in suggestion
+  JSON contract. LLMs now respond with
+  `{"type": "structure", ...}` for schema-reshaping suggestions. The
+  previous `"schema"` value is a v1.0-only breaking change; pre-v1
+  responses are invalid.
 
 ## Registration
 

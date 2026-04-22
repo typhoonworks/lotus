@@ -679,7 +679,7 @@ defmodule Lotus do
   def list_schemas(repo_or_name, opts \\ []), do: Schema.list_schemas(repo_or_name, opts)
 
   @doc """
-  Gets the schema for a specific table.
+  Describes a specific table, returning its column definitions.
 
   ## Options
 
@@ -690,9 +690,9 @@ defmodule Lotus do
 
   ## Examples
 
-      {:ok, schema} = Lotus.describe_table("primary", "users")
-      {:ok, schema} = Lotus.describe_table("postgres", "customers", schema: "reporting")
-      {:ok, schema} = Lotus.describe_table(MyApp.DataRepo, "products", search_path: "analytics, public")
+      {:ok, columns} = Lotus.describe_table("primary", "users")
+      {:ok, columns} = Lotus.describe_table("postgres", "customers", schema: "reporting")
+      {:ok, columns} = Lotus.describe_table(MyApp.DataRepo, "products", search_path: "analytics, public")
   """
   def describe_table(repo_or_name, table_name, opts \\ []),
     do: Schema.describe_table(repo_or_name, table_name, opts)
@@ -710,7 +710,7 @@ defmodule Lotus do
     do: Schema.get_table_stats(repo_or_name, table_name, opts)
 
   @doc """
-  Lists all relations (tables with schema information) in a data repository.
+  Lists all relations (tables with column information) in a data repository.
 
   ## Options
 

@@ -257,14 +257,14 @@ defmodule Lotus.Schema do
   end
 
   @doc """
-  Gets the schema information for a specific table.
+  Describes a specific table (column definitions).
 
   Returns a list of column definitions with their types and constraints.
 
   ## Options
 
-  - `:schema` - Look for table in specific schema
-  - `:schemas` - Search for table in multiple schemas (first match wins)
+  - `:schema` - Look for table in specific namespace
+  - `:schemas` - Search for table in multiple namespaces (first match wins)
   - `:search_path` - Use PostgreSQL search_path to resolve table location
   - `:cache` - Cache options (profile, ttl_ms, etc.)
   - `:context` - Opaque value passed to the `:after_describe_table` and
@@ -274,13 +274,13 @@ defmodule Lotus.Schema do
 
   ## Examples
 
-      {:ok, schema} = Lotus.Schema.describe_table(MyApp.Repo, "users")
-      # Returns schema for public.users
+      {:ok, columns} = Lotus.Schema.describe_table(MyApp.Repo, "users")
+      # Column definitions for public.users
 
-      {:ok, schema} = Lotus.Schema.describe_table("postgres", "customers", schema: "reporting")
-      # Returns schema for reporting.customers
+      {:ok, columns} = Lotus.Schema.describe_table("postgres", "customers", schema: "reporting")
+      # Column definitions for reporting.customers
 
-      {:ok, schema} = Lotus.Schema.describe_table("postgres", "customers", search_path: "reporting, public")
+      {:ok, columns} = Lotus.Schema.describe_table("postgres", "customers", search_path: "reporting, public")
       # Finds customers table using search_path resolution
   """
   @spec describe_table(module() | String.t(), String.t(), keyword()) ::
@@ -520,10 +520,10 @@ defmodule Lotus.Schema do
   end
 
   @doc """
-  Lists all relations (tables with schema information) in the given repository.
+  Lists all relations (tables with namespace information) in the given repository.
 
   Similar to list_tables/2 but returns {schema, table} tuples instead of just table names.
-  Useful for UIs that need to display schema information.
+  Useful for UIs that need to display the full namespace-qualified list.
 
   ## Options
 
