@@ -1,11 +1,14 @@
 defmodule Lotus.CacheCase do
   @moduledoc """
   This module defines the setup for cache-related tests.
+
+  The `Lotus.Cache.ETS` GenServer is started globally by `Lotus.Application`,
+  so its tables already exist for the duration of the test run. Each test just
+  needs a clean slate, so the setup clears table contents rather than tearing
+  down and re-creating the tables (which would strand the running GenServer).
   """
 
   use ExUnit.CaseTemplate
-
-  alias Lotus.Cache.ETS
 
   using do
     quote do
@@ -14,30 +17,18 @@ defmodule Lotus.CacheCase do
   end
 
   setup do
-    cleanup_cache_tables()
-
-    {:ok, _} = ETS.start_link([])
-
-    on_exit(fn -> cleanup_cache_tables() end)
-
+    clear_cache_tables()
+    on_exit(&clear_cache_tables/0)
     :ok
   end
 
-  defp cleanup_cache_tables do
-    try do
-      if :ets.whereis(:lotus_cache) != :undefined do
-        :ets.delete(:lotus_cache)
+  defp clear_cache_tables do
+    for table <- [:lotus_cache, :lotus_cache_tags] do
+      if :ets.whereis(table) != :undefined do
+        :ets.delete_all_objects(table)
       end
-    rescue
-      ArgumentError -> :ok
     end
 
-    try do
-      if :ets.whereis(:lotus_cache_tags) != :undefined do
-        :ets.delete(:lotus_cache_tags)
-      end
-    rescue
-      ArgumentError -> :ok
-    end
+    :ok
   end
 end

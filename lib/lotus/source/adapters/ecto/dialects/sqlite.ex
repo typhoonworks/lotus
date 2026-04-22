@@ -5,12 +5,10 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
 
   require Logger
 
+  alias __MODULE__.EditorConfig
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
-  alias Lotus.SQL.Identifier
   alias Lotus.SQL.SortInjector
-
-  @exlite_error Module.concat([:Exqlite, :Error])
 
   @impl true
   def source_type, do: :sqlite
@@ -23,13 +21,20 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
     read_only? = Keyword.get(opts, :read_only, true)
     timeout = Keyword.get(opts, :timeout, 15_000)
 
-    {pragma_supported?, prev_state} = setup_read_only_pragma(repo, read_only?)
+    # checkout/1 pins one pool connection for setup + tx + restore;
+    # without it, PRAGMA query_only (connection-scoped) could be set on one
+    # pool member and never restored, leaving it stuck in read-only mode.
+    repo.checkout(fn ->
+      {pragma_supported?, prev_state} = setup_read_only_pragma(repo, read_only?)
 
-    try do
-      repo.transaction(fun, timeout: timeout)
-    after
-      restore_pragma_state(repo, pragma_supported?, prev_state)
-    end
+      try do
+        repo.transaction(fun, timeout: timeout)
+      after
+        restore_pragma_state(repo, pragma_supported?, prev_state)
+      end
+    end)
+  rescue
+    e -> {:error, Exception.message(e)}
   end
 
   defp setup_read_only_pragma(_repo, false), do: {false, nil}
@@ -83,7 +88,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
-  def format_error(%{__struct__: mod} = e) when mod == @exlite_error do
+  def format_error(%{__struct__: mod} = e) when mod == Exqlite.Error do
     "SQLite Error: " <> (Map.get(e, :message) || Exception.message(e))
   end
 
@@ -171,8 +176,13 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
 
   @impl true
   def get_table_schema(repo, _schema, table_name) do
-    Identifier.validate_identifier!(table_name, "table name")
-    query = "PRAGMA table_info(#{table_name})"
+    # Use quote_identifier/1 (double-quote + escaped internal quotes) rather
+    # than the strict identifier validator — list_tables/3 returns SQLite
+    # names verbatim from sqlite_master, which accepts legal names the
+    # validator rejects (e.g. "2024_events" starts with a digit).
+    # Quoted identifiers remain injection-safe via the escape-doubling in
+    # quote_identifier/1.
+    query = "PRAGMA table_info(#{quote_identifier(table_name)})"
 
     result = repo.query!(query)
 
@@ -229,17 +239,25 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
 
   @impl true
-  def extract_accessed_resources(repo, sql, params, _opts) do
+  def extract_accessed_resources(repo, sql, params, opts) do
     alias_map = EctoHelpers.parse_alias_map(sql)
     explain = "EXPLAIN QUERY PLAN " <> sql
 
+    # Route through execute_in_transaction so EXPLAIN runs under
+    # PRAGMA query_only = ON with capture/restore around the tx.
+    # PRAGMA query_only is connection-scoped in SQLite, so setting it
+    # inline without restoration would poison the next connection checkout.
     result =
-      repo.transaction(fn ->
-        case repo.query(explain, params) do
-          {:ok, %{rows: rows}} -> parse_explain_rows(rows, alias_map)
-          {:error, err} -> repo.rollback(format_error(err))
-        end
-      end)
+      execute_in_transaction(
+        repo,
+        fn ->
+          case repo.query(explain, params) do
+            {:ok, %{rows: rows}} -> parse_explain_rows(rows, alias_map)
+            {:error, err} -> repo.rollback(format_error(err))
+          end
+        end,
+        opts
+      )
 
     case result do
       {:ok, relations} -> {:ok, relations}
@@ -288,7 +306,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
   end
 
   @impl true
-  def transform_sql(sql) do
+  def transform_statement(sql) do
     alias Lotus.SQL.Transformer
 
     sql
@@ -296,36 +314,44 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.SQLite3 do
     |> Transformer.strip_quoted_variables()
   end
 
+  # SQLite accepts any declared type string; prefix-match on the type name so
+  # parameterized declarations (DECIMAL(10,2), VARCHAR(255)) and family
+  # variants (BIGINT, FLOAT, BOOLEAN) map to their Lotus type instead of
+  # silently falling through to :text.
+  #
+  # Order matters: longer prefixes must come before shorter ones that would
+  # also match (e.g. INTEGER before INT, DATETIME before DATE).
+  @type_prefixes [
+    {"INTEGER", :integer},
+    {"BIGINT", :integer},
+    {"SMALLINT", :integer},
+    {"MEDIUMINT", :integer},
+    {"TINYINT", :integer},
+    {"INT", :integer},
+    {"REAL", :float},
+    {"FLOAT", :float},
+    {"DOUBLE", :float},
+    {"DECIMAL", :decimal},
+    {"NUMERIC", :decimal},
+    {"BOOLEAN", :boolean},
+    {"DATETIME", :datetime},
+    {"TIMESTAMP", :datetime},
+    {"DATE", :date},
+    {"TIME", :time},
+    {"BLOB", :binary}
+  ]
+
   @impl true
   def db_type_to_lotus_type(db_type) do
-    # SQLite has dynamic typing but uses "type affinity"
-    case String.upcase(db_type) do
-      "INTEGER" ->
-        :integer
+    up = String.upcase(db_type)
 
-      "REAL" ->
-        :float
-
-      "NUMERIC" ->
-        :decimal
-
-      "DATE" ->
-        :date
-
-      "DATETIME" ->
-        :datetime
-
-      "BLOB" ->
-        :binary
-
-      # SQLite stores UUIDs as TEXT (no native UUID type)
-      _ ->
-        :text
-    end
+    # VARCHAR/CHAR/TEXT/CLOB and unknown types fall through to :text.
+    # SQLite stores UUIDs as TEXT (no native UUID type).
+    Enum.find_value(@type_prefixes, :text, fn {prefix, type} ->
+      if String.starts_with?(up, prefix), do: type
+    end)
   end
 
   @impl true
-  def editor_config do
-    Lotus.Source.Adapters.Ecto.Dialects.SQLite3.EditorConfig.config()
-  end
+  def editor_config, do: EditorConfig.config()
 end

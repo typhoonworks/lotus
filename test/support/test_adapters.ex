@@ -47,6 +47,13 @@ defmodule Lotus.Test.NoOpAdapter do
   def source_type(_state), do: :other
   @impl true
   def supports_feature?(_state, _feature), do: false
+  @impl true
+  def limit_query(_state, statement, _limit), do: statement
+  @impl true
+  def db_type_to_lotus_type(_state, _db_type), do: :text
+  @impl true
+  def editor_config(_state),
+    do: %{language: "", keywords: [], types: [], functions: [], context_boundaries: []}
 end
 
 defmodule Lotus.Test.StubAdapter do
@@ -95,4 +102,11 @@ defmodule Lotus.Test.StubAdapter do
   def source_type(_state), do: :other
   @impl true
   def supports_feature?(_state, _feature), do: false
+  @impl true
+  def limit_query(_state, statement, _limit), do: statement
+  @impl true
+  def db_type_to_lotus_type(_state, _db_type), do: :text
+  @impl true
+  def editor_config(_state),
+    do: %{language: "", keywords: [], types: [], functions: [], context_boundaries: []}
 end

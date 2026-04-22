@@ -177,57 +177,144 @@ Callbacks are organized by category. All required callbacks must be implemented.
 
 Use this path for data sources that do not use Ecto at all (e.g. Elasticsearch, MongoDB, a REST API).
 
-Implement the `Lotus.Source.Adapter` behaviour directly. The adapter must handle resolution (`can_handle?/1`, `wrap/2`), query execution, introspection, SQL generation helpers, and error handling.
+Implement the `Lotus.Source.Adapter` behaviour directly. A minimal adapter looks like the stub below — an in-memory "echo" source that returns the submitted statement as a row. It shows the shape of every required callback; swap the bodies with real HTTP calls (or whatever transport your source speaks) to ship a production adapter.
 
 ```elixir
-defmodule MyApp.Adapters.Elasticsearch do
+defmodule MyApp.Adapters.Echo do
   @behaviour Lotus.Source.Adapter
 
   # -- Resolution -------------------------------------------------------------
+  # Decide which data_sources entries this adapter claims. Lotus dispatches to
+  # the first adapter whose can_handle?/1 returns true.
   @impl true
-  def can_handle?(%{adapter: :elasticsearch}), do: true
+  def can_handle?(%{adapter: :echo}), do: true
   def can_handle?(_), do: false
 
   @impl true
-  def wrap(name, config) do
+  def wrap(name, %{adapter: :echo} = config) do
     %Lotus.Source.Adapter{
       name: name,
       module: __MODULE__,
       state: config,
-      source_type: :elasticsearch
+      source_type: :echo
     }
   end
 
   # -- Query execution --------------------------------------------------------
-  # execute_query/4, transaction/3
+  # The :statement argument is whatever query language the source understands
+  # (SQL, JSON DSL, Cypher, etc.). Return a result map with :columns, :rows,
+  # :num_rows — Lotus wraps it into a %Lotus.Result{} struct.
+  @impl true
+  def execute_query(_state, statement, params, _opts) do
+    {:ok,
+     %{
+       columns: ["statement", "param_count"],
+       rows: [[statement, length(params)]],
+       num_rows: 1
+     }}
+  end
+
+  # Non-transactional sources can run the fun directly.
+  @impl true
+  def transaction(state, fun, _opts), do: {:ok, fun.(state)}
 
   # -- Introspection ----------------------------------------------------------
-  # list_schemas/1, list_tables/3, get_table_schema/3, resolve_table_schema/3
+  # Power the schema browser. Return empty lists if your source has no
+  # schemas/tables concept.
+  @impl true
+  def list_schemas(_state), do: {:ok, ["default"]}
 
-  # -- SQL generation (may return no-ops for non-SQL sources) -----------------
-  # quote_identifier/2, param_placeholder/4, apply_filters/4, apply_sorts/3,
-  # explain_plan/4, limit_offset_placeholders/3
+  @impl true
+  def list_tables(_state, _schemas, _opts), do: {:ok, [{"default", "messages"}]}
+
+  @impl true
+  def get_table_schema(_state, _schema, _table), do: {:ok, []}
+
+  @impl true
+  def resolve_table_schema(_state, _table, _schemas), do: {:ok, nil}
+
+  # -- SQL generation (no-ops are fine for non-SQL sources) -------------------
+  @impl true
+  def quote_identifier(_state, id), do: id
+
+  @impl true
+  def param_placeholder(_state, _idx, _var, _type), do: ""
+
+  @impl true
+  def limit_offset_placeholders(_state, _l, _o), do: {"", ""}
+
+  @impl true
+  def apply_filters(_state, statement, params, _filters), do: {statement, params}
+
+  @impl true
+  def apply_sorts(_state, statement, _sorts), do: statement
+
+  @impl true
+  def limit_query(_state, statement, _limit), do: statement
+
+  @impl true
+  def explain_plan(_state, _statement, _params, _opts),
+    do: {:error, "EXPLAIN not supported for echo sources"}
 
   # -- Safety and visibility --------------------------------------------------
-  # builtin_denies/1, builtin_schema_denies/1, default_schemas/1
+  @impl true
+  def builtin_denies(_state), do: []
+
+  @impl true
+  def builtin_schema_denies(_state), do: []
+
+  @impl true
+  def default_schemas(_state), do: ["default"]
 
   # -- Error handling ---------------------------------------------------------
-  # format_error/2, handled_errors/1
+  @impl true
+  def format_error(_state, error), do: inspect(error)
+
+  @impl true
+  def handled_errors(_state), do: []
 
   # -- Identity ---------------------------------------------------------------
-  # source_type/1, supports_feature?/2, query_language/1, limit_query/2,
-  # hierarchy_label/1, example_query/2
+  @impl true
+  def source_type(_state), do: :echo
 
-  # -- SQL analysis (non-SQL adapters typically return :skip) ------------------
-  # extract_accessed_resources/4 -> :skip
-  # sanitize_query/3, transform_query/4
+  @impl true
+  def supports_feature?(_state, _feature), do: false
+
+  @impl true
+  def db_type_to_lotus_type(_state, _db_type), do: :text
+
+  @impl true
+  def editor_config(_state),
+    do: %{language: "echo", keywords: [], types: [], functions: [], context_boundaries: []}
 
   # -- Lifecycle --------------------------------------------------------------
-  # health_check/1, disconnect/1
+  @impl true
+  def health_check(_state), do: :ok
+
+  @impl true
+  def disconnect(_state), do: :ok
 end
 ```
 
-Note that non-SQL adapters may return `:skip` from `extract_accessed_resources` and implement `sanitize_query` / `transform_query` differently than SQL adapters.
+Register it and use it like any other source:
+
+```elixir
+config :lotus,
+  source_adapters: [MyApp.Adapters.Echo],
+  data_sources: %{"echo" => %{adapter: :echo}}
+
+{:ok, result} = Lotus.run_statement("hello", [1, 2, 3], repo: "echo")
+# result.rows #=> [["hello", 3]]
+```
+
+Optional callbacks non-SQL adapters usually don't implement:
+
+- `sanitize_query/3` — Lotus defaults to `:ok`. Return `{:error, reason}` to reject malformed statements (JSON schema checks, DSL validation).
+- `transform_statement/2` / `transform_bound_query/4` — default to passthrough. Implement only if your statement text needs pre- or post-binding rewrites.
+- `extract_accessed_resources/4` — default is `:skip`, which makes `Lotus.Preflight` authorize everything that passes your own `sanitize_query`. Implement to wire up visibility rules against the tables/indices/collections a query will touch.
+- `apply_pagination/4` — default is `{query, params, nil}`. Implement to support `window: [limit:, offset:, count:]` pagination in your source's native syntax.
+
+For a real-world reference, see [`lotus_elasticsearch`](https://github.com/elixir-lotus/lotus_elasticsearch), which implements this contract against the Elasticsearch Query DSL.
 
 ## Editor Configuration
 

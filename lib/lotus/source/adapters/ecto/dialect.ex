@@ -126,17 +126,24 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
               {:ok, MapSet.t({String.t() | nil, String.t()})} | {:error, term()} | :skip
 
   # ---------------------------------------------------------------------------
-  # Optional callbacks — SQL transformation & type mapping
+  # Optional callbacks — Statement transformation & type mapping
   # ---------------------------------------------------------------------------
 
   @doc """
-  Transform SQL query for dialect-specific syntax before variable substitution.
+  Rewrite the raw statement text before variables are extracted and bound.
 
-  Used for dialect-specific rewrites like INTERVAL syntax, CONCAT vs ||, etc.
-  Return the transformed SQL string.
+  Fires in `Lotus.Storage.Query.to_sql_params/2` before `{{var}}` placeholders
+  are resolved. Use for dialect-specific syntax rewrites (wildcard handling,
+  INTERVAL, CONCAT vs `||`, etc.). Return the rewritten statement.
 
-  Default (when not implemented): returns SQL unchanged.
+  Default (when not implemented): returns the statement unchanged.
   """
+  @callback transform_statement(statement :: String.t()) :: String.t()
+
+  # Deprecated in favor of transform_statement/1. The Ecto adapter's macro
+  # forwards old-name implementations with a runtime warning during the
+  # deprecation window.
+  @doc false
   @callback transform_sql(sql :: String.t()) :: String.t()
 
   @doc """
@@ -154,6 +161,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
     hierarchy_label: 0,
     example_query: 2,
     extract_accessed_resources: 4,
+    transform_statement: 1,
     transform_sql: 1,
     db_type_to_lotus_type: 1,
     editor_config: 0

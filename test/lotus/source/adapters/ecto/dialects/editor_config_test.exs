@@ -2,8 +2,8 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.EditorConfigTest do
   use ExUnit.Case, async: true
 
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
-  alias Lotus.Source.Adapters.Ecto.Dialects.Postgres
   alias Lotus.Source.Adapters.Ecto.Dialects.MySQL
+  alias Lotus.Source.Adapters.Ecto.Dialects.Postgres
   alias Lotus.Source.Adapters.Ecto.Dialects.SQLite3
 
   @required_keys [:language, :keywords, :types, :functions, :context_boundaries]

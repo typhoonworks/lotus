@@ -91,13 +91,24 @@ defmodule Lotus.Storage.Query do
   @spec to_sql_params(t(), map()) ::
           {:ok, String.t(), [term()]} | {:error, String.t()}
   def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
-    adapter = Source.resolve!(q.data_source, nil)
+    # A stored query's `data_source` can become stale when the source is
+    # renamed or removed. Fall back to the default source so compilation
+    # still succeeds — the caller (Runner/Preflight) will surface a clear
+    # error at execution if the default source doesn't match the query's
+    # dialect expectations.
+    adapter =
+      try do
+        Source.resolve!(q.data_source, nil)
+      rescue
+        ArgumentError -> Source.resolve!(nil, nil)
+      end
 
     # Process optional clauses before transformation
     processed_sql = OptionalClause.process(sql, supplied_vars)
 
-    # Transform SQL for dialect-specific syntax
-    transformed_sql = Adapter.transform_sql(adapter, processed_sql)
+    # Rewrite the raw statement text before variables are bound (dialect or
+    # adapter-specific preprocessing — e.g., wildcard rewriting).
+    transformed_sql = Adapter.transform_statement(adapter, processed_sql)
 
     # Extract variables from SQL
     vars_in_order = Lotus.Variables.extract_names(transformed_sql)
@@ -293,11 +304,11 @@ defmodule Lotus.Storage.Query do
     OptionalClause.extract_optional_variable_names(statement)
   end
 
-  defp enrich_bindings_with_types(bindings, %Adapter{state: repo} = adapter, search_path) do
+  defp enrich_bindings_with_types(bindings, %Adapter{} = adapter, search_path) do
     Enum.map(bindings, fn binding ->
       schema = resolve_schema(binding.table, search_path)
 
-      case SchemaCache.get_column_type(repo, schema, binding.table, binding.column) do
+      case SchemaCache.get_column_type(adapter, schema, binding.table, binding.column) do
         {:ok, db_type} ->
           lotus_type = Adapter.db_type_to_lotus_type(adapter, db_type)
           Map.put(binding, :lotus_type, lotus_type)
@@ -312,7 +323,11 @@ defmodule Lotus.Storage.Query do
       end
     end)
   rescue
-    error in [ArgumentError, FunctionClauseError, DBConnection.ConnectionError] ->
+    # Narrowly rescue only transient connection failures so type enrichment
+    # degrades gracefully when the DB is unreachable. Other exceptions
+    # (ArgumentError from bad config, FunctionClauseError from callback
+    # mismatches) indicate real bugs — let them propagate to the caller.
+    error in DBConnection.ConnectionError ->
       Logger.warning(
         "Type enrichment failed: #{Exception.message(error)}, " <>
           "defaulting all bindings to :text"

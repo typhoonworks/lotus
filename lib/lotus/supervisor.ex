@@ -57,9 +57,11 @@ defmodule Lotus.Supervisor do
     # Always start ETS so cache tables exist regardless of boot order.
     # Skip if the configured cache adapter already includes it.
     ets_child =
-      if Enum.any?(cache_children, fn {mod, _} -> mod == Lotus.Cache.ETS end),
-        do: [],
-        else: [{Lotus.Cache.ETS, []}]
+      if Enum.any?(cache_children, fn child ->
+           Supervisor.child_spec(child, []).id == Lotus.Cache.ETS
+         end),
+         do: [],
+         else: [{Lotus.Cache.ETS, []}]
 
     children =
       [{Task.Supervisor, name: task_sup_name}] ++ ets_child ++ cache_children

@@ -41,6 +41,27 @@ defmodule Lotus.VisibilityTest do
       assert Visibility.allowed_relation?("sqlite", {nil, "products"})
       assert Visibility.allowed_relation?("sqlite", {nil, "customers"})
     end
+
+    test "unresolvable repo name still applies the conservative fallback deny list" do
+      # Regression: Visibility previously reached into
+      # Lotus.Source.Adapters.Ecto.Dialects.Default for this fallback, which
+      # coupled a generic cross-cutting module to the Ecto subtree. It now
+      # routes through Lotus.Source.Adapter.builtin_{schema_,}denies/0.
+      refute Visibility.allowed_relation?("unconfigured_source", {"pg_catalog", "pg_class"})
+      refute Visibility.allowed_relation?("unconfigured_source", {"information_schema", "tables"})
+      refute Visibility.allowed_relation?("unconfigured_source", {nil, "schema_migrations"})
+      refute Visibility.allowed_relation?("unconfigured_source", {nil, "lotus_queries"})
+
+      # Regular tables still allowed under the fallback.
+      assert Visibility.allowed_relation?("unconfigured_source", {"public", "users"})
+    end
+
+    test "unresolvable repo name falls back to conservative schema denies" do
+      refute Visibility.allowed_schema?("unconfigured_source", "pg_catalog")
+      refute Visibility.allowed_schema?("unconfigured_source", "information_schema")
+      refute Visibility.allowed_schema?("unconfigured_source", "mysql")
+      assert Visibility.allowed_schema?("unconfigured_source", "public")
+    end
   end
 
   describe "user-configured allow rules" do

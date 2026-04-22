@@ -84,8 +84,26 @@ defmodule Lotus.Source.Resolvers.Static do
 
   defp wrap_entry(name, entry) do
     case find_adapter(entry) do
-      {:ok, adapter_mod} -> adapter_mod.wrap(name, entry)
-      :none -> EctoAdapter.wrap(name, entry)
+      {:ok, adapter_mod} ->
+        adapter_mod.wrap(name, entry)
+
+      :none when is_atom(entry) ->
+        # Atom entries fall back to EctoAdapter — it handles unknown Ecto
+        # dialects by wrapping them with a default source_type.
+        EctoAdapter.wrap(name, entry)
+
+      :none ->
+        raise ArgumentError, """
+        No source adapter can handle data source #{inspect(name)}.
+
+        The configured entry was:
+
+            #{inspect(entry)}
+
+        For non-Ecto sources (maps, tuples, etc.), configure a matching
+        adapter in `:lotus, :source_adapters` and ensure its `can_handle?/1`
+        returns true for this entry.
+        """
     end
   end
 
@@ -98,7 +116,13 @@ defmodule Lotus.Source.Resolvers.Static do
     end
   end
 
-  defp source_module?(mod) when is_atom(mod) and not is_nil(mod), do: true
+  # Accepts any loaded module (Ecto repo or non-Ecto adapter module). Rejects
+  # bare atoms (e.g. :typoed_name) so they fall through the resolver's cond
+  # chain instead of committing to a failing module lookup.
+  defp source_module?(mod) when is_atom(mod) and not is_nil(mod) do
+    Code.ensure_loaded?(mod) and function_exported?(mod, :module_info, 0)
+  end
+
   defp source_module?(_), do: false
 
   defp default_adapter do

@@ -109,7 +109,6 @@ defmodule Lotus.SchemaTest do
     end
 
     @tag :sqlite
-    @tag :skip
     test "gets row count for a table with data" do
       insert_test_data(Lotus.Test.SqliteRepo)
 
@@ -352,25 +351,25 @@ defmodule Lotus.SchemaTest do
 
   describe "general error handling" do
     test "returns error for non-existent repo name" do
-      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"nonexistent\" not configured/, fn ->
         Schema.list_tables("nonexistent")
       end
     end
 
     test "list_schemas returns error for non-existent repo name" do
-      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"nonexistent\" not configured/, fn ->
         Schema.list_schemas("nonexistent")
       end
     end
 
     test "get_table_schema returns error for non-existent repo name" do
-      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"nonexistent\" not configured/, fn ->
         Schema.get_table_schema("nonexistent", "some_table")
       end
     end
 
     test "get_table_stats returns error for non-existent repo name" do
-      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"nonexistent\" not configured/, fn ->
         Schema.get_table_stats("nonexistent", "some_table")
       end
     end

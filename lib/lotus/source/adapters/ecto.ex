@@ -45,7 +45,53 @@ defmodule Lotus.Source.Adapters.Ecto do
   # ---------------------------------------------------------------------------
 
   defmacro __using__(opts) do
-    dialect = Keyword.fetch!(opts, :dialect)
+    dialect_ast =
+      case Keyword.fetch(opts, :dialect) do
+        {:ok, ast} ->
+          ast
+
+        :error ->
+          raise ArgumentError,
+                "use Lotus.Source.Adapters.Ecto requires a :dialect module — " <>
+                  "e.g. `use Lotus.Source.Adapters.Ecto, dialect: MyDialect`"
+      end
+
+    # Resolve the alias AST to a module atom. Safe to do here because the
+    # value has to be a literal module name, not an expression.
+    dialect = Macro.expand(dialect_ast, __CALLER__)
+
+    unless is_atom(dialect) do
+      raise ArgumentError,
+            "use Lotus.Source.Adapters.Ecto expects :dialect to be a module, got: " <>
+              Macro.to_string(dialect_ast)
+    end
+
+    # Compile-time sanity check on the :dialect module. Uses the soft
+    # `ensure_compiled` (not the bang variant) because the dialect and the
+    # adapter that `use`s it are often compiled together — requiring the
+    # dialect to be fully compiled here would deadlock the dep graph. When
+    # the dialect IS already compiled, assert it implements the Dialect
+    # behaviour so typo'd modules that happen to be loaded still raise.
+    case Code.ensure_compiled(dialect) do
+      {:module, ^dialect} ->
+        behaviours =
+          dialect.__info__(:attributes)
+          |> Keyword.get_values(:behaviour)
+          |> List.flatten()
+
+        unless Lotus.Source.Adapters.Ecto.Dialect in behaviours do
+          raise ArgumentError,
+                "#{inspect(dialect)} does not implement the " <>
+                  "Lotus.Source.Adapters.Ecto.Dialect behaviour. Add " <>
+                  "`@behaviour Lotus.Source.Adapters.Ecto.Dialect` to the dialect module."
+        end
+
+      {:error, _reason} ->
+        # Dialect isn't compiled yet (co-compile cycle). Skip the behaviour
+        # assertion here — Elixir's usual compile-time @behaviour warnings
+        # will catch mismatches when the dialect does compile.
+        :ok
+    end
 
     quote do
       @behaviour Lotus.Source.Adapter
@@ -200,7 +246,7 @@ defmodule Lotus.Source.Adapters.Ecto do
       def sanitize_query(_repo, query, opts), do: EctoAdapter.do_sanitize_query(query, opts)
 
       @impl true
-      def transform_query(_repo, query, params, _opts), do: {query, params}
+      def transform_bound_query(_repo, query, params, _opts), do: {query, params}
 
       @impl true
       def extract_accessed_resources(repo, query, params, opts) do
@@ -208,8 +254,8 @@ defmodule Lotus.Source.Adapters.Ecto do
       end
 
       @impl true
-      def apply_window(repo, query, params, window_opts) do
-        EctoAdapter.do_apply_window(__MODULE__, @dialect, repo, query, params, window_opts)
+      def apply_pagination(repo, query, params, pagination_opts) do
+        EctoAdapter.do_apply_pagination(@dialect, repo, query, params, pagination_opts)
       end
     end
   end
@@ -262,10 +308,8 @@ defmodule Lotus.Source.Adapters.Ecto do
   defp type_mapping_callbacks do
     quote do
       @impl true
-      def transform_sql(_repo, sql) do
-        if function_exported?(@dialect, :transform_sql, 1),
-          do: @dialect.transform_sql(sql),
-          else: sql
+      def transform_statement(_repo, statement) do
+        EctoAdapter.dispatch_transform_statement(@dialect, statement)
       end
 
       @impl true
@@ -315,6 +359,17 @@ defmodule Lotus.Source.Adapters.Ecto do
   def wrap(name, repo_module) when is_binary(name) and is_atom(repo_module) do
     case Enum.find(@builtin_ecto_adapters, & &1.can_handle?(repo_module)) do
       nil ->
+        # Guard the fallback path: `can_handle?/1` is broad (any atom), so
+        # without this check we'd happily wrap a non-Ecto atom like :typoed_name
+        # and fail later with an opaque error during query execution.
+        unless function_exported?(repo_module, :__adapter__, 0) do
+          raise ArgumentError,
+                "Cannot wrap #{inspect(repo_module)} as an Ecto source — " <>
+                  "the module does not export __adapter__/0. Either register " <>
+                  "a custom `source_adapters` entry whose can_handle?/1 matches " <>
+                  "this source, or pass an `Ecto.Repo` module."
+        end
+
         %Adapter{
           name: name,
           module: __MODULE__,
@@ -502,7 +557,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   def sanitize_query(_repo, query, opts), do: do_sanitize_query(query, opts)
 
   @impl true
-  def transform_query(_repo, query, params, _opts), do: {query, params}
+  def transform_bound_query(_repo, query, params, _opts), do: {query, params}
 
   @impl true
   def extract_accessed_resources(repo, query, params, opts) do
@@ -510,8 +565,8 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @impl true
-  def apply_window(repo, query, params, window_opts) do
-    do_apply_window(__MODULE__, @default_dialect, repo, query, params, window_opts)
+  def apply_pagination(repo, query, params, pagination_opts) do
+    do_apply_pagination(@default_dialect, repo, query, params, pagination_opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -555,9 +610,51 @@ defmodule Lotus.Source.Adapters.Ecto do
       else: "SELECT value_column FROM #{table}"
   end
 
+  @impl true
+  def db_type_to_lotus_type(_repo, db_type), do: @default_dialect.db_type_to_lotus_type(db_type)
+
   # ---------------------------------------------------------------------------
   # Shared helpers (called by __using__ macro and this module's own callbacks)
   # ---------------------------------------------------------------------------
+
+  # Resolves a dialect's statement-rewrite callback. Prefers the new name
+  # (`transform_statement/1`) and falls back to the deprecated `transform_sql/1`
+  # with a one-time runtime warning so existing dialects keep working during
+  # the deprecation window. Returns the input unchanged if neither exists.
+  @doc false
+  def dispatch_transform_statement(dialect, statement) do
+    cond do
+      function_exported?(dialect, :transform_statement, 1) ->
+        dialect.transform_statement(statement)
+
+      function_exported?(dialect, :transform_sql, 1) ->
+        warn_deprecated_dialect_callback_once(dialect, :transform_sql, :transform_statement)
+        dialect.transform_sql(statement)
+
+      true ->
+        statement
+    end
+  end
+
+  defp warn_deprecated_dialect_callback_once(dialect, deprecated_name, new_name) do
+    key = {__MODULE__, :deprecated_dialect_warned, dialect, deprecated_name}
+
+    case :persistent_term.get(key, :none) do
+      :warned ->
+        :ok
+
+      :none ->
+        :persistent_term.put(key, :warned)
+
+        require Logger
+
+        Logger.warning(
+          "#{inspect(dialect)} implements deprecated " <>
+            "Lotus.Source.Adapters.Ecto.Dialect callback #{deprecated_name}/1. " <>
+            "Rename it to #{new_name}/1 — the old name will be removed in v1.0."
+        )
+    end
+  end
 
   @doc false
   def do_execute_query(dialect, repo, sql, params, opts) do
@@ -621,12 +718,11 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @doc false
-  def do_apply_window(adapter_mod, dialect, repo, query, params, window_opts) do
+  def do_apply_pagination(dialect, _repo, query, params, pagination_opts) do
     base_sql = Sanitizer.strip_trailing_semicolon(query)
-    limit = Keyword.fetch!(window_opts, :limit)
-    offset = Keyword.get(window_opts, :offset, 0)
-    count_mode = Keyword.get(window_opts, :count, :none)
-    search_path = Keyword.get(window_opts, :search_path)
+    limit = Keyword.fetch!(pagination_opts, :limit)
+    offset = Keyword.get(pagination_opts, :offset, 0)
+    count_mode = Keyword.get(pagination_opts, :count, :none)
 
     param_count = length(params)
 
@@ -639,26 +735,19 @@ defmodule Lotus.Source.Adapters.Ecto do
 
     paged_params = params ++ [limit, offset]
 
-    window_meta =
+    count_spec =
       case count_mode do
         :exact ->
-          adapter_struct = adapter_mod.wrap("__window__", repo)
-
           %{
-            window: %{limit: limit, offset: offset},
-            total_count: :pending,
-            total_mode: :exact,
-            count_sql: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
-            count_params: params,
-            adapter: adapter_struct,
-            search_path: search_path
+            query: "SELECT COUNT(*) FROM (" <> base_sql <> ") AS lotus_sub",
+            params: params
           }
 
         _ ->
-          %{window: %{limit: limit, offset: offset}, total_count: nil, total_mode: :none}
+          nil
       end
 
-    {paged_sql, paged_params, window_meta}
+    {paged_sql, paged_params, count_spec}
   end
 
   # ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ defmodule Lotus.AI.QueryOptimizer do
     temperature = Keyword.get(opts, :temperature, 0.1)
 
     adapter = Lotus.Source.get_source!(data_source)
-    database_type = adapter.source_type
+    database_type = Adapter.source_type(adapter)
 
     execution_plan = get_execution_plan(adapter, sql, params, search_path: search_path)
 

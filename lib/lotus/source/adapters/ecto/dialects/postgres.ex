@@ -3,12 +3,13 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
 
   @behaviour Lotus.Source.Adapters.Ecto.Dialect
 
+  alias __MODULE__.EditorConfig
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.Identifier
   alias Lotus.SQL.SortInjector
 
-  @postgrex_error Module.concat([:Postgrex, :Error])
+  @default_statement_timeout_ms 5_000
 
   @impl true
   def source_type, do: :postgres
@@ -19,7 +20,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   @impl true
   def execute_in_transaction(repo, fun, opts) do
     read_only? = Keyword.get(opts, :read_only, true)
-    stmt_ms = Keyword.get(opts, :statement_timeout_ms, 5_000)
+    stmt_ms = Keyword.get(opts, :statement_timeout_ms, @default_statement_timeout_ms)
     timeout = Keyword.get(opts, :timeout, 15_000)
     search_path = Keyword.get(opts, :search_path)
 
@@ -42,7 +43,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def set_statement_timeout(repo, timeout_ms) do
+  def set_statement_timeout(repo, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
     repo.query!("SET LOCAL statement_timeout = #{timeout_ms}")
     :ok
   end
@@ -55,7 +56,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def format_error(%{__struct__: mod} = e) when mod == @postgrex_error do
+  def format_error(%{__struct__: mod} = e) when mod == Postgrex.Error do
     pg = Map.get(e, :postgres)
 
     cond do
@@ -160,6 +161,8 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
     SELECT schema_name
     FROM information_schema.schemata
     WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND schema_name NOT LIKE 'pg_temp_%'
+      AND schema_name NOT LIKE 'pg_toast_temp_%'
     ORDER BY schema_name
     """
 
@@ -186,6 +189,11 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
 
   @impl true
   def get_table_schema(repo, schema, table) do
+    # Use EXISTS for the PK check rather than LEFT JOIN against
+    # key_column_usage: a column participating in multiple constraints
+    # (PK + UNIQUE index, FK + unique composite, etc.) would appear once
+    # per kcu row under the LEFT JOIN, duplicating the column in the
+    # result.
     sql = """
     SELECT
       c.column_name,
@@ -195,16 +203,18 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
       c.numeric_scale,
       c.is_nullable,
       c.column_default,
-      CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary_key
+      EXISTS (
+        SELECT 1
+        FROM information_schema.key_column_usage kcu
+        JOIN information_schema.table_constraints tc
+          ON kcu.constraint_name = tc.constraint_name
+         AND kcu.table_schema = tc.table_schema
+        WHERE kcu.table_schema = c.table_schema
+          AND kcu.table_name = c.table_name
+          AND kcu.column_name = c.column_name
+          AND tc.constraint_type = 'PRIMARY KEY'
+      ) AS is_primary_key
     FROM information_schema.columns c
-    LEFT JOIN information_schema.key_column_usage kcu
-      ON c.table_name = kcu.table_name
-     AND c.column_name = kcu.column_name
-     AND c.table_schema = kcu.table_schema
-    LEFT JOIN information_schema.table_constraints tc
-      ON kcu.constraint_name = tc.constraint_name
-     AND kcu.table_schema = tc.table_schema
-     AND tc.constraint_type = 'PRIMARY KEY'
     WHERE c.table_schema = $1 AND c.table_name = $2
     ORDER BY c.ordinal_position
     """
@@ -308,9 +318,17 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
 
         case repo.query(explain, params) do
           {:ok, %{rows: [[json]]}} ->
-            json
-            |> parse_explain_plan()
-            |> collect_relations(MapSet.new())
+            try do
+              json
+              |> parse_explain_plan()
+              |> collect_relations(MapSet.new())
+            rescue
+              # An EXPLAIN plan with an unexpected shape should fail preflight
+              # cleanly, not crash the whole caller. Known cases: missing
+              # "Plan" key, unusual list wrappers, older/newer server JSON
+              # schemas.
+              e -> repo.rollback("Failed to parse EXPLAIN plan: #{Exception.message(e)}")
+            end
 
           {:error, err} ->
             repo.rollback(format_error(err))
@@ -371,7 +389,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   defp format_postgres_type(type, _, _, _), do: type
 
   @impl true
-  def transform_sql(sql) do
+  def transform_statement(sql) do
     alias Lotus.SQL.Transformer
 
     sql
@@ -419,7 +437,5 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   defp pg_scalar_type(_), do: :text
 
   @impl true
-  def editor_config do
-    Lotus.Source.Adapters.Ecto.Dialects.Postgres.EditorConfig.config()
-  end
+  def editor_config, do: EditorConfig.config()
 end

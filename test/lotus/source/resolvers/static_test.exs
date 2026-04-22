@@ -1,6 +1,8 @@
 defmodule Lotus.Source.Resolvers.StaticTest do
   use Lotus.Case, async: true
+  use Mimic
 
+  alias Lotus.Config
   alias Lotus.Source.Resolvers.Static
 
   describe "resolve/2" do
@@ -75,18 +77,26 @@ defmodule Lotus.Source.Resolvers.StaticTest do
       assert {:error, :not_found} = Static.resolve(UnknownRepo, nil)
     end
 
-    test "non-repo module in repo_opt falls through to fallback" do
-      assert {:ok, adapter} = Static.resolve(String, "sqlite")
+    test "loaded but unconfigured module in repo_opt returns :not_found" do
+      # String is a real loaded module but not in data_sources, so we commit
+      # to it and surface the error rather than silently masking with fallback.
+      assert {:error, :not_found} = Static.resolve(String, "sqlite")
+    end
+
+    test "unloaded atom in repo_opt falls through to fallback" do
+      # :typoed_name isn't a loaded module — caller probably typo'd a source
+      # name. Fall through so the query's data_source can recover.
+      assert {:ok, adapter} = Static.resolve(:typoed_name, "sqlite")
       assert adapter.name == "sqlite"
     end
 
-    test "non-repo atoms in both positions fall through to default" do
-      assert {:ok, adapter} = Static.resolve(String, Enum)
+    test "unloaded atoms in both positions fall through to default" do
+      assert {:ok, adapter} = Static.resolve(:typoed_one, :typoed_two)
       assert adapter.name == "postgres"
     end
 
     test "non-atom, non-string values fall through to default" do
-      assert {:ok, adapter} = Static.resolve(123, :atom)
+      assert {:ok, adapter} = Static.resolve(123, :"Elixir.Nonexistent.Module")
       assert adapter.name == "postgres"
     end
   end
@@ -120,7 +130,7 @@ defmodule Lotus.Source.Resolvers.StaticTest do
     end
 
     test "raises for unknown name" do
-      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"unknown\" not configured/, fn ->
         Static.get_source!("unknown")
       end
     end
@@ -144,6 +154,52 @@ defmodule Lotus.Source.Resolvers.StaticTest do
       # Default is "postgres" per test config
       assert name == "postgres"
       assert adapter.state == Lotus.Test.Repo
+    end
+  end
+
+  describe "wrap_entry error handling" do
+    setup do
+      Mimic.copy(Config)
+      :ok
+    end
+
+    test "raises ArgumentError with a descriptive message for an unhandled map entry" do
+      # Regression: before the fix, a map entry without a matching source_adapter
+      # silently fell through to EctoAdapter.wrap/2, which has an
+      # `when is_atom/1` guard, and raised FunctionClauseError.
+      Config
+      |> stub(:data_sources, fn -> %{"api" => %{adapter: :some_http_adapter}} end)
+      |> stub(:source_adapters, fn -> [] end)
+
+      assert_raise ArgumentError, ~r/No source adapter can handle data source "api"/, fn ->
+        Static.list_sources()
+      end
+    end
+
+    test "uses a matching custom source_adapter for a map entry" do
+      defmodule FakeHttpAdapter do
+        def can_handle?(%{adapter: :fake_http}), do: true
+        def can_handle?(_), do: false
+
+        def wrap(name, %{adapter: :fake_http} = opts) do
+          %Lotus.Source.Adapter{
+            name: name,
+            module: __MODULE__,
+            state: opts,
+            source_type: :other
+          }
+        end
+      end
+
+      Config
+      |> stub(:data_sources, fn -> %{"api" => %{adapter: :fake_http, url: "x"}} end)
+      |> stub(:source_adapters, fn -> [FakeHttpAdapter] end)
+
+      [adapter] = Static.list_sources()
+      assert adapter.name == "api"
+      assert adapter.module == FakeHttpAdapter
+      assert adapter.state == %{adapter: :fake_http, url: "x"}
+      assert adapter.source_type == :other
     end
   end
 end

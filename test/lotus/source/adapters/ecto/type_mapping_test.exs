@@ -188,6 +188,29 @@ defmodule Lotus.Source.Adapters.Ecto.TypeMappingTest do
       assert Dialects.SQLite3.db_type_to_lotus_type("UUID") == :text
       assert Dialects.SQLite3.db_type_to_lotus_type("VARCHAR") == :text
     end
+
+    test "prefix-matches parameterized and family variants" do
+      # Parameterized declarations
+      assert Dialects.SQLite3.db_type_to_lotus_type("DECIMAL(10,2)") == :decimal
+      assert Dialects.SQLite3.db_type_to_lotus_type("NUMERIC(5)") == :decimal
+      assert Dialects.SQLite3.db_type_to_lotus_type("VARCHAR(255)") == :text
+
+      # Integer family
+      assert Dialects.SQLite3.db_type_to_lotus_type("BIGINT") == :integer
+      assert Dialects.SQLite3.db_type_to_lotus_type("SMALLINT") == :integer
+      assert Dialects.SQLite3.db_type_to_lotus_type("TINYINT") == :integer
+      assert Dialects.SQLite3.db_type_to_lotus_type("MEDIUMINT") == :integer
+      assert Dialects.SQLite3.db_type_to_lotus_type("INT8") == :integer
+
+      # Float family
+      assert Dialects.SQLite3.db_type_to_lotus_type("FLOAT") == :float
+      assert Dialects.SQLite3.db_type_to_lotus_type("DOUBLE") == :float
+
+      # Other scalar families that previously fell through to :text
+      assert Dialects.SQLite3.db_type_to_lotus_type("BOOLEAN") == :boolean
+      assert Dialects.SQLite3.db_type_to_lotus_type("TIMESTAMP") == :datetime
+      assert Dialects.SQLite3.db_type_to_lotus_type("TIME") == :time
+    end
   end
 
   describe "type consistency across databases" do

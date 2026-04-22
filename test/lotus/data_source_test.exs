@@ -16,7 +16,7 @@ defmodule Lotus.DataSourceTest do
     end
 
     test "raises when getting non-existent data source" do
-      assert_raise ArgumentError, ~r/Data source 'nonexistent' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"nonexistent\" not configured/, fn ->
         Lotus.get_data_source!("nonexistent")
       end
     end

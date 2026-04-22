@@ -34,7 +34,7 @@ defmodule Lotus.Source do
         label = source_opt || q_source
 
         raise ArgumentError,
-              "Data source '#{label}' not configured. " <>
+              "Data source #{inspect(label)} not configured. " <>
                 "Available sources: #{inspect(available)}"
     end
   end

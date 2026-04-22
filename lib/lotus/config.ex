@@ -210,7 +210,7 @@ defmodule Lotus.Config do
       """
     ],
     source_adapters: [
-      type: {:list, :atom},
+      type: {:list, {:custom, __MODULE__, :validate_source_adapter, []}},
       default: [],
       doc:
         "List of external adapter modules implementing `Lotus.Source.Adapter` with `can_handle?/1` and `wrap/2`."
@@ -294,9 +294,63 @@ defmodule Lotus.Config do
 
   defp validate!(opts) do
     case NimbleOptions.validate(opts, @schema) do
-      {:ok, conf} -> conf
+      {:ok, conf} -> validate_default_source!(conf)
       {:error, e} -> raise ArgumentError, "Invalid :lotus config: #{Exception.message(e)}"
     end
+  end
+
+  # Cross-validation NimbleOptions can't express: :default_source must be a
+  # key in :data_sources when both are set. Catches typos at boot instead of
+  # on first query.
+  defp validate_default_source!(conf) do
+    default = conf[:default_source]
+    sources = conf[:data_sources] || %{}
+
+    cond do
+      is_nil(default) ->
+        conf
+
+      Map.has_key?(sources, default) ->
+        conf
+
+      true ->
+        raise ArgumentError,
+              "Invalid :lotus config: :default_source #{inspect(default)} is not a key " <>
+                "in :data_sources. Configured sources: #{inspect(Map.keys(sources))}"
+    end
+  end
+
+  @doc false
+  # NimbleOptions :custom validator for :source_adapters entries.
+  # Surfaces typos, unloaded modules, and non-adapter modules at boot rather
+  # than at first query (where the resolver would raise UndefinedFunctionError
+  # calling can_handle?/1).
+  @spec validate_source_adapter(term()) :: {:ok, module()} | {:error, String.t()}
+  def validate_source_adapter(mod) when is_atom(mod) and not is_nil(mod) do
+    cond do
+      not Code.ensure_loaded?(mod) ->
+        {:error,
+         "expected a loaded module implementing Lotus.Source.Adapter, got: #{inspect(mod)}"}
+
+      not implements_source_adapter?(mod) ->
+        {:error, "#{inspect(mod)} does not implement the Lotus.Source.Adapter behaviour"}
+
+      true ->
+        {:ok, mod}
+    end
+  end
+
+  def validate_source_adapter(other) do
+    {:error, "expected a module atom, got: #{inspect(other)}"}
+  end
+
+  defp implements_source_adapter?(mod) do
+    behaviours =
+      mod.__info__(:attributes)
+      |> Keyword.get_values(:behaviour)
+      |> List.flatten()
+
+    Lotus.Source.Adapter in behaviours
   end
 
   defp get_lotus_config do
@@ -384,7 +438,7 @@ defmodule Lotus.Config do
     case Map.get(data_sources(), name) do
       nil ->
         raise ArgumentError,
-              "Data source '#{name}' not configured. " <>
+              "Data source #{inspect(name)} not configured. " <>
                 "Available sources: #{inspect(Map.keys(data_sources()))}"
 
       source ->
@@ -464,12 +518,12 @@ defmodule Lotus.Config do
 
   @doc false
   @deprecated "Use data_sources/0 instead. Will be removed in v1.0"
-  @spec data_repos() :: %{String.t() => module()}
+  @spec data_repos() :: %{String.t() => module() | map()}
   def data_repos, do: data_sources()
 
   @doc false
   @deprecated "Use get_data_source!/1 instead. Will be removed in v1.0"
-  @spec get_data_repo!(String.t()) :: module()
+  @spec get_data_repo!(String.t()) :: module() | map()
   def get_data_repo!(name), do: get_data_source!(name)
 
   @doc false

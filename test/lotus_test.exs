@@ -19,17 +19,22 @@ defmodule LotusTest do
   end
 
   describe "start_link/1" do
-    test "name can be an arbitrary term" do
-      opts = [name: make_ref(), cache: nil]
+    test "supervisor_name can be an arbitrary term" do
+      sup_name = :"lotus_sup_#{System.unique_integer([:positive])}"
+      opts = [supervisor_name: sup_name, cache: nil]
+
       assert {:ok, _pid} = start_supervised({Lotus, opts})
     end
 
-    test "supervisor_name must be unique" do
-      sup_name = :lotus_test_sup
+    test "is idempotent for a given supervisor_name — returns {:ok, existing_pid}" do
+      # Behavior change (see CHANGELOG): start_link/1 now collapses
+      # {:error, {:already_started, pid}} into {:ok, pid}, so the same
+      # supervisor_name yields the same pid on repeat calls.
+      sup_name = :"lotus_sup_#{System.unique_integer([:positive])}"
       opts = [supervisor_name: sup_name, cache: nil]
 
-      {:ok, pid} = Lotus.start_link(opts)
-      assert {:error, {:already_started, ^pid}} = Lotus.start_link(opts)
+      assert {:ok, pid} = Lotus.start_link(opts)
+      assert {:ok, ^pid} = Lotus.start_link(opts)
     end
   end
 

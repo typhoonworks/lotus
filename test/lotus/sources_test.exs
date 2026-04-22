@@ -81,22 +81,30 @@ defmodule Lotus.SourcesTest do
       end
     end
 
-    test "non-repo module in repo_opt falls through to q_repo" do
-      adapter = Source.resolve!(String, "sqlite")
+    test "loaded but unconfigured module in repo_opt raises" do
+      # String is a real loaded module but not in data_sources — the resolver
+      # commits to it and surfaces the error rather than silently masking it.
+      assert_raise ArgumentError, ~r/not configured/, fn ->
+        Source.resolve!(String, "sqlite")
+      end
+    end
+
+    test "unloaded atom in repo_opt falls through to q_repo" do
+      adapter = Source.resolve!(:typoed_name, "sqlite")
       assert %Adapter{} = adapter
       assert adapter.name == "sqlite"
       assert adapter.state == Lotus.Test.SqliteRepo
     end
 
-    test "non-repo module in q_repo falls through to default" do
-      adapter = Source.resolve!(String, Enum)
+    test "unloaded atoms in both positions fall through to default" do
+      adapter = Source.resolve!(:typoed_one, :typoed_two)
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
     end
 
     test "handles invalid types gracefully" do
-      adapter = Source.resolve!(123, :atom)
+      adapter = Source.resolve!(123, :"Elixir.Nonexistent.Module")
       assert %Adapter{} = adapter
       assert adapter.name == "postgres"
       assert adapter.state == Lotus.Test.Repo
@@ -152,7 +160,7 @@ defmodule Lotus.SourcesTest do
     end
 
     test "raises for unknown repo name" do
-      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"unknown\" not configured/, fn ->
         Source.source_type("unknown")
       end
     end
@@ -193,7 +201,7 @@ defmodule Lotus.SourcesTest do
     end
 
     test "raises for unknown name" do
-      assert_raise ArgumentError, ~r/Data source 'unknown' not configured/, fn ->
+      assert_raise ArgumentError, ~r/Data source \"unknown\" not configured/, fn ->
         Source.get_source!("unknown")
       end
     end

@@ -4,11 +4,12 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   @behaviour Lotus.Source.Adapters.Ecto.Dialect
   require Logger
 
+  alias __MODULE__.EditorConfig
   alias Lotus.Source.Adapters.Ecto.Dialects.Default
   alias Lotus.SQL.FilterInjector
   alias Lotus.SQL.SortInjector
 
-  @myxql_error Module.concat([:MyXQL, :Error])
+  @default_statement_timeout_ms 5_000
 
   @impl true
   def source_type, do: :mysql
@@ -18,15 +19,23 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
 
   @impl true
   def execute_in_transaction(repo, fun, opts) do
-    session_state = capture_session_state(repo)
     config = parse_transaction_config(opts)
 
-    try do
-      setup_transaction_session(repo, config)
-      repo.transaction(fun, timeout: config.timeout)
-    after
-      restore_session_state(repo, session_state)
-    end
+    # checkout/1 pins one pool connection for capture + setup + tx + restore;
+    # without it, each query outside repo.transaction can land on a different
+    # member and leave SET SESSION state stranded. Setup must run before
+    # repo.transaction because MySQL rejects SET SESSION TRANSACTION inside
+    # an active tx ("Transaction characteristics can't be changed…").
+    repo.checkout(fn ->
+      session_state = capture_session_state(repo)
+
+      try do
+        setup_transaction_session(repo, config)
+        repo.transaction(fun, timeout: config.timeout)
+      after
+        restore_session_state(repo, session_state)
+      end
+    end)
   rescue
     e -> {:error, Exception.message(e)}
   end
@@ -57,9 +66,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
     read_only? = Keyword.get(opts, :read_only, true)
 
     stmt_ms =
-      case Keyword.get(opts, :statement_timeout_ms, 5_000) do
+      case Keyword.get(opts, :statement_timeout_ms, @default_statement_timeout_ms) do
         v when is_integer(v) and v >= 0 -> v
-        _ -> 5_000
+        _ -> @default_statement_timeout_ms
       end
 
     timeout = Keyword.get(opts, :timeout, 15_000)
@@ -73,9 +82,15 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   defp restore_session_state(repo, session_state) do
+    # Cleanup runs in an `after` block — if a restore query itself fails
+    # (connection already dropped, etc.) we swallow the secondary error so
+    # the caller still sees the original exception. Matches SQLite's
+    # restore_pragma_state semantics.
     restore_read_only_state(repo, session_state.read_only)
     if session_state.isolation, do: restore_iso(repo, session_state.isolation)
     restore_max_execution_time(repo, session_state.max_execution_time)
+  rescue
+    _ -> :ok
   end
 
   defp restore_read_only_state(repo, prev_ro) do
@@ -124,7 +139,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
-  def set_statement_timeout(repo, timeout_ms) do
+  def set_statement_timeout(repo, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
     repo.query!("SET SESSION max_execution_time = #{timeout_ms}")
     :ok
   end
@@ -133,9 +148,9 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   def set_search_path(_repo, _search_path), do: :ok
 
   @impl true
-  def format_error(%{__struct__: mod} = e) when mod == @myxql_error do
+  def format_error(%{__struct__: mod} = e) when mod == MyXQL.Error do
     case e do
-      %{mysql: %{code: code, message: message}} when is_binary(message) ->
+      %{mysql: %{code: code, message: message}} when is_integer(code) and is_binary(message) ->
         "MySQL Error (#{code}): #{message}"
 
       %{message: message} when is_binary(message) ->
@@ -279,13 +294,14 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
 
   @impl true
   def get_table_schema(repo, schema, table) do
+    # COLUMN_TYPE carries the full declaration (e.g. "tinyint(1)", "binary(16)",
+    # "varchar(255)", "decimal(10,2)") that db_type_to_lotus_type/1 pattern-matches
+    # on. DATA_TYPE strips the precision/length, which would silently make the
+    # "tinyint(1) -> :boolean" and "binary(16) -> :uuid" mappings unreachable.
     sql = """
     SELECT
       c.column_name,
-      c.data_type,
-      c.character_maximum_length,
-      c.numeric_precision,
-      c.numeric_scale,
+      c.column_type,
       c.is_nullable,
       c.column_default,
       IF(c.column_key = 'PRI', 1, 0) as is_primary_key
@@ -296,10 +312,10 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
 
     %{rows: rows} = repo.query!(sql, [schema, table])
 
-    Enum.map(rows, fn [name, type, char_len, num_prec, num_scale, nullable, default, is_pk] ->
+    Enum.map(rows, fn [name, type, nullable, default, is_pk] ->
       %{
         name: name,
-        type: format_mysql_type(type, char_len, num_prec, num_scale),
+        type: type,
         nullable: nullable == "YES",
         default: default,
         primary_key: is_pk == 1
@@ -321,6 +337,8 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
+  def resolve_table_schema(_repo, _table, []), do: nil
+
   def resolve_table_schema(repo, table, schemas) do
     placeholders = Enum.map_join(1..length(schemas), ",", fn _ -> "?" end)
 
@@ -359,29 +377,44 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
 
   @impl true
-  def extract_accessed_resources(repo, sql, params, _opts) do
+  def extract_accessed_resources(repo, sql, params, opts) do
     alias_map = EctoHelpers.parse_alias_map(sql)
     explain = "EXPLAIN FORMAT=JSON " <> sql
 
-    case repo.query(explain, params) do
-      {:ok, %{rows: [[json]]}} ->
-        explain_rels =
-          json
-          |> Lotus.JSON.decode!()
-          |> collect_mysql_relations(MapSet.new())
-          |> MapSet.to_list()
-          |> Enum.map(fn {schema, table_name} ->
-            {schema, EctoHelpers.resolve_alias(table_name, alias_map)}
-          end)
-          |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
+    # Route through execute_in_transaction so EXPLAIN runs under
+    # SET SESSION TRANSACTION READ ONLY + SET SESSION max_execution_time.
+    # MySQL's SESSION setting only takes effect at the next START TRANSACTION,
+    # so the SETs must happen before repo.transaction — which is what
+    # execute_in_transaction already guarantees.
+    result =
+      execute_in_transaction(
+        repo,
+        fn ->
+          case repo.query(explain, params) do
+            {:ok, %{rows: [[json]]}} ->
+              explain_rels =
+                json
+                |> Lotus.JSON.decode!()
+                |> collect_mysql_relations(MapSet.new())
+                |> MapSet.to_list()
+                |> Enum.map(fn {schema, table_name} ->
+                  {schema, EctoHelpers.resolve_alias(table_name, alias_map)}
+                end)
+                |> Enum.reject(fn {_schema, name} -> is_nil(name) end)
 
-        sql_rels = extract_tables_from_sql(sql)
-        relations = choose_relations(explain_rels, sql_rels, sql) |> MapSet.new()
+              sql_rels = extract_tables_from_sql(sql)
+              choose_relations(explain_rels, sql_rels, sql) |> MapSet.new()
 
-        {:ok, relations}
+            {:error, err} ->
+              repo.rollback(format_error(err))
+          end
+        end,
+        opts
+      )
 
-      {:error, e} ->
-        {:error, format_error(e)}
+    case result do
+      {:ok, relations} -> {:ok, relations}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -435,7 +468,12 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
     |> Enum.map(fn
       [_, _, schema, _, table] when schema != "" -> {schema, table}
       [_, "", "", _, table] -> {nil, table}
+      # Regex future-proofing: if the capture groups change (e.g. someone adds
+      # an optional alias capture), unmatched shapes fall through to nil and
+      # are filtered out rather than crashing preflight.
+      _ -> nil
     end)
+    |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
 
@@ -454,23 +492,8 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
       String.contains?(sql, "sys.")
   end
 
-  defp format_mysql_type("varchar", char_len, _, _) when not is_nil(char_len),
-    do: "varchar(#{char_len})"
-
-  defp format_mysql_type("char", char_len, _, _) when not is_nil(char_len),
-    do: "char(#{char_len})"
-
-  defp format_mysql_type("decimal", _, num_prec, num_scale)
-       when not is_nil(num_prec) and not is_nil(num_scale),
-       do: "decimal(#{num_prec},#{num_scale})"
-
-  defp format_mysql_type("decimal", _, num_prec, _) when not is_nil(num_prec),
-    do: "decimal(#{num_prec})"
-
-  defp format_mysql_type(type, _, _, _), do: type
-
   @impl true
-  def transform_sql(sql) do
+  def transform_statement(sql) do
     alias Lotus.SQL.Transformer
 
     sql
@@ -503,7 +526,5 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   defp mysql_scalar_type(_), do: :text
 
   @impl true
-  def editor_config do
-    Lotus.Source.Adapters.Ecto.Dialects.MySQL.EditorConfig.config()
-  end
+  def editor_config, do: EditorConfig.config()
 end

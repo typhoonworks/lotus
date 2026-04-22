@@ -39,22 +39,31 @@ config :lotus,
 
 A map of data sources where queries can be executed against actual data. This powerful feature allows Lotus to work with multiple databases simultaneously, supporting PostgreSQL, MySQL, and SQLite.
 
-Keys are friendly names that you use when executing queries, values are Ecto repository modules.
+Keys are friendly names that you use when executing queries. Values are **either** Ecto repository modules (for SQL databases handled by the built-in Ecto adapter) **or** config maps (for non-Ecto adapters like Elasticsearch, ClickHouse-HTTP, or any custom `Lotus.Source.Adapter` implementation).
 
 > **Deprecation note**: The old `:data_repos` config key is deprecated but still works. Please migrate to `:data_sources`.
 
 ```elixir
 config :lotus,
   data_sources: %{
+    # Ecto-backed sources (module values) — handled by the built-in Ecto adapter
     "main" => MyApp.Repo,           # Can be the same as ecto_repo
     "analytics" => MyApp.AnalyticsRepo,
     "reporting" => MyApp.ReportingRepo,
     "mysql_data" => MyApp.MySQLRepo,    # MySQL repository
-    "sqlite_data" => MyApp.SqliteRepo   # Mix database types
-  }
+    "sqlite_data" => MyApp.SqliteRepo,  # Mix database types
+
+    # Non-Ecto sources (map values) — dispatched to a matching
+    # source_adapters entry via its can_handle?/1 callback
+    "search" => %{adapter: :elasticsearch, url: "http://localhost:9200"},
+    "warehouse" => %{adapter: MyApp.ClickHouseAdapter, url: "http://ch:8123"}
+  },
+  source_adapters: [MyApp.ClickHouseAdapter]
 ```
 
-**Type**: `%{String.t() => module()}`
+**Type**: `%{String.t() => module() | map()}`
+
+Map values are opaque to Lotus — the matching adapter's `wrap/2` callback interprets them. See the [source adapters guide](source-adapters.md) for details on registering custom adapters.
 
 #### `default_source` (required when multiple data_sources)
 
@@ -358,6 +367,27 @@ config :lotus,
 ```
 
 ### Extension Points
+
+#### `source_adapters`
+
+A list of modules implementing the `Lotus.Source.Adapter` behaviour. Custom adapters let you execute queries against non-Ecto data sources (REST APIs, Elasticsearch, ClickHouse-over-HTTP, gRPC, etc.) through the same public API.
+
+```elixir
+config :lotus,
+  source_adapters: [
+    MyApp.ElasticsearchAdapter,
+    MyApp.ClickHouseAdapter
+  ],
+  data_sources: %{
+    "search" => %{adapter: :elasticsearch, url: "http://localhost:9200"},
+    "warehouse" => %{adapter: MyApp.ClickHouseAdapter, url: "http://ch:8123"}
+  }
+```
+
+**Type**: `[module()]` — each module must implement `Lotus.Source.Adapter` with `can_handle?/1` and `wrap/2`. Validated at boot: unloaded modules or modules missing the behaviour raise at `Config.reload!/0` rather than at first query.
+**Default**: `[]`
+
+When resolving a data source, Lotus checks each `source_adapters` module's `can_handle?/1` against the entry (repo module or map) and dispatches to the first match. If none match, atom entries fall through to the built-in Ecto adapter; map entries raise a clear error. See the [source adapters guide](source-adapters.md) for the full contract and a walkthrough.
 
 #### `source_resolver`
 
