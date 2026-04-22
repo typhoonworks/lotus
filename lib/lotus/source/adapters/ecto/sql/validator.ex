@@ -7,9 +7,9 @@ defmodule Lotus.Source.Adapters.Ecto.SQL.Validator do
   stripped so the raw template can be checked.
   """
 
+  alias Lotus.Query.OptionalClause
   alias Lotus.Source
   alias Lotus.Source.Adapter
-  alias Lotus.Query.OptionalClause
   alias Lotus.Variables
 
   @doc """

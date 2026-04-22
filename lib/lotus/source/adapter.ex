@@ -56,6 +56,7 @@ defmodule Lotus.Source.Adapter do
       Adapter.quote_identifier(adapter, "users")
   """
 
+  alias Lotus.Query.Filter
   alias Lotus.Query.Statement
 
   @type source_type :: :postgres | :mysql | :sqlite | :other | atom()
@@ -865,7 +866,7 @@ defmodule Lotus.Source.Adapter do
   def supported_filter_operators(%__MODULE__{module: mod, state: state}) do
     if function_exported?(mod, :supported_filter_operators, 1),
       do: mod.supported_filter_operators(state),
-      else: Lotus.Query.Filter.operators()
+      else: Filter.operators()
   end
 
   @doc "Apply filters to a statement via the adapter. Empty filters short-circuit."

@@ -154,6 +154,22 @@ defmodule Lotus.Source do
     source_name |> get_source!() |> Adapter.limit_query(statement, limit)
   end
 
+  @doc """
+  Return the `Lotus.Query.Filter` operators this source's adapter supports.
+
+  UIs that expose a filter operator dropdown should read this list and
+  gate the options per source — attempting to use an operator outside
+  the declared list raises `Lotus.UnsupportedOperatorError` when filters
+  are applied.
+  """
+  @spec supported_filter_operators(Adapter.t() | String.t()) :: [atom()]
+  def supported_filter_operators(%Adapter{} = adapter),
+    do: Adapter.supported_filter_operators(adapter)
+
+  def supported_filter_operators(source_name) when is_binary(source_name) do
+    source_name |> get_source!() |> Adapter.supported_filter_operators()
+  end
+
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------

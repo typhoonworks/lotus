@@ -62,9 +62,9 @@ defmodule Lotus.AI.Actions.GetTableSchema do
     do: Adapter.validate_identifier(adapter, :table, table)
 
   defp validate_parts(adapter, schema, table) do
-    with :ok <- Adapter.validate_identifier(adapter, :schema, schema),
-         :ok <- Adapter.validate_identifier(adapter, :table, table),
-         do: :ok
+    with :ok <- Adapter.validate_identifier(adapter, :schema, schema) do
+      Adapter.validate_identifier(adapter, :table, table)
+    end
   end
 
   defp fetch_schema(data_source, nil, table, original_name) do

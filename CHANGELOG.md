@@ -90,6 +90,8 @@
 
 ### Added
 
+- **Filter/sort column + operator validation in the pipeline.** `Lotus.execute_with_options/7` now calls `Adapter.validate_identifier/3` on each filter/sort column name before dispatching to `apply_filters/3` / `apply_sorts/3`, raising `ArgumentError` on unsafe identifiers. Filter operators are validated against `Adapter.supported_filter_operators/1` before dispatch — unsupported operators raise `Lotus.UnsupportedOperatorError` rather than silently degrading.
+- `Lotus.Source.supported_filter_operators/1` public facade — returns the adapter's declared operator set for the given source (accepts either `%Adapter{}` or a source-name binary). UI layers reading this list gate their operator dropdown per source.
 - **Four new universal `Lotus.Source.Adapter` callbacks** for feature-driven non-SQL parity:
   - `validate_statement/3` — adapter validates a statement without executing (SQL: EXPLAIN; ES: `_validate`; default: `:ok` trust-on-execute).
   - `parse_qualified_name/2` — parses a qualified resource name into an ordered hierarchy list (`"public.users"` → `["public", "users"]`; flat-namespace adapters return `[name]`).

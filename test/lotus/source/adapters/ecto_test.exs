@@ -1,6 +1,7 @@
 defmodule Lotus.Source.Adapters.EctoTest do
   use Lotus.Case, async: true
 
+  alias Lotus.Query.Filter
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.Source.Adapters.Ecto, as: EctoAdapter
@@ -361,6 +362,109 @@ defmodule Lotus.Source.Adapters.EctoTest do
       errors = Adapter.handled_errors(adapter)
       assert is_list(errors)
       assert Postgrex.Error in errors
+    end
+  end
+
+  describe "validate_statement/3" do
+    test "returns :ok for a parseable SQL statement" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      assert :ok = Adapter.validate_statement(adapter, Statement.new("SELECT 1"), [])
+    end
+
+    test "returns {:error, reason} for syntactically invalid SQL" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert {:error, reason} =
+               Adapter.validate_statement(adapter, Statement.new("SELEC 1"), [])
+
+      assert is_binary(reason)
+    end
+
+    test "neutralizes {{var}} placeholders so the raw template validates" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      # Unbound {{id}} → NULL during validation.
+      assert :ok =
+               Adapter.validate_statement(
+                 adapter,
+                 Statement.new("SELECT * FROM test_users WHERE id = {{id}}"),
+                 []
+               )
+    end
+
+    test "strips [[...]] optional clauses so the template validates" do
+      adapter = EctoAdapter.wrap("main", Repo)
+
+      assert :ok =
+               Adapter.validate_statement(
+                 adapter,
+                 Statement.new("SELECT * FROM test_users [[WHERE name = {{name}}]]"),
+                 []
+               )
+    end
+  end
+
+  describe "parse_qualified_name/2" do
+    test "splits a schema-qualified name into [schema, table]" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      assert {:ok, ["public", "users"]} = Adapter.parse_qualified_name(adapter, "public.users")
+    end
+
+    test "returns [name] for an unqualified name" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      assert {:ok, ["users"]} = Adapter.parse_qualified_name(adapter, "users")
+    end
+  end
+
+  describe "validate_identifier/3" do
+    setup do
+      {:ok, adapter: EctoAdapter.wrap("main", Repo)}
+    end
+
+    test "accepts a simple ASCII identifier", %{adapter: adapter} do
+      assert :ok = Adapter.validate_identifier(adapter, :table, "users")
+      assert :ok = Adapter.validate_identifier(adapter, :schema, "public")
+      assert :ok = Adapter.validate_identifier(adapter, :column, "email_address")
+    end
+
+    test "rejects identifiers with spaces or punctuation", %{adapter: adapter} do
+      assert {:error, msg} = Adapter.validate_identifier(adapter, :table, "users table")
+      assert msg =~ "Invalid table name"
+    end
+
+    test "rejects identifiers starting with a digit", %{adapter: adapter} do
+      assert {:error, _msg} = Adapter.validate_identifier(adapter, :column, "1col")
+    end
+
+    test "accepts identifiers with underscores and digits (after first char)", %{adapter: adapter} do
+      assert :ok = Adapter.validate_identifier(adapter, :column, "col_1")
+      assert :ok = Adapter.validate_identifier(adapter, :column, "_private")
+    end
+  end
+
+  describe "supported_filter_operators/1" do
+    test "returns the full Lotus.Query.Filter operator set" do
+      adapter = EctoAdapter.wrap("main", Repo)
+      ops = Adapter.supported_filter_operators(adapter)
+
+      assert is_list(ops)
+      assert Enum.sort(ops) == Enum.sort(Filter.operators())
+    end
+
+    @tag :sqlite
+    test "SQLite dialect reports the same set" do
+      adapter = EctoAdapter.wrap("sqlite", Lotus.Test.SqliteRepo)
+      ops = Adapter.supported_filter_operators(adapter)
+
+      assert Enum.sort(ops) == Enum.sort(Filter.operators())
+    end
+
+    @tag :mysql
+    test "MySQL dialect reports the same set" do
+      adapter = EctoAdapter.wrap("mysql", Lotus.Test.MysqlRepo)
+      ops = Adapter.supported_filter_operators(adapter)
+
+      assert Enum.sort(ops) == Enum.sort(Filter.operators())
     end
   end
 end

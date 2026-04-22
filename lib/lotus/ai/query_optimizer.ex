@@ -9,8 +9,8 @@ defmodule Lotus.AI.QueryOptimizer do
   alias Lotus.AI.Actions
   alias Lotus.AI.Prompts.Optimization
   alias Lotus.AI.Tool
-  alias Lotus.Source.Adapter
   alias Lotus.Query.OptionalClause
+  alias Lotus.Source.Adapter
   alias Lotus.Variables
 
   @doc """

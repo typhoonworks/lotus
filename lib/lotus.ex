@@ -61,15 +61,16 @@ defmodule Lotus do
           vars: map(),
           cache: [cache_opt] | :bypass | :refresh | nil,
           window: window_opts,
-          filters: [Lotus.Query.Filter.t()],
+          filters: [Filter.t()],
           context: term()
         ]
 
   alias Lotus.Cache.{Key, KeyBuilder}
   alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
-  alias Lotus.Query.Statement
+  alias Lotus.Query.{Filter, Sort, Statement}
   alias Lotus.Source.Adapter
   alias Lotus.Storage.Query
+  alias Lotus.UnsupportedOperatorError
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
   def start_link(opts \\ []), do: Lotus.Supervisor.start_link(opts)
@@ -472,9 +473,12 @@ defmodule Lotus do
     statement = Adapter.transform_bound_query(adapter, statement, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
+    :ok = validate_filter_columns!(adapter, filters)
+    :ok = validate_filter_operators!(adapter, filters)
     statement = Adapter.apply_filters(adapter, statement, filters)
 
     sorts = Keyword.get(opts, :sorts, [])
+    :ok = validate_sort_columns!(adapter, sorts)
     statement = Adapter.apply_sorts(adapter, statement, sorts)
 
     {statement, pagination_meta, cache_bound} =
@@ -887,6 +891,60 @@ defmodule Lotus do
       limit ->
         min(limit, max_limit)
     end
+  end
+
+  # Pipeline-level validation of caller-supplied filter/sort column names
+  # and filter operators. Catches mismatches (unknown columns, operators the
+  # adapter can't handle) before we ever hand them to `apply_filters/3` /
+  # `apply_sorts/3` — so the failure mode is a clear error at the boundary,
+  # not a cryptic SQL/DSL error from deep inside the adapter.
+  defp validate_filter_columns!(_adapter, []), do: :ok
+
+  defp validate_filter_columns!(adapter, filters) do
+    Enum.each(filters, fn %Filter{column: col} ->
+      case Adapter.validate_identifier(adapter, :column, col) do
+        :ok -> :ok
+        {:error, reason} -> raise ArgumentError, reason
+      end
+    end)
+
+    :ok
+  end
+
+  defp validate_sort_columns!(_adapter, []), do: :ok
+
+  defp validate_sort_columns!(adapter, sorts) do
+    Enum.each(sorts, fn
+      %Sort{column: col} -> check_column!(adapter, col)
+      col when is_binary(col) -> check_column!(adapter, col)
+      _other -> :ok
+    end)
+
+    :ok
+  end
+
+  defp check_column!(adapter, col) do
+    case Adapter.validate_identifier(adapter, :column, col) do
+      :ok -> :ok
+      {:error, reason} -> raise ArgumentError, reason
+    end
+  end
+
+  defp validate_filter_operators!(_adapter, []), do: :ok
+
+  defp validate_filter_operators!(adapter, filters) do
+    supported = Adapter.supported_filter_operators(adapter)
+
+    Enum.each(filters, fn %Filter{op: op} ->
+      unless op in supported do
+        raise UnsupportedOperatorError,
+          operator: op,
+          source: adapter.name,
+          supported: supported
+      end
+    end)
+
+    :ok
   end
 
   defp maybe_paginate(%Statement{} = statement, _adapter, _search_path, nil),

@@ -34,10 +34,14 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   @behaviour Lotus.Source.Adapter
 
+  alias Lotus.Query.Filter
+  alias Lotus.Query.OptionalClause
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
   alias Lotus.Source.Adapters.Ecto.Dialects
+  alias Lotus.Source.Adapters.Ecto.SQL.Identifier
   alias Lotus.Source.Adapters.Ecto.SQL.Sanitizer
+  alias Lotus.Variables
 
   @default_dialect Dialects.Default
 
@@ -109,6 +113,7 @@ defmodule Lotus.Source.Adapters.Ecto do
       unquote(visibility_callbacks())
       unquote(lifecycle_callbacks())
       unquote(pipeline_callbacks())
+      unquote(validation_callbacks())
       unquote(identity_callbacks())
       unquote(presentation_callbacks())
       unquote(type_mapping_callbacks())
@@ -263,7 +268,11 @@ defmodule Lotus.Source.Adapters.Ecto do
       @impl true
       def substitute_list_variable(_repo, statement, var_name, values, type),
         do: EctoAdapter.do_substitute_list_variable(@dialect, statement, var_name, values, type)
+    end
+  end
 
+  defp validation_callbacks do
+    quote do
       @impl true
       def validate_statement(repo, statement, opts),
         do: EctoAdapter.do_validate_statement(@dialect, repo, statement, opts)
@@ -849,8 +858,8 @@ defmodule Lotus.Source.Adapters.Ecto do
       when is_binary(sql) do
     neutralized =
       sql
-      |> Lotus.Query.OptionalClause.strip_brackets()
-      |> Lotus.Variables.neutralize("NULL")
+      |> OptionalClause.strip_brackets()
+      |> Variables.neutralize("NULL")
 
     case dialect.query_plan(repo, neutralized, params, []) do
       {:ok, _plan} -> :ok
@@ -871,14 +880,14 @@ defmodule Lotus.Source.Adapters.Ecto do
   # via `defoverridable` in their own adapter module.
   @doc false
   def do_validate_identifier(kind, value) when is_binary(value) do
-    Lotus.Source.Adapters.Ecto.SQL.Identifier.validate_identifier(value, "#{kind} name")
+    Identifier.validate_identifier(value, "#{kind} name")
   end
 
   # Ecto-backed adapters implement all `Lotus.Query.Filter` operators via
   # `Lotus.Source.Adapters.Ecto.SQL.FilterInjector`. Dialects may override to declare a narrower
   # set (e.g. if an engine lacks regex LIKE support).
   @doc false
-  def do_supported_filter_operators, do: Lotus.Query.Filter.operators()
+  def do_supported_filter_operators, do: Filter.operators()
 
   # ---------------------------------------------------------------------------
   # Private helpers
