@@ -183,7 +183,7 @@ defmodule Lotus.Cache.ETSTest do
     test "returns proper child spec" do
       spec = ETS.child_spec([])
       assert spec.id == ETS
-      assert spec.type == :supervisor
+      assert spec.type == :worker
       assert spec.start == {ETS, :start_link, [[]]}
     end
   end

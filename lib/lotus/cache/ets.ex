@@ -16,14 +16,13 @@ defmodule Lotus.Cache.ETS do
     %{
       id: __MODULE__,
       start: {__MODULE__, :start_link, [[]]},
-      type: :supervisor
+      type: :worker
     }
   end
 
   def start_link(_opts) do
     ensure_tables!()
     start_janitor()
-    {:ok, self()}
   end
 
   @impl Lotus.Cache.Adapter
@@ -141,8 +140,11 @@ defmodule Lotus.Cache.ETS do
     end
   end
 
+
   defp start_janitor do
-    spawn_link(fn -> janitor_loop() end)
+    Task.start_link(fn ->
+      janitor_loop()
+    end)
   end
 
   defp janitor_loop do
