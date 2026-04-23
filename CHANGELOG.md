@@ -54,6 +54,24 @@
   `apply_pagination/3` returns a single `%Statement{}` whose `:meta`
   carries the optional count spec instead of the old third tuple element.
 
+- **Two pagination count strategies for `count: :exact`.** Adapters pick
+  how they surface the pre-pagination total. **Strategy A — inline
+  count:** `execute_query/4` returns the total via a new optional
+  `:total_count` key in its result map, for engines where the count
+  comes back as a side-effect of the main query (Elasticsearch's
+  `track_total_hits: true`, MongoDB's `$facet`). `apply_pagination/3`
+  does not set `:count_spec` in this mode. **Strategy B — separate count
+  query:** `apply_pagination/3` places a `count_spec` in
+  `statement.meta[:count_spec]` and Lotus core runs it through the same
+  adapter (standard for SQL). Precedence: if both channels are present,
+  the inline count wins and `count_spec` is not run. `Result.meta.total_mode`
+  now reflects what the caller requested (`:exact` | `:none`), not how
+  the adapter chose to fulfil it — so an adapter that cannot produce a
+  total still reports `:exact` honestly with `total_count: nil`.
+  `execute_query/4` typespec widened to include
+  `optional(:total_count) => non_neg_integer() | nil`; existing adapters
+  that omit the key are unaffected.
+
 - **Variable substitution is adapter-owned.** Two universal callbacks —
   `substitute_variable/5` and `substitute_list_variable/5` — let each
   adapter pick its substitution strategy. SQL-prepared adapters add a

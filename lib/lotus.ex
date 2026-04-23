@@ -952,12 +952,13 @@ defmodule Lotus do
     paged_statement = Adapter.apply_pagination(adapter, statement, callback_opts)
     count_spec = Map.get(paged_statement.meta, :count_spec)
 
-    # Assemble the internal meta with the real adapter from scope. The
-    # preserved user-facing shape (Result.meta.window / .total_count /
-    # .total_mode) is built by merge_pagination_meta/2 below.
+    # `total_mode` reflects what the caller requested — not how the adapter
+    # chose to fulfil it. Strategy A adapters (inline count via the main
+    # query result) don't set :count_spec but still need :exact plumbed
+    # through so merge_pagination_meta/2 surfaces the total.
     pagination_meta = %{
       window: %{limit: limit, offset: offset},
-      total_mode: if(count_spec, do: :exact, else: :none),
+      total_mode: count_mode,
       count_spec: count_spec,
       adapter: adapter,
       search_path: search_path
@@ -981,11 +982,21 @@ defmodule Lotus do
   defp merge_pagination_meta(%Result{} = res, %{total_mode: :exact} = meta) do
     win = Map.fetch!(meta, :window)
 
-    # Try to compute exact count synchronously. If it fails, fall back with no total.
+    # Precedence: adapter-supplied inline count (Strategy A) wins over
+    # :count_spec (Strategy B). If neither yields a count, fall back to nil.
     total_count =
-      case do_count(meta) do
-        {:ok, n} when is_integer(n) and n >= 0 -> n
-        _ -> nil
+      cond do
+        is_integer(res.meta[:total_count]) ->
+          res.meta[:total_count]
+
+        is_map(meta[:count_spec]) ->
+          case do_count(meta) do
+            {:ok, n} when is_integer(n) and n >= 0 -> n
+            _ -> nil
+          end
+
+        true ->
+          nil
       end
 
     updated_meta =

@@ -91,9 +91,33 @@ defmodule Lotus.Source.Adapter do
   other engines) together with any bound `params`, and return the usual
   `{columns, rows, num_rows}` result shape so core can assemble a
   `%Lotus.Result{}`.
+
+  ## Optional `:total_count` — inline count strategy
+
+  When the caller requested `count: :exact` via pagination and the adapter
+  can compute the pre-pagination row total as a side-effect of running the
+  main query (e.g. Elasticsearch's `hits.total.value` with
+  `track_total_hits: true`), include `:total_count` in the result map:
+
+      {:ok, %{
+        columns: [...],
+        rows: [...],
+        num_rows: N,
+        total_count: T    # pre-pagination total; nil if unavailable
+      }}
+
+  Adapters without a cheap inline count should omit the key and use
+  `apply_pagination/3` + `:count_spec` to compute the total via a separate
+  query. See the pagination callback for the full precedence rule.
   """
   @callback execute_query(state :: term(), sql :: term(), params :: list(), opts :: keyword()) ::
-              {:ok, %{columns: [String.t()], rows: [[term()]], num_rows: non_neg_integer()}}
+              {:ok,
+               %{
+                 :columns => [String.t()],
+                 :rows => [[term()]],
+                 :num_rows => non_neg_integer(),
+                 optional(:total_count) => non_neg_integer() | nil
+               }}
               | {:error, term()}
 
   @doc "Execute a function within a transaction."
@@ -235,7 +259,22 @@ defmodule Lotus.Source.Adapter do
     * `:limit` (required) — page size
     * `:offset` — page offset (default: `0`)
     * `:count` — `:none` (default) or `:exact`. When `:exact`, the adapter
-      should place a `count_spec` in `statement.meta[:count_spec]`.
+      picks one of two strategies to surface the pre-pagination total:
+
+      **Strategy A — inline count.** The adapter arranges for its main
+      query to return the total as a side-effect (e.g. Elasticsearch's
+      `track_total_hits: true`, MongoDB's `$facet`). `execute_query/4`
+      returns the count via the optional `:total_count` key in its result
+      map. The adapter does *not* set `:count_spec` in `statement.meta`.
+
+      **Strategy B — separate count query.** The adapter places a
+      `count_spec` in `statement.meta[:count_spec]`; Lotus core runs it
+      through the same adapter after the main query. Standard for SQL
+      adapters (a `SELECT count(*) FROM ...` around the filtered query).
+
+      Adapters pick one — not both. If both are present, Strategy A wins
+      (the inline count from the main query is authoritative; the
+      count_spec is not run).
     * `:search_path` — forwarded by callers that care about schema isolation
 
   ## Return

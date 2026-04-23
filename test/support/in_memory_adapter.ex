@@ -74,12 +74,25 @@ defmodule Lotus.Test.InMemoryAdapter do
   Build a dataset map that `can_handle?/1` and `wrap/2` will recognize.
 
       Lotus.Test.InMemoryAdapter.dataset(tables: %{"users" => %{columns: [...], rows: [...]}})
+
+  ## Options
+
+    * `:tables` — table name → `%{columns, rows, types}` map.
+    * `:count_strategy` — `:separate` (default) or `:inline`. Controls how the
+      adapter surfaces pre-pagination totals when the caller requests
+      `count: :exact`:
+        * `:separate` — Strategy B. `apply_pagination/3` stashes a
+          `:count_spec` in `statement.meta`; Lotus core runs it as a
+          second query.
+        * `:inline` — Strategy A. `execute_query/4` returns
+          `:total_count` directly in its result map.
   """
   @spec dataset(keyword()) :: map()
   def dataset(opts \\ []) do
     %{
       __lotus_adapter__: __MODULE__,
-      tables: Keyword.get(opts, :tables, %{})
+      tables: Keyword.get(opts, :tables, %{}),
+      count_strategy: Keyword.get(opts, :count_strategy, :separate)
     }
   end
 
@@ -119,10 +132,19 @@ defmodule Lotus.Test.InMemoryAdapter do
   def execute_query(state, text, params, _opts) do
     with {:ok, dsl} <- ensure_dsl(text),
          {:ok, table} <- fetch_table(state, dsl[:from]) do
-      rows = run_dsl(dsl, table, params)
+      {rows, total} = run_dsl(dsl, table, params)
       columns = dsl[:select] || table.columns
       projected = project(rows, table.columns, columns)
-      {:ok, %{columns: columns, rows: projected, num_rows: length(projected)}}
+      result = %{columns: columns, rows: projected, num_rows: length(projected)}
+
+      # Strategy A: surface the pre-pagination total inline when the dataset
+      # opted in AND the pagination step recorded the caller's :exact intent.
+      result =
+        if state[:count_strategy] == :inline and dsl[:count_mode] == :exact,
+          do: Map.put(result, :total_count, total),
+          else: result
+
+      {:ok, result}
     end
   end
 
@@ -206,24 +228,27 @@ defmodule Lotus.Test.InMemoryAdapter do
   end
 
   @impl true
-  def apply_pagination(_state, %Statement{} = statement, opts) do
+  def apply_pagination(state, %Statement{} = statement, opts) do
     dsl = ensure_dsl!(statement.text)
     limit = Keyword.get(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
+    count = Keyword.get(opts, :count, :none)
 
     new_text =
       dsl
       |> Map.put(:limit, limit)
       |> Map.put(:offset, offset)
+      |> Map.put(:count_mode, count)
 
+    # Strategy B (:separate, default) — record a :count_spec for core to run.
+    # Strategy A (:inline) — execute_query will return :total_count with the
+    # main result; no second query needed.
     meta =
-      case Keyword.get(opts, :count, :none) do
-        :exact ->
-          count_dsl = dsl |> Map.drop([:limit, :offset]) |> Map.put(:count, true)
-          Map.put(statement.meta, :count_spec, %{query: count_dsl, params: []})
-
-        _ ->
-          statement.meta
+      if count == :exact and state[:count_strategy] != :inline do
+        count_dsl = dsl |> Map.drop([:limit, :offset, :count_mode]) |> Map.put(:count, true)
+        Map.put(statement.meta, :count_spec, %{query: count_dsl, params: []})
+      else
+        statement.meta
       end
 
     %{statement | text: new_text, meta: meta}
@@ -439,11 +464,16 @@ defmodule Lotus.Test.InMemoryAdapter do
   defp ensure_tagged(%{__lotus_adapter__: __MODULE__} = d), do: d
   defp ensure_tagged(d), do: Map.put(d, :__lotus_adapter__, __MODULE__)
 
+  # Returns `{page, total}` — `total` is the row count before pagination is
+  # applied (what Strategy A surfaces as `:total_count`).
   defp run_dsl(dsl, %{columns: cols, rows: rows}, _params) do
-    rows
-    |> Enum.filter(&matches_all?(&1, cols, Map.get(dsl, :where, [])))
-    |> sort_rows(cols, Map.get(dsl, :order_by, []))
-    |> paginate(Map.get(dsl, :offset, 0), Map.get(dsl, :limit))
+    filtered_sorted =
+      rows
+      |> Enum.filter(&matches_all?(&1, cols, Map.get(dsl, :where, [])))
+      |> sort_rows(cols, Map.get(dsl, :order_by, []))
+
+    page = paginate(filtered_sorted, Map.get(dsl, :offset, 0), Map.get(dsl, :limit))
+    {page, length(filtered_sorted)}
   end
 
   defp project(rows, source_cols, target_cols) when source_cols == target_cols, do: rows

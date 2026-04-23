@@ -74,8 +74,43 @@ return new structs rather than mutating in place.
 Relevant keys inside `:meta`:
 
 - `:count_spec` — placed by `apply_pagination/3` when the caller requested
-  `count: :exact`. Shape: `%{query: adapter-native, params: list()}`. Lotus
-  core runs it through the same adapter.
+  `count: :exact` and the adapter uses Strategy B (separate count query).
+  Shape: `%{query: adapter-native, params: list()}`. Lotus core runs it
+  through the same adapter. See "Exact counts" below.
+
+## Exact counts — two adapter strategies
+
+When the caller requests `count: :exact`, the adapter picks one of two
+strategies to surface the pre-pagination total:
+
+**Strategy A — inline count** (new for engines where count comes back with
+the data). `execute_query/4` includes `:total_count` directly in its result
+map:
+
+```elixir
+{:ok, %{columns: [...], rows: [...], num_rows: 3, total_count: 1_247}}
+```
+
+Use this for engines that return the total as a side-effect of the main
+query — Elasticsearch's `hits.total.value` with `track_total_hits: true`,
+MongoDB's `$facet`, any store whose search response includes the match count
+for free. `apply_pagination/3` should NOT set `:count_spec` — its only job
+is to arrange for the main query to return the count (e.g. add
+`"track_total_hits": true` to the ES body).
+
+**Strategy B — separate count query** (classic SQL path). `apply_pagination/3`
+places a `count_spec` in `statement.meta`; Lotus core runs it through the
+same adapter after the main query. Standard for SQL adapters — a
+`SELECT count(*) FROM ...` around the filtered query.
+
+**Precedence rule.** Adapters pick one strategy per dataset — not both. If
+both are present anyway, Strategy A wins: the inline count is authoritative
+and the count_spec is not run.
+
+Adapters that cannot provide an exact count at all simply don't populate
+either channel — `Result.meta[:total_count]` ends up `nil` and
+`:total_mode` is `:exact` (honest signal that the caller asked but no
+number was produced).
 
 ## Default Behaviour
 

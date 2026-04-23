@@ -94,12 +94,17 @@ defmodule Lotus.Runner do
         {:error, msg}
 
       {final_cols, final_rows} ->
+        result_meta =
+          raw
+          |> Map.take([:connection_id, :messages])
+          |> maybe_put_total_count(raw)
+
         {:ok,
          Result.new(final_cols, final_rows,
            num_rows: num_rows,
            duration_ms: duration_ms,
            command: command,
-           meta: Map.take(raw, [:connection_id, :messages])
+           meta: result_meta
          )}
     end
   end
@@ -111,6 +116,11 @@ defmodule Lotus.Runner do
   defp handle_query_result(other, _elapsed_us, _adapter) do
     other
   end
+
+  defp maybe_put_total_count(meta, %{total_count: n}) when is_integer(n) and n >= 0,
+    do: Map.put(meta, :total_count, n)
+
+  defp maybe_put_total_count(meta, _raw), do: meta
 
   defp normalize_command(nil), do: nil
   defp normalize_command(cmd) when is_atom(cmd), do: Atom.to_string(cmd)
