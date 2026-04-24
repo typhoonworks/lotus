@@ -1358,10 +1358,127 @@ defmodule Lotus.Source.Adapter do
     end
   end
 
-  @doc "Return editor configuration via the adapter."
+  # Caps on editor_config list sizes. A noisy or compromised adapter
+  # could otherwise ship a huge payload that flows over LiveView to
+  # every editor session. Enforced at the dispatch layer, same
+  # philosophy as the ai_context caps above.
+  @editor_config_max_keywords 2000
+  @editor_config_max_types 2000
+  @editor_config_max_functions 500
+  @editor_config_max_context_schema_root 200
+  @editor_config_max_context_schema_children 500
+
+  @editor_config_known_keys [
+    :language,
+    :keywords,
+    :types,
+    :functions,
+    :context_boundaries,
+    :dialect_spec,
+    :context_schema
+  ]
+
+  @doc """
+  Return editor configuration via the adapter, with list sizes capped
+  at safe limits.
+
+  Unknown top-level keys are dropped; oversized `:keywords`, `:types`,
+  `:functions`, `:context_schema.root`, and `:context_schema.children`
+  are truncated with a one-time `Logger.warning/1` per adapter module.
+  Prevents a misbehaving adapter from bloating every editor session's
+  LiveView payload.
+  """
   @spec editor_config(t()) :: map()
   def editor_config(%__MODULE__{module: mod, state: state}) do
-    mod.editor_config(state)
+    state |> mod.editor_config() |> sanitize_editor_config(mod)
+  end
+
+  defp sanitize_editor_config(config, mod) when is_map(config) do
+    config
+    |> Map.take(@editor_config_known_keys)
+    |> truncate_list_field(:keywords, @editor_config_max_keywords, mod)
+    |> truncate_list_field(:types, @editor_config_max_types, mod)
+    |> truncate_list_field(:functions, @editor_config_max_functions, mod)
+    |> truncate_context_schema(mod)
+  end
+
+  defp sanitize_editor_config(other, _mod), do: other
+
+  defp truncate_list_field(config, key, limit, mod) do
+    case Map.get(config, key) do
+      list when is_list(list) and length(list) > limit ->
+        warn_editor_config_once(mod, key, "exceeds #{limit} entries, truncating")
+        Map.put(config, key, Enum.take(list, limit))
+
+      _ ->
+        config
+    end
+  end
+
+  defp truncate_context_schema(config, mod) do
+    case Map.get(config, :context_schema) do
+      %{} = schema ->
+        schema =
+          schema
+          |> truncate_schema_root(mod)
+          |> truncate_schema_children(mod)
+
+        Map.put(config, :context_schema, schema)
+
+      _ ->
+        config
+    end
+  end
+
+  defp truncate_schema_root(schema, mod) do
+    case Map.get(schema, :root) do
+      list when is_list(list) and length(list) > @editor_config_max_context_schema_root ->
+        warn_editor_config_once(
+          mod,
+          :context_schema_root,
+          "exceeds #{@editor_config_max_context_schema_root} entries, truncating"
+        )
+
+        Map.put(schema, :root, Enum.take(list, @editor_config_max_context_schema_root))
+
+      _ ->
+        schema
+    end
+  end
+
+  defp truncate_schema_children(schema, mod) do
+    case Map.get(schema, :children) do
+      %{} = children when map_size(children) > @editor_config_max_context_schema_children ->
+        warn_editor_config_once(
+          mod,
+          :context_schema_children,
+          "exceeds #{@editor_config_max_context_schema_children} entries, truncating"
+        )
+
+        truncated =
+          children
+          |> Enum.take(@editor_config_max_context_schema_children)
+          |> Map.new()
+
+        Map.put(schema, :children, truncated)
+
+      _ ->
+        schema
+    end
+  end
+
+  defp warn_editor_config_once(mod, field, msg) do
+    key = {__MODULE__, :editor_config_warn, mod, field}
+
+    case :persistent_term.get(key, :none) do
+      :warned ->
+        :ok
+
+      :none ->
+        :persistent_term.put(key, :warned)
+        require Logger
+        Logger.warning("editor_config from #{inspect(mod)} field #{inspect(field)}: #{msg}")
+    end
   end
 
   @doc "Wrap a statement with a limit clause via the adapter."
