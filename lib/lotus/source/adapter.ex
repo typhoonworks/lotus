@@ -669,13 +669,144 @@ defmodule Lotus.Source.Adapter do
   @doc "Map a database column type string to a Lotus internal type atom."
   @callback db_type_to_lotus_type(state :: term(), db_type :: String.t()) :: atom()
 
-  @doc "Return editor configuration (keywords, types, functions) for the adapter."
+  @typedoc """
+  Optional SQL tokenizer spec, passed through verbatim (camelCased) to
+  CodeMirror 6's `SQLDialect.define()` so external SQL adapters can reach
+  tokenization parity with the built-in PG / MySQL Lezer grammars.
+
+  Field names mirror `@codemirror/lang-sql`'s `SQLDialectSpec` — see
+  `assets/node_modules/@codemirror/lang-sql/dist/index.d.ts` in
+  `lotus_web` for authoritative semantics.
+  """
+  @type dialect_spec :: %{
+          optional(:identifier_quotes) => String.t(),
+          optional(:operator_chars) => String.t(),
+          optional(:hash_comments) => boolean(),
+          optional(:slash_comments) => boolean(),
+          optional(:double_quoted_strings) => boolean(),
+          optional(:double_dollar_quoted_strings) => boolean(),
+          optional(:backslash_escapes) => boolean(),
+          optional(:space_after_dashes) => boolean(),
+          optional(:case_insensitive_identifiers) => boolean(),
+          optional(:builtin) => String.t(),
+          optional(:char_set_casts) => boolean(),
+          optional(:plsql_quoting_mechanism) => boolean(),
+          optional(:unquoted_bit_literals) => boolean(),
+          optional(:treat_bits_as_bytes) => boolean(),
+          optional(:special_var) => String.t()
+        }
+
+  @typedoc """
+  Structural JSON DSL schema used by `lotus_web`'s `JsonDslCompletion` to
+  offer parent-aware completions (e.g., only `must`/`should`/`filter`
+  inside Elasticsearch's `bool` block; field names from the schema
+  inside `match`/`term`/`range`).
+
+  * `:root` — valid top-level keys.
+  * `:children` — per-parent-key rules. Values are either a list of valid
+    child keys, or one of the marker atoms `:fields` (use schema field
+    names), `:array_of_query` (array element objects accept the same
+    keys as `"query"`), `:named_aggregation` (user-named bucket — no
+    key suggestions), or `:range_operators` (grandparent lookup for ES
+    range-style operators).
+  * `:value_literals` — fixed value-position completions keyed by
+    immediate key (e.g., `"order" => ["asc", "desc"]`).
+  """
+  @type context_schema :: %{
+          required(:root) => [String.t()],
+          required(:children) => %{
+            String.t() => [String.t()] | atom() | [{String.t(), atom()}]
+          },
+          optional(:value_literals) => %{String.t() => [String.t()]}
+        }
+
+  @doc """
+  Return editor configuration (keywords, types, functions) for the adapter.
+
+  ## Shape
+
+  Required fields:
+
+    * `:language` — query-language identifier (e.g. `"sql:postgres"`,
+      `"json:elasticsearch"`). Drives CodeMirror language selection.
+    * `:keywords`, `:types` — flat lists feeding the "complete any
+      keyword anywhere" legacy fallback and the AI prompt pipeline.
+    * `:functions` — `%{name, detail, args}` entries for signature help.
+    * `:context_boundaries` — SQL-only; ignored for JSON DSLs.
+
+  Optional fields (Lotus ≥ 1.0):
+
+    * `:dialect_spec` — SQL tokenizer options, forwarded verbatim to
+      CodeMirror's `SQLDialect.define()`. Only meaningful for SQL
+      languages; adapters on a built-in CM6 dialect (Postgres, MySQL,
+      SQLite, MSSQL, MariaSQL, Cassandra, PLSQL) can omit this.
+    * `:context_schema` — JSON DSL structural completion schema. Drives
+      parent-aware autocomplete (e.g., Elasticsearch's `bool` →
+      `must`/`should`/`filter`). Adapters that omit it fall back to the
+      flat keyword list.
+
+  Both new fields are additive — existing adapters need no changes.
+
+  ## Examples
+
+  Minimal (legacy shape — still valid):
+
+      %{
+        language: "sql",
+        keywords: ["SELECT", "FROM", "WHERE"],
+        types: ["INTEGER", "TEXT"],
+        functions: [%{name: "COUNT", detail: "count(*)", args: "(*)"}],
+        context_boundaries: ["SELECT", "FROM", "WHERE"]
+      }
+
+  External SQL adapter (adds `:dialect_spec`):
+
+      %{
+        language: "sql:clickhouse",
+        keywords: [...],
+        types: [...],
+        functions: [...],
+        context_boundaries: [...],
+        dialect_spec: %{
+          identifier_quotes: "`",
+          hash_comments: true,
+          double_quoted_strings: false,
+          case_insensitive_identifiers: true
+        }
+      }
+
+  JSON DSL adapter (adds `:context_schema`):
+
+      %{
+        language: "json:elasticsearch",
+        keywords: [...],
+        types: [],
+        functions: [],
+        context_boundaries: [],
+        context_schema: %{
+          root: ["query", "aggs", "sort"],
+          children: %{
+            "query" => ["match", "term", "bool"],
+            "bool" => ["must", "should", "filter"],
+            "must" => :array_of_query,
+            "match" => :fields
+          },
+          value_literals: %{"order" => ["asc", "desc"]}
+        }
+      }
+
+  Size caps on `:keywords`, `:types`, `:functions`, `:context_schema.root`,
+  and `:context_schema.children` are enforced at the dispatch layer —
+  see `Lotus.Source.Adapter.editor_config/1` for exact limits.
+  """
   @callback editor_config(state :: term()) :: %{
-              language: String.t(),
-              keywords: [String.t()],
-              types: [String.t()],
-              functions: [%{name: String.t(), detail: String.t(), args: String.t()}],
-              context_boundaries: [String.t()]
+              required(:language) => String.t(),
+              required(:keywords) => [String.t()],
+              required(:types) => [String.t()],
+              required(:functions) => [%{name: String.t(), detail: String.t(), args: String.t()}],
+              required(:context_boundaries) => [String.t()],
+              optional(:dialect_spec) => dialect_spec(),
+              optional(:context_schema) => context_schema()
             }
 
   @optional_callbacks [

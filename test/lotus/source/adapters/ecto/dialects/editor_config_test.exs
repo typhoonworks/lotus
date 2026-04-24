@@ -193,4 +193,24 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.EditorConfigTest do
       end
     end
   end
+
+  describe "built-in dialects conform to the minimal editor_config shape" do
+    test "Default / Postgres / MySQL / SQLite3 return only the required legacy keys" do
+      for mod <- [Default, Postgres, MySQL, SQLite3] do
+        config = mod.editor_config()
+
+        for key <- @required_keys do
+          assert Map.has_key?(config, key), "#{inspect(mod)} missing required key #{key}"
+        end
+
+        # Built-in dialects opt out of the widened fields; those are only
+        # meaningful for external adapters.
+        refute Map.has_key?(config, :dialect_spec),
+               "#{inspect(mod)} unexpectedly defined :dialect_spec"
+
+        refute Map.has_key?(config, :context_schema),
+               "#{inspect(mod)} unexpectedly defined :context_schema"
+      end
+    end
+  end
 end

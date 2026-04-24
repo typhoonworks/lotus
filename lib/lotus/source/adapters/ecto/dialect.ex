@@ -95,11 +95,13 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   # ---------------------------------------------------------------------------
 
   @callback editor_config() :: %{
-              language: String.t(),
-              keywords: [String.t()],
-              types: [String.t()],
-              functions: [%{name: String.t(), detail: String.t(), args: String.t()}],
-              context_boundaries: [String.t()]
+              required(:language) => String.t(),
+              required(:keywords) => [String.t()],
+              required(:types) => [String.t()],
+              required(:functions) => [%{name: String.t(), detail: String.t(), args: String.t()}],
+              required(:context_boundaries) => [String.t()],
+              optional(:dialect_spec) => Lotus.Source.Adapter.dialect_spec(),
+              optional(:context_schema) => Lotus.Source.Adapter.context_schema()
             }
 
   @callback supports_feature?(feature :: atom()) :: boolean()

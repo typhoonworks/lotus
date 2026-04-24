@@ -385,6 +385,19 @@
 
 ### Added
 
+- **Widened `editor_config/1` with two optional fields** — `:dialect_spec`
+  (SQL tokenizer options: identifier quotes, operator chars, hash / slash
+  / dollar-quoted string rules, PL/SQL quoting, etc., passed through
+  verbatim to CodeMirror's `SQLDialect.define()`) and `:context_schema`
+  (structural JSON DSL completion schema: per-parent valid keys, marker
+  atoms for field-name / nested-query / named-aggregation lookups, and
+  value-literal lists). Both fields are optional and additive — existing
+  adapters need no changes. External SQL adapters can now reach
+  tokenization parity with the built-in PG/MySQL Lezer grammars; JSON
+  DSL adapters (Elasticsearch, future OpenSearch) can declare the
+  structural schema that drives parent-aware autocomplete in `lotus_web`
+  (elixir-lotus/lotus_web#126).
+
 - **First-party non-SQL reference adapter `Lotus.Test.InMemoryAdapter`**
   (in `test/support/`). Implements the full `Lotus.Source.Adapter`
   contract against an in-memory dataset using a structured DSL map as
