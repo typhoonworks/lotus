@@ -385,18 +385,25 @@
 
 ### Added
 
-- **Widened `editor_config/1` with two optional fields** — `:dialect_spec`
-  (SQL tokenizer options: identifier quotes, operator chars, hash / slash
-  / dollar-quoted string rules, PL/SQL quoting, etc., passed through
-  verbatim to CodeMirror's `SQLDialect.define()`) and `:context_schema`
-  (structural JSON DSL completion schema: per-parent valid keys, marker
-  atoms for field-name / nested-query / named-aggregation lookups, and
-  value-literal lists). Both fields are optional and additive — existing
-  adapters need no changes. External SQL adapters can now reach
-  tokenization parity with the built-in PG/MySQL Lezer grammars; JSON
-  DSL adapters (Elasticsearch, future OpenSearch) can declare the
-  structural schema that drives parent-aware autocomplete in `lotus_web`
-  (elixir-lotus/lotus_web#126).
+- **`editor_config/1` exposes two optional extension points** —
+  `:dialect_spec` (SQL tokenizer options: identifier quotes, operator
+  chars, hash / slash / dollar-quoted string rules, PL/SQL quoting,
+  etc., forwarded verbatim to CodeMirror's `SQLDialect.define()`) and
+  `:context_schema` (structural JSON DSL completion schema: per-parent
+  valid keys, marker atoms for field-name / nested-query / named-
+  aggregation lookups, and value-literal lists). External SQL adapters
+  declaring `:dialect_spec` reach tokenization parity with the
+  built-in PG/MySQL Lezer grammars; JSON DSL adapters (Elasticsearch,
+  future OpenSearch) declare a `:context_schema` that drives parent-
+  aware autocomplete in `lotus_web`. Mirroring the `ai_context`
+  sanitization philosophy, `editor_config/1` payloads are capped at
+  the `Lotus.Source.Adapter` dispatch layer: `:keywords` and `:types`
+  at 2000 entries each, `:functions` at 500, `:context_schema.root`
+  at 200, `:context_schema.children` at 500, unknown top-level keys
+  dropped, with a one-time `Logger.warning/1` per `(adapter, field)`
+  truncation (deduped via `:persistent_term`) so a noisy or compromised
+  adapter can't ship a huge payload over LiveView to every editor
+  session (elixir-lotus/lotus_web#126).
 
 - **First-party non-SQL reference adapter `Lotus.Test.InMemoryAdapter`**
   (in `test/support/`). Implements the full `Lotus.Source.Adapter`

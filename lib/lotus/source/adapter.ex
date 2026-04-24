@@ -730,26 +730,27 @@ defmodule Lotus.Source.Adapter do
     * `:language` — query-language identifier (e.g. `"sql:postgres"`,
       `"json:elasticsearch"`). Drives CodeMirror language selection.
     * `:keywords`, `:types` — flat lists feeding the "complete any
-      keyword anywhere" legacy fallback and the AI prompt pipeline.
+      keyword anywhere" fallback (used when `:context_schema` is
+      absent) and the AI prompt pipeline.
     * `:functions` — `%{name, detail, args}` entries for signature help.
     * `:context_boundaries` — SQL-only; ignored for JSON DSLs.
 
-  Optional fields (Lotus ≥ 1.0):
+  Optional fields:
 
     * `:dialect_spec` — SQL tokenizer options, forwarded verbatim to
       CodeMirror's `SQLDialect.define()`. Only meaningful for SQL
       languages; adapters on a built-in CM6 dialect (Postgres, MySQL,
-      SQLite, MSSQL, MariaSQL, Cassandra, PLSQL) can omit this.
+      SQLite, MSSQL, MariaSQL, Cassandra, PLSQL) can omit this and
+      get the built-in grammar.
     * `:context_schema` — JSON DSL structural completion schema. Drives
       parent-aware autocomplete (e.g., Elasticsearch's `bool` →
-      `must`/`should`/`filter`). Adapters that omit it fall back to the
-      flat keyword list.
-
-  Both new fields are additive — existing adapters need no changes.
+      `must`/`should`/`filter`). Omit for SQL adapters; for JSON DSL
+      adapters, omitting it degrades the editor to flat keyword
+      suggestions at every key position.
 
   ## Examples
 
-  Minimal (legacy shape — still valid):
+  Plain SQL adapter — required fields only:
 
       %{
         language: "sql",
@@ -759,7 +760,7 @@ defmodule Lotus.Source.Adapter do
         context_boundaries: ["SELECT", "FROM", "WHERE"]
       }
 
-  External SQL adapter (adds `:dialect_spec`):
+  External SQL adapter with tokenizer options:
 
       %{
         language: "sql:clickhouse",
@@ -775,7 +776,7 @@ defmodule Lotus.Source.Adapter do
         }
       }
 
-  JSON DSL adapter (adds `:context_schema`):
+  JSON DSL adapter with a structural schema:
 
       %{
         language: "json:elasticsearch",
