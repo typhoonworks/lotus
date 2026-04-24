@@ -3,6 +3,10 @@ defmodule Lotus.Source.EditorConfigShapeTest do
   # warning dedup so each test sees a fresh warn-state.
   use ExUnit.Case, async: false
 
+  # Each test deliberately re-triggers the truncation warnings to cover
+  # the logger branch; capture them so the suite output stays clean.
+  @moduletag capture_log: true
+
   alias Lotus.Query.Statement
   alias Lotus.Source.Adapter
 
