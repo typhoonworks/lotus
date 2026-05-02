@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-05-02
+
+### Fixed
+
+- **FIX:** `Lotus.Migrations` now maps the Ecto MyXQL adapter to the Lotus MySQL migration adapter, so MySQL hosts can run `Lotus.Migrations.up/0` and `down/0` correctly (#223)
+
 ## [0.16.4] - 2026-03-10
 
 ### Fixed
