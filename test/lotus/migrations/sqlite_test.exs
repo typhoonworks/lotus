@@ -20,13 +20,6 @@ defmodule Lotus.Migrations.SQLiteTest do
 
   @moduletag :sqlite
 
-  defmodule Migration do
-    use Ecto.Migration
-
-    defdelegate up, to: Lotus.Migrations.SQLite
-    defdelegate down, to: Lotus.Migrations.SQLite
-  end
-
   test "migrating a sqlite database" do
     {:ok, _} = start_supervised(MigrationRepo)
 
@@ -36,10 +29,10 @@ defmodule Lotus.Migrations.SQLiteTest do
 
     :ok = MigrationRepo.__adapter__().storage_up(config)
 
-    assert Ecto.Migrator.up(MigrationRepo, 1, Migration) in [:ok, :already_up]
+    assert Ecto.Migrator.up(MigrationRepo, 1, Lotus.Migrations) in [:ok, :already_up]
     assert table_exists?("lotus_queries")
 
-    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Migration)
+    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Lotus.Migrations)
     refute table_exists?("lotus_queries")
   after
     try do

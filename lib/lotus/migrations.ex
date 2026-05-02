@@ -73,6 +73,7 @@ defmodule Lotus.Migrations do
     case repo().__adapter__() do
       Ecto.Adapters.Postgres -> Lotus.Migrations.Postgres
       Ecto.Adapters.SQLite3 -> Lotus.Migrations.SQLite
+      Ecto.Adapters.MyXQL -> Lotus.Migrations.MySQL
       _ -> raise ArgumentError, "Unsupported database adapter: #{inspect(repo().__adapter__())}"
     end
   end

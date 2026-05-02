@@ -18,8 +18,8 @@ defmodule Lotus.Migrations.MySQLTest do
   defmodule Migration do
     use Ecto.Migration
 
-    defdelegate up, to: Lotus.Migrations.MySQL
-    defdelegate down, to: Lotus.Migrations.MySQL
+    defdelegate up, to: Lotus.Migrations
+    defdelegate down, to: Lotus.Migrations
   end
 
   test "migrating a mysql database" do
@@ -27,10 +27,10 @@ defmodule Lotus.Migrations.MySQLTest do
 
     start_supervised!(MigrationRepo)
 
-    assert Ecto.Migrator.up(MigrationRepo, 1, Migration) in [:ok, :already_up]
+    assert Ecto.Migrator.up(MigrationRepo, 1, Lotus.Migrations) in [:ok, :already_up]
     assert table_exists?("lotus_queries")
 
-    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Migration)
+    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Lotus.Migrations)
     refute table_exists?("lotus_queries")
   after
     MigrationRepo.__adapter__().storage_down(MigrationRepo.config())
