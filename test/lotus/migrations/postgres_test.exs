@@ -13,23 +13,16 @@ defmodule Lotus.Migrations.PostgresTest do
     end
   end
 
-  defmodule Migration do
-    use Ecto.Migration
-
-    defdelegate up, to: Lotus.Migrations.Postgres
-    defdelegate down, to: Lotus.Migrations.Postgres
-  end
-
   test "migrating a postgres database" do
     MigrationRepo.__adapter__().storage_down(MigrationRepo.config())
     MigrationRepo.__adapter__().storage_up(MigrationRepo.config())
 
     start_supervised!(MigrationRepo)
 
-    assert Ecto.Migrator.up(MigrationRepo, 1, Migration) in [:ok, :already_up]
+    assert Ecto.Migrator.up(MigrationRepo, 1, Lotus.Migrations) in [:ok, :already_up]
     assert table_exists?("lotus_queries")
 
-    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Migration)
+    assert :ok = Ecto.Migrator.down(MigrationRepo, 1, Lotus.Migrations)
     refute table_exists?("lotus_queries")
   after
     clear_migrated()
@@ -39,8 +32,8 @@ defmodule Lotus.Migrations.PostgresTest do
   defp table_exists?(table_name) do
     query = """
     SELECT EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_schema = 'public' 
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public'
       AND table_name = $1
     )
     """
