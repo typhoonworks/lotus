@@ -202,7 +202,7 @@ defmodule Lotus.Source.Adapter do
   the statement.
 
   Use when you need access to the bound parameter values — for example, to
-  inline values into `statement.text` for a transport that can't carry
+  inline values into `statement.body` for a transport that can't carry
   prepared-statement parameters, or to apply a transformation that depends on
   the bound values.
 
@@ -313,10 +313,10 @@ defmodule Lotus.Source.Adapter do
   language:
 
     * SQL (prepared-statement) drivers add a placeholder (`$1`, `?`, ...) to
-      `statement.text`, append the value to `statement.params`, and leave
+      `statement.body`, append the value to `statement.params`, and leave
       binding to the driver.
     * JSON / DSL adapters (Elasticsearch, Mongo) inline the value as a
-      properly-escaped literal inside `statement.text`.
+      properly-escaped literal inside `statement.body`.
 
   `value` has already been type-cast by Lotus core. `type` is the resolved
   Lotus internal type atom (e.g. `:integer`, `:uuid`) — adapters that care
@@ -651,8 +651,8 @@ defmodule Lotus.Source.Adapter do
   @doc """
   Rewrite the statement before variables are extracted and bound.
 
-  Pipeline position: fires inside `Lotus.Storage.Query.to_sql_params/2`
-  **before** `{{var}}` placeholders are extracted from `statement.text` and
+  Pipeline position: fires inside `Lotus.Storage.Query.compile/2`
+  **before** `{{var}}` placeholders are extracted from `statement.body` and
   before any value is bound. The statement's `:params` is `[]` at this point.
 
   Use for language-specific syntax normalization of the stored template
@@ -1259,11 +1259,32 @@ defmodule Lotus.Source.Adapter do
     if Lotus.Config.trusted_source_adapter?(mod) do
       ctx
     else
+      # Only signal when there was actually something to strip — adapters that
+      # legitimately contribute just :language never trip this. The strip is an
+      # intentional config consequence (adapter not allowlisted), not a
+      # misconfiguration, so it logs at :info; the host's only other signal
+      # would otherwise be downstream LLM-quality drift.
+      if has_text_fields?(ctx) do
+        warn_ai_context_once(
+          mod,
+          :trust_boundary,
+          "stripped to language-only (not in :trusted_source_adapters); AI prompts " <>
+            "will not see this adapter's syntax_notes / example_query / error_patterns",
+          :info
+        )
+      end
+
       ctx
       |> Map.put(:example_query, "")
       |> Map.put(:syntax_notes, "")
       |> Map.put(:error_patterns, [])
     end
+  end
+
+  defp has_text_fields?(ctx) do
+    Map.get(ctx, :example_query) not in [nil, ""] or
+      Map.get(ctx, :syntax_notes) not in [nil, ""] or
+      Map.get(ctx, :error_patterns) not in [nil, []]
   end
 
   # Default to all-supported when the adapter omits `:capabilities` —
@@ -1343,9 +1364,11 @@ defmodule Lotus.Source.Adapter do
     end
   end
 
-  # Log each (adapter, field) truncation/repair once per BEAM node so a
-  # misconfigured adapter doesn't spam the log on every AI call.
-  defp warn_ai_context_once(mod, field, msg) do
+  # Emit each (adapter, field) notice once per BEAM node so a misconfigured or
+  # un-allowlisted adapter doesn't spam the log on every AI call. `level`
+  # defaults to :warning for cap/format violations; the trust-boundary strip
+  # passes :info since it's an intentional config consequence.
+  defp warn_ai_context_once(mod, field, msg, level \\ :warning) do
     key = {__MODULE__, :ai_context_warn, mod, field}
 
     case :persistent_term.get(key, :none) do
@@ -1355,7 +1378,7 @@ defmodule Lotus.Source.Adapter do
       :none ->
         :persistent_term.put(key, :warned)
         require Logger
-        Logger.warning("ai_context from #{inspect(mod)} field #{inspect(field)}: #{msg}")
+        Logger.log(level, "ai_context from #{inspect(mod)} field #{inspect(field)}: #{msg}")
     end
   end
 

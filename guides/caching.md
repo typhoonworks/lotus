@@ -292,9 +292,9 @@ defmodule MyApp.CustomKeyBuilder do
   end
 
   @impl true
-  def result_key(sql, bound, opts, scope) do
+  def result_key(body, bound, opts, scope) do
     # Delegate to default for result keys
-    Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts, scope)
+    Lotus.Cache.KeyBuilder.Default.result_key(body, bound, opts, scope)
   end
 end
 ```
@@ -312,7 +312,7 @@ config :lotus,
 The behaviour defines two callbacks:
 
 - `discovery_key/2` — builds keys for schema introspection cache entries (list_tables, get_table_schema, etc.)
-- `result_key/4` — builds keys for SQL query result cache entries (accepts `scope` as the 4th argument)
+- `result_key/4` — builds keys for query result cache entries (accepts `scope` as the 4th argument)
 
 When no `key_builder` is configured, `Lotus.Cache.KeyBuilder.Default` is used, which preserves the built-in key generation logic.
 

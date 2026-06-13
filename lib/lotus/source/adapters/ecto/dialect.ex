@@ -134,7 +134,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialect do
   @doc """
   Rewrite the statement before variables are extracted and bound.
 
-  Fires in `Lotus.Storage.Query.to_sql_params/2` before `{{var}}` placeholders
+  Fires in `Lotus.Storage.Query.compile/2` before `{{var}}` placeholders
   are resolved. Use for dialect-specific syntax rewrites (wildcard handling,
   INTERVAL, CONCAT vs `||`, etc.). Return the rewritten statement.
 

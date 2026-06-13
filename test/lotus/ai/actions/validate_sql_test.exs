@@ -7,7 +7,7 @@ defmodule Lotus.AI.Actions.ValidateSQLTest do
 
   describe "run/2" do
     test "returns valid: true when validation succeeds" do
-      expect(Adapter, :validate_statement, fn _adapter, %Statement{text: "SELECT 1"}, _opts ->
+      expect(Adapter, :validate_statement, fn _adapter, %Statement{body: "SELECT 1"}, _opts ->
         :ok
       end)
 

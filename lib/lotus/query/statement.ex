@@ -10,10 +10,10 @@ defmodule Lotus.Query.Statement do
   ## Fields
 
     * `:adapter` — module implementing `Lotus.Source.Adapter` that owns this
-      statement's `:text` shape. Used for routing and debugging; core treats it
+      statement's `:body` shape. Used for routing and debugging; core treats it
       as opaque.
 
-    * `:text` — the adapter-native query payload. `term()` by design: SQL
+    * `:body` — the adapter-native query payload. `term()` by design: SQL
       binaries for Ecto-backed adapters, decoded JSON for Elasticsearch, an
       AST for DSL-based adapters. Core never inspects this field.
 
@@ -33,23 +33,23 @@ defmodule Lotus.Query.Statement do
 
   @type t :: %__MODULE__{
           adapter: module() | nil,
-          text: term(),
+          body: term(),
           params: list(),
           meta: map()
         }
 
-  @enforce_keys [:text]
-  defstruct adapter: nil, text: nil, params: [], meta: %{}
+  @enforce_keys [:body]
+  defstruct adapter: nil, body: nil, params: [], meta: %{}
 
   @doc """
-  Build a statement from text and optional bound params.
+  Build a statement from a body and optional bound params.
 
   Typically the pipeline builds statements via `Lotus.execute_with_options/7`,
   but callers (Runner integration tests, adapter-author examples) sometimes
   need to construct one directly.
   """
-  @spec new(text :: term(), params :: list()) :: t()
-  def new(text, params \\ []) when is_list(params) do
-    %__MODULE__{text: text, params: params}
+  @spec new(body :: term(), params :: list()) :: t()
+  def new(body, params \\ []) when is_list(params) do
+    %__MODULE__{body: body, params: params}
   end
 end

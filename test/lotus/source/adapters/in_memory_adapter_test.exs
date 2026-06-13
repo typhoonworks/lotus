@@ -48,7 +48,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
 
   defp adapter, do: InMemoryAdapter.adapter("mem", sample_dataset())
 
-  defp stmt(dsl, params \\ []), do: %Statement{text: dsl, params: params}
+  defp stmt(dsl, params \\ []), do: %Statement{body: dsl, params: params}
 
   describe "registration (can_handle?/1, wrap/2)" do
     test "can_handle?/1 only matches tagged dataset maps" do
@@ -118,7 +118,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
       statement = stmt(%{from: "users"})
       filters = [Filter.new("status", :eq, "active")]
 
-      %Statement{text: %{where: where}} = Adapter.apply_filters(adapter(), statement, filters)
+      %Statement{body: %{where: where}} = Adapter.apply_filters(adapter(), statement, filters)
       assert where == [{"status", :eq, "active"}]
     end
 
@@ -126,7 +126,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
       statement = stmt(%{from: "users"})
       sorts = [Sort.new("age", :desc)]
 
-      %Statement{text: %{order_by: order}} = Adapter.apply_sorts(adapter(), statement, sorts)
+      %Statement{body: %{order_by: order}} = Adapter.apply_sorts(adapter(), statement, sorts)
       assert order == [{"age", :desc}]
     end
 
@@ -134,8 +134,8 @@ defmodule Lotus.Test.InMemoryAdapterTest do
       statement = stmt(%{from: "users"})
       paged = Adapter.apply_pagination(adapter(), statement, limit: 2, offset: 1, count: :exact)
 
-      assert paged.text.limit == 2
-      assert paged.text.offset == 1
+      assert paged.body.limit == 2
+      assert paged.body.offset == 1
       assert %{query: count_dsl, params: []} = paged.meta[:count_spec]
       refute Map.has_key?(count_dsl, :limit)
       refute Map.has_key?(count_dsl, :offset)
@@ -147,7 +147,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
     test "substitute_variable/5 inlines into {:var, name} markers" do
       statement = stmt(%{from: "users", where: [{"id", :eq, {:var, "uid"}}]})
 
-      assert {:ok, %Statement{text: %{where: where}}} =
+      assert {:ok, %Statement{body: %{where: where}}} =
                Adapter.substitute_variable(adapter(), statement, "uid", 1, :integer)
 
       assert where == [{"id", :eq, 1}]
@@ -156,7 +156,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
     test "substitute_variable/5 ignores markers for other names" do
       statement = stmt(%{from: "users", where: [{"id", :eq, {:var, "other"}}]})
 
-      assert {:ok, %Statement{text: %{where: where}}} =
+      assert {:ok, %Statement{body: %{where: where}}} =
                Adapter.substitute_variable(adapter(), statement, "uid", 99, :integer)
 
       assert where == [{"id", :eq, {:var, "other"}}]
@@ -165,7 +165,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
     test "substitute_list_variable/5 inlines a list into a :in marker" do
       statement = stmt(%{from: "users", where: [{"id", :in, {:var, "ids"}}]})
 
-      assert {:ok, %Statement{text: %{where: where}}} =
+      assert {:ok, %Statement{body: %{where: where}}} =
                Adapter.substitute_list_variable(adapter(), statement, "ids", [1, 2, 3], :integer)
 
       assert where == [{"id", :in, [1, 2, 3]}]
@@ -180,7 +180,7 @@ defmodule Lotus.Test.InMemoryAdapterTest do
     end
 
     test "returns {:unrestricted, _} for non-DSL text" do
-      statement = %Statement{text: "SELECT 1"}
+      statement = %Statement{body: "SELECT 1"}
       assert {:unrestricted, reason} = Adapter.extract_accessed_resources(adapter(), statement)
       assert reason =~ "non-DSL"
     end

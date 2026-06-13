@@ -228,7 +228,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
       # Postgres's transform_statement rewrites interval syntax, among other things.
       adapter = EctoAdapter.wrap("main", Repo)
       out = Adapter.transform_statement(adapter, Statement.new("SELECT 1"))
-      assert %Statement{text: text} = out
+      assert %Statement{body: text} = out
       assert is_binary(text)
     end
   end
@@ -267,8 +267,8 @@ defmodule Lotus.Source.Adapters.EctoTest do
           offset: 0
         )
 
-      assert paged.text =~ "LIMIT"
-      assert paged.text =~ "OFFSET"
+      assert paged.body =~ "LIMIT"
+      assert paged.body =~ "OFFSET"
       assert paged.params == [10, 0]
       refute Map.has_key?(paged.meta, :count_spec)
     end
@@ -472,7 +472,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
     test "neutralizes {{var}} placeholders to NULL" do
       adapter = EctoAdapter.wrap("main", Repo)
 
-      assert {:ok, %Statement{text: prepared}} =
+      assert {:ok, %Statement{body: prepared}} =
                Adapter.prepare_for_analysis(
                  adapter,
                  Statement.new("SELECT * FROM test_users WHERE id = {{id}}")
@@ -485,7 +485,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
     test "strips [[...]] brackets while keeping inner content visible to the planner" do
       adapter = EctoAdapter.wrap("main", Repo)
 
-      assert {:ok, %Statement{text: prepared}} =
+      assert {:ok, %Statement{body: prepared}} =
                Adapter.prepare_for_analysis(
                  adapter,
                  Statement.new("SELECT * FROM test_users [[WHERE name = {{name}}]]")
@@ -515,7 +515,7 @@ defmodule Lotus.Source.Adapters.EctoTest do
           Statement.new("SELECT id FROM test_users WHERE id = {{id}} [[AND name = {{name}}]]")
         )
 
-      assert {:ok, _plan} = Adapter.query_plan(adapter, prepared.text, prepared.params, [])
+      assert {:ok, _plan} = Adapter.query_plan(adapter, prepared.body, prepared.params, [])
     end
   end
 end

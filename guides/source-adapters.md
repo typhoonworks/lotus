@@ -66,7 +66,7 @@ All pipeline callbacks operate on a `%Lotus.Query.Statement{}`:
 }
 ```
 
-The `:text` field is deliberately typed `term()` — SQL text for Ecto-backed
+The `:body` field is deliberately typed `term()` — SQL text for Ecto-backed
 adapters, a JSON body for Elasticsearch, a DSL AST for other engines. The
 pipeline is a series of pure `statement -> statement` transforms; adapters
 return new structs rather than mutating in place.
@@ -446,10 +446,10 @@ When a stored query contains `{{var_name}}`, Lotus calls your adapter's
 to embed it:
 
 - **SQL prepared-statement adapters** (`Lotus.Source.Adapters.Ecto`) append a
-  placeholder (`$1`, `?`, …) to `statement.text` and push the value into
+  placeholder (`$1`, `?`, …) to `statement.body` and push the value into
   `statement.params`. The database driver handles binding and escaping.
 - **JSON / DSL adapters** (Elasticsearch, Mongo) have no prepared-statement
-  concept. They inline values directly into `statement.text`. **This is the
+  concept. They inline values directly into `statement.body`. **This is the
   primary injection boundary.** Use a language-appropriate escaper
   (`Lotus.JSON.encode!/1` for JSON DSLs, an AST builder for structured
   languages, never raw `to_string/1` + string interpolation).

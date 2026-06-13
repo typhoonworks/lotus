@@ -722,7 +722,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   end
 
   @doc false
-  def do_sanitize_query(%Statement{text: sql}, opts) do
+  def do_sanitize_query(%Statement{body: sql}, opts) do
     read_only = Keyword.get(opts, :read_only, true)
 
     with :ok <- assert_single_statement(sql) do
@@ -743,7 +743,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   def do_apply_pagination(
         dialect,
         _repo,
-        %Statement{text: sql, params: params, meta: meta} = statement,
+        %Statement{body: sql, params: params, meta: meta} = statement,
         pagination_opts
       ) do
     base_sql = Sanitizer.strip_trailing_semicolon(sql)
@@ -780,14 +780,14 @@ defmodule Lotus.Source.Adapters.Ecto do
         spec -> Map.put(meta, :count_spec, spec)
       end
 
-    %{statement | text: paged_sql, params: paged_params, meta: new_meta}
+    %{statement | body: paged_sql, params: paged_params, meta: new_meta}
   end
 
   # SQL-specific preflight heuristic. Skips introspection statements
   # (EXPLAIN, SHOW, PRAGMA) that do not touch visible relations. Dialects
   # can override by implementing `needs_preflight?/1`.
   @doc false
-  def do_needs_preflight?(dialect, %Statement{text: sql} = statement) do
+  def do_needs_preflight?(dialect, %Statement{body: sql} = statement) do
     cond do
       function_exported?(dialect, :needs_preflight?, 1) ->
         dialect.needs_preflight?(statement)
@@ -816,13 +816,13 @@ defmodule Lotus.Source.Adapters.Ecto do
 
   # Scalar substitution for Ecto-backed adapters: append value to
   # `statement.params`, replace the first `{{var_name}}` occurrence in
-  # `statement.text` with the dialect's placeholder at position `idx + 1`.
+  # `statement.body` with the dialect's placeholder at position `idx + 1`.
   # Subsequent occurrences of the same variable are handled by further
   # calls from the caller's reduce loop.
   @doc false
   def do_substitute_variable(
         dialect,
-        %Statement{text: sql, params: params} = statement,
+        %Statement{body: sql, params: params} = statement,
         var_name,
         value,
         type
@@ -831,7 +831,7 @@ defmodule Lotus.Source.Adapters.Ecto do
     idx = length(params) + 1
     placeholder = dialect.param_placeholder(idx, var_name, type)
     new_sql = String.replace(sql, "{{#{var_name}}}", placeholder, global: false)
-    {:ok, %{statement | text: new_sql, params: params ++ [value]}}
+    {:ok, %{statement | body: new_sql, params: params ++ [value]}}
   end
 
   # List substitution: generate one placeholder per value, join with `, `,
@@ -840,7 +840,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   @doc false
   def do_substitute_list_variable(
         dialect,
-        %Statement{text: sql, params: params} = statement,
+        %Statement{body: sql, params: params} = statement,
         var_name,
         values,
         type
@@ -854,7 +854,7 @@ defmodule Lotus.Source.Adapters.Ecto do
       |> Enum.map_join(", ", fn {_value, i} -> dialect.param_placeholder(i, var_name, type) end)
 
     new_sql = String.replace(sql, "{{#{var_name}}}", placeholders, global: false)
-    {:ok, %{statement | text: new_sql, params: params ++ values}}
+    {:ok, %{statement | body: new_sql, params: params ++ values}}
   end
 
   # Ecto adapters validate statements by running EXPLAIN (via query_plan)
@@ -865,7 +865,7 @@ defmodule Lotus.Source.Adapters.Ecto do
   def do_validate_statement(
         dialect,
         repo,
-        %Statement{text: sql, params: params},
+        %Statement{body: sql, params: params},
         _opts
       )
       when is_binary(sql) do
@@ -926,13 +926,13 @@ defmodule Lotus.Source.Adapters.Ecto do
   # `{{var}}` placeholders; `[[...]]` optional blocks are kept (inner
   # content retained so all clauses are visible to the planner).
   @doc false
-  def do_prepare_for_analysis(%Statement{text: sql} = statement) when is_binary(sql) do
+  def do_prepare_for_analysis(%Statement{body: sql} = statement) when is_binary(sql) do
     prepared =
       sql
       |> OptionalClause.strip_brackets()
       |> Variables.neutralize("NULL")
 
-    {:ok, %{statement | text: prepared, params: []}}
+    {:ok, %{statement | body: prepared, params: []}}
   end
 
   def do_prepare_for_analysis(_statement), do: {:error, :non_text_statement}

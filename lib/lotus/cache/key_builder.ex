@@ -28,9 +28,9 @@ defmodule Lotus.Cache.KeyBuilder do
         end
 
         @impl true
-        def result_key(sql, bound, opts, scope) do
+        def result_key(body, bound, opts, scope) do
           # Custom key logic for result cache entries
-          Lotus.Cache.KeyBuilder.Default.result_key(sql, bound, opts, scope)
+          Lotus.Cache.KeyBuilder.Default.result_key(body, bound, opts, scope)
         end
       end
   """
@@ -61,13 +61,14 @@ defmodule Lotus.Cache.KeyBuilder do
 
   ## Parameters
 
-  - `sql` - The SQL query string
+  - `body` - The adapter-native query payload. `term()` by design: a SQL
+    string for Ecto adapters, a DSL / AST / JSON payload for others
   - `bound` - Bound parameters (map or list)
   - `opts` - Options including `:data_source`, `:search_path`, `:lotus_version`
   - `scope` - The scope term, or `nil` if no scope is set
   """
   @callback result_key(
-              sql :: binary(),
+              body :: term(),
               bound :: map() | list(),
               opts :: keyword(),
               scope :: term() | nil

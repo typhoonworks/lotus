@@ -3,8 +3,6 @@ defmodule Lotus.ConfigTest do
 
   alias Lotus.Config
 
-  import ExUnit.CaptureLog
-
   @preserved_keys [
     :cache,
     :table_visibility,
@@ -245,6 +243,22 @@ defmodule Lotus.ConfigTest do
 
       assert Config.allow_unrestricted_resources?("es") == true
       assert Config.allow_unrestricted_resources?("pg") == false
+    end
+
+    test "per-source false wins over global flag being true" do
+      Application.put_env(:lotus, :allow_unrestricted_resources, true)
+
+      Application.put_env(:lotus, :data_sources, %{
+        "es" => %{adapter: :elasticsearch, allow_unrestricted_resources: false},
+        "pg" => Lotus.Test.Repo
+      })
+
+      Config.reload!()
+
+      # Explicit per-source false tightens the source even though the global
+      # default is permissive; an unconfigured source still inherits the global.
+      refute Config.allow_unrestricted_resources?("es")
+      assert Config.allow_unrestricted_resources?("pg")
     end
 
     test "defaults to false when nothing is configured" do

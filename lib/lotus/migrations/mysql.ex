@@ -7,6 +7,8 @@ defmodule Lotus.Migrations.MySQL do
 
   @impl Lotus.Migration
   def up(_opts \\ []) do
+    ensure_data_source_column!()
+
     create_if_not_exists table(:lotus_queries, primary_key: false) do
       add(:id, :serial, primary_key: true)
       add(:name, :string, size: 255, null: false)
@@ -159,4 +161,33 @@ defmodule Lotus.Migrations.MySQL do
 
   @impl Lotus.Migration
   def migrated_version(_opts), do: 0
+
+  # MySQL migrations are single-file and unversioned, so there is no V4-style
+  # compensating migration (as on Postgres) to rename `data_repo` →
+  # `data_source` on an upgrading install. Without this guard, `up/1` is a
+  # no-op on an existing table — `mix ecto.migrate` reports success while
+  # leaving the legacy column in place, and every read then crashes in
+  # production. Detect the legacy column and fail at migrate time instead.
+  defp ensure_data_source_column! do
+    %{rows: rows} =
+      repo().query!("""
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'lotus_queries'
+        AND column_name = 'data_repo'
+      LIMIT 1
+      """)
+
+    if rows != [] do
+      raise """
+      Lotus v1.0 renamed the lotus_queries `data_repo` column to `data_source`.
+      MySQL migrations are unversioned and cannot perform this rename for you.
+      Run it once before re-running migrations:
+
+          ALTER TABLE lotus_queries RENAME COLUMN data_repo TO data_source;
+
+      See guides/upgrading-to-v1.md section 3.
+      """
+    end
+  end
 end

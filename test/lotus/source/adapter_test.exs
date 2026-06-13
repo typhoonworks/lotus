@@ -50,17 +50,17 @@ defmodule Lotus.Source.AdapterTest do
     def quote_identifier(_state, identifier), do: ~s("#{identifier}")
 
     @impl true
-    def apply_filters(_state, %Statement{text: sql, params: params} = statement, _filters),
-      do: %{statement | text: sql <> " WHERE 1=1", params: params}
+    def apply_filters(_state, %Statement{body: sql, params: params} = statement, _filters),
+      do: %{statement | body: sql <> " WHERE 1=1", params: params}
 
     @impl true
-    def apply_sorts(_state, %Statement{text: sql} = statement, _sorts),
-      do: %{statement | text: sql <> " ORDER BY id"}
+    def apply_sorts(_state, %Statement{body: sql} = statement, _sorts),
+      do: %{statement | body: sql <> " ORDER BY id"}
 
     @impl true
     def substitute_variable(
           _state,
-          %Statement{text: sql, params: params} = statement,
+          %Statement{body: sql, params: params} = statement,
           var,
           value,
           type
@@ -71,7 +71,7 @@ defmodule Lotus.Source.AdapterTest do
       {:ok,
        %{
          statement
-         | text: String.replace(sql, "{{#{var}}}", placeholder),
+         | body: String.replace(sql, "{{#{var}}}", placeholder),
            params: params ++ [value]
        }}
     end
@@ -79,7 +79,7 @@ defmodule Lotus.Source.AdapterTest do
     @impl true
     def substitute_list_variable(
           _state,
-          %Statement{text: sql, params: params} = statement,
+          %Statement{body: sql, params: params} = statement,
           var,
           values,
           type
@@ -90,7 +90,7 @@ defmodule Lotus.Source.AdapterTest do
       {:ok,
        %{
          statement
-         | text: String.replace(sql, "{{#{var}}}", placeholder),
+         | body: String.replace(sql, "{{#{var}}}", placeholder),
            params: params ++ values
        }}
     end
@@ -225,13 +225,13 @@ defmodule Lotus.Source.AdapterTest do
 
     test "apply_filters/3 dispatches with state", %{adapter: adapter} do
       statement = Adapter.apply_filters(adapter, Statement.new("SELECT 1"), [%{}])
-      assert statement.text =~ "WHERE 1=1"
+      assert statement.body =~ "WHERE 1=1"
       assert statement.params == []
     end
 
     test "apply_sorts/3 dispatches with state", %{adapter: adapter} do
       statement = Adapter.apply_sorts(adapter, Statement.new("SELECT 1"), [:id])
-      assert statement.text =~ "ORDER BY id"
+      assert statement.body =~ "ORDER BY id"
     end
 
     test "substitute_variable/5 dispatches with state", %{adapter: adapter} do
@@ -245,7 +245,7 @@ defmodule Lotus.Source.AdapterTest do
         )
 
       assert_received {:mock_substitute_variable, "id", 42, :integer}
-      assert statement.text == "SELECT * FROM t WHERE id = <<id:integer>>"
+      assert statement.body == "SELECT * FROM t WHERE id = <<id:integer>>"
       assert statement.params == [42]
     end
 
@@ -260,7 +260,7 @@ defmodule Lotus.Source.AdapterTest do
         )
 
       assert_received {:mock_substitute_list_variable, "ids", [1, 2, 3], :integer}
-      assert statement.text == "SELECT * FROM t WHERE id IN (<<ids[]:integer>>)"
+      assert statement.body == "SELECT * FROM t WHERE id IN (<<ids[]:integer>>)"
       assert statement.params == [1, 2, 3]
     end
 

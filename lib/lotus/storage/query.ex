@@ -81,17 +81,21 @@ defmodule Lotus.Storage.Query do
   end
 
   @doc """
-  Builds the final SQL statement and parameter list for a query.
+  Compiles a stored query into an executable `Lotus.Query.Statement`.
 
-  Returns `{:ok, sql, params}` on success, or `{:error, reason}` when a
-  required variable is missing, a list variable is empty, or a supplied
+  Resolves `{{variable}}` placeholders, casts the supplied values, and folds
+  them through the source adapter's substitution callbacks. The returned
+  statement carries the adapter-native `:body` (SQL for Ecto adapters, a
+  DSL / AST / JSON payload for others) and the bound `:params`.
+
+  Returns `{:ok, %Lotus.Query.Statement{}}` on success, or `{:error, reason}`
+  when a required variable is missing, a list variable is empty, or a supplied
   value fails type casting.
 
-  Use `to_sql_params!/2` if you prefer a raising variant.
+  Use `compile!/2` if you prefer a raising variant.
   """
-  @spec to_sql_params(t(), map()) ::
-          {:ok, String.t(), [term()]} | {:error, String.t()}
-  def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
+  @spec compile(t(), map()) :: {:ok, Statement.t()} | {:error, String.t()}
+  def compile(%__MODULE__{statement: raw_body, variables: vars} = q, supplied_vars \\ %{}) do
     # A stored query's `data_source` can become stale when the source is
     # renamed or removed. Fall back to the default source so compilation
     # still succeeds — the caller (Runner/Preflight) will surface a clear
@@ -105,17 +109,17 @@ defmodule Lotus.Storage.Query do
       end
 
     # Process optional clauses before transformation
-    processed_sql = OptionalClause.process(sql, supplied_vars)
+    processed_body = OptionalClause.process(raw_body, supplied_vars)
 
     # Rewrite the raw statement before variables are bound (dialect or
     # adapter-specific preprocessing — e.g., wildcard rewriting).
-    transform_input = %Statement{adapter: adapter.module, text: processed_sql}
-    %Statement{text: transformed_sql} = Adapter.transform_statement(adapter, transform_input)
+    transform_input = %Statement{adapter: adapter.module, body: processed_body}
+    %Statement{body: transformed_body} = Adapter.transform_statement(adapter, transform_input)
 
-    # Extract variables from SQL
-    vars_in_order = Lotus.Variables.extract_names(transformed_sql)
+    # Extract the variables in the order they appear in the statement body
+    vars_in_order = Lotus.Variables.extract_names(transformed_body)
 
-    variable_bindings = VariableResolver.resolve_variables(transformed_sql)
+    variable_bindings = VariableResolver.resolve_variables(transformed_body)
 
     enriched_bindings =
       enrich_bindings_with_types(variable_bindings, adapter, q.search_path)
@@ -123,39 +127,32 @@ defmodule Lotus.Storage.Query do
     # Build the statement by folding each variable through the adapter's
     # substitution callback. The adapter owns placeholder syntax and param
     # accumulation — this loop is adapter-agnostic.
-    init_statement = %Statement{adapter: adapter.module, text: transformed_sql}
+    init_statement = %Statement{adapter: adapter.module, body: transformed_body}
 
-    result =
-      Enum.reduce_while(vars_in_order, {:ok, init_statement}, fn var, {:ok, statement} ->
-        case substitute_variable(
-               var,
-               vars,
-               supplied_vars,
-               enriched_bindings,
-               adapter,
-               statement
-             ) do
-          {:ok, _} = ok -> {:cont, ok}
-          {:error, _} = err -> {:halt, err}
-        end
-      end)
-
-    case result do
-      {:ok, %Statement{text: final_sql, params: final_params}} ->
-        {:ok, final_sql, final_params}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    # The reduce already accumulates a %Statement{}, so the success branch is
+    # exactly the value callers want — no re-wrapping needed.
+    Enum.reduce_while(vars_in_order, {:ok, init_statement}, fn var, {:ok, statement} ->
+      case substitute_variable(
+             var,
+             vars,
+             supplied_vars,
+             enriched_bindings,
+             adapter,
+             statement
+           ) do
+        {:ok, _} = ok -> {:cont, ok}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
   end
 
   @doc """
-  Same as `to_sql_params/2` but raises `ArgumentError` on error.
+  Same as `compile/2` but raises `ArgumentError` on error.
   """
-  @spec to_sql_params!(t(), map()) :: {String.t(), [term()]}
-  def to_sql_params!(%__MODULE__{} = q, supplied_vars \\ %{}) do
-    case to_sql_params(q, supplied_vars) do
-      {:ok, sql, params} -> {sql, params}
+  @spec compile!(t(), map()) :: Statement.t()
+  def compile!(%__MODULE__{} = q, supplied_vars \\ %{}) do
+    case compile(q, supplied_vars) do
+      {:ok, %Statement{} = statement} -> statement
       {:error, reason} -> raise ArgumentError, reason
     end
   end

@@ -179,7 +179,7 @@ defmodule Lotus.AI.InMemoryAdapterAITest do
 
       Config.reload!()
 
-      statement = %Lotus.Query.Statement{text: %{from: "users"}}
+      statement = %Lotus.Query.Statement{body: %{from: "users"}}
 
       assert {:error, {:ai_feature_unsupported, :optimization, reason}} =
                AI.suggest_optimizations(statement: statement, data_source: @source_name)

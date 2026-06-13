@@ -52,7 +52,7 @@ defmodule Lotus.Runner do
     end
   end
 
-  defp exec_read_only(%Adapter{} = adapter, %Statement{text: sql, params: params}, opts) do
+  defp exec_read_only(%Adapter{} = adapter, %Statement{body: body, params: params}, opts) do
     Adapter.transaction(
       adapter,
       fn _state ->
@@ -60,7 +60,7 @@ defmodule Lotus.Runner do
 
         {elapsed_us, res} =
           :timer.tc(fn ->
-            Adapter.execute_query(adapter, sql, params, opts ++ [timeout: timeout])
+            Adapter.execute_query(adapter, body, params, opts ++ [timeout: timeout])
           end)
 
         handle_query_result(res, elapsed_us, adapter)

@@ -179,16 +179,16 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Default do
   end
 
   @impl true
-  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+  def apply_filters(%Statement{body: sql, params: params} = statement, filters) do
     {new_sql, new_params} =
       FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
 
-    %{statement | text: new_sql, params: new_params}
+    %{statement | body: new_sql, params: new_params}
   end
 
   @impl true
-  def apply_sorts(%Statement{text: sql} = statement, sorts) do
-    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
+  def apply_sorts(%Statement{body: sql} = statement, sorts) do
+    %{statement | body: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   @impl true

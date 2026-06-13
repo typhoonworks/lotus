@@ -84,7 +84,7 @@ defmodule Lotus.Integration.NonSql.InMemoryEndToEndTest do
 
       statement = %Statement{
         adapter: adapter.module,
-        text: %{from: "users"}
+        body: %{from: "users"}
       }
 
       statement = Adapter.apply_filters(adapter, statement, [Filter.new("status", :eq, "active")])

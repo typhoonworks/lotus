@@ -395,22 +395,22 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
-  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+  def apply_filters(%Statement{body: sql, params: params} = statement, filters) do
     {new_sql, new_params} =
       FilterInjector.apply(sql, params, filters, &quote_identifier/1, fn _idx -> "?" end)
 
-    %{statement | text: new_sql, params: new_params}
+    %{statement | body: new_sql, params: new_params}
   end
 
   @impl true
-  def apply_sorts(%Statement{text: sql} = statement, sorts) do
-    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
+  def apply_sorts(%Statement{body: sql} = statement, sorts) do
+    %{statement | body: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   alias Lotus.Source.Adapters.Ecto, as: EctoHelpers
 
   @impl true
-  def extract_accessed_resources(repo, %Statement{text: sql, params: params, meta: meta}) do
+  def extract_accessed_resources(repo, %Statement{body: sql, params: params, meta: meta}) do
     opts = Map.to_list(meta)
     alias_map = EctoHelpers.parse_alias_map(sql)
     explain = "EXPLAIN FORMAT=JSON " <> sql
@@ -527,7 +527,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   end
 
   @impl true
-  def transform_statement(%Statement{text: sql} = statement) do
+  def transform_statement(%Statement{body: sql} = statement) do
     alias Lotus.Source.Adapters.Ecto.SQL.Transformer
 
     new_sql =
@@ -535,7 +535,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
       |> Transformer.transform_wildcards(:concat_fn)
       |> Transformer.strip_quoted_variables()
 
-    %{statement | text: new_sql}
+    %{statement | body: new_sql}
   end
 
   @impl true

@@ -14,7 +14,7 @@ defmodule Lotus.Test.InMemoryAdapter do
         offset: 0
       }
 
-  This shape sidesteps `Lotus.Storage.Query.to_sql_params/2` (which expects
+  This shape sidesteps `Lotus.Storage.Query.compile/2` (which expects
   string text with `{{var}}` placeholders) — tests drive the adapter via
   `Lotus.Runner.run_statement/3` with a hand-built `%Statement{}`. Variable
   substitution is still exercised through `substitute_variable/5` and
@@ -201,19 +201,19 @@ defmodule Lotus.Test.InMemoryAdapter do
 
   @impl true
   def apply_filters(_state, %Statement{} = statement, filters) do
-    dsl = ensure_dsl!(statement.text)
+    dsl = ensure_dsl!(statement.body)
     where = Map.get(dsl, :where, [])
 
     new_where =
       where ++
         Enum.map(filters, fn %Filter{column: c, op: op, value: v} -> {c, op, v} end)
 
-    %{statement | text: Map.put(dsl, :where, new_where)}
+    %{statement | body: Map.put(dsl, :where, new_where)}
   end
 
   @impl true
   def apply_sorts(_state, %Statement{} = statement, sorts) do
-    dsl = ensure_dsl!(statement.text)
+    dsl = ensure_dsl!(statement.body)
     order = Map.get(dsl, :order_by, [])
 
     new_order =
@@ -224,12 +224,12 @@ defmodule Lotus.Test.InMemoryAdapter do
           c when is_binary(c) -> {c, :asc}
         end)
 
-    %{statement | text: Map.put(dsl, :order_by, new_order)}
+    %{statement | body: Map.put(dsl, :order_by, new_order)}
   end
 
   @impl true
   def apply_pagination(state, %Statement{} = statement, opts) do
-    dsl = ensure_dsl!(statement.text)
+    dsl = ensure_dsl!(statement.body)
     limit = Keyword.get(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
     count = Keyword.get(opts, :count, :none)
@@ -251,7 +251,7 @@ defmodule Lotus.Test.InMemoryAdapter do
         statement.meta
       end
 
-    %{statement | text: new_text, meta: meta}
+    %{statement | body: new_text, meta: meta}
   end
 
   @impl true
@@ -262,7 +262,7 @@ defmodule Lotus.Test.InMemoryAdapter do
 
   @impl true
   def substitute_variable(_state, %Statement{} = statement, var_name, value, _type) do
-    with {:ok, dsl} <- ensure_dsl(statement.text) do
+    with {:ok, dsl} <- ensure_dsl(statement.body) do
       new_where =
         dsl
         |> Map.get(:where, [])
@@ -271,14 +271,14 @@ defmodule Lotus.Test.InMemoryAdapter do
           other -> other
         end)
 
-      {:ok, %{statement | text: Map.put(dsl, :where, new_where)}}
+      {:ok, %{statement | body: Map.put(dsl, :where, new_where)}}
     end
   end
 
   @impl true
   def substitute_list_variable(_state, %Statement{} = statement, var_name, values, _type)
       when is_list(values) do
-    with {:ok, dsl} <- ensure_dsl(statement.text) do
+    with {:ok, dsl} <- ensure_dsl(statement.body) do
       new_where =
         dsl
         |> Map.get(:where, [])
@@ -287,7 +287,7 @@ defmodule Lotus.Test.InMemoryAdapter do
           other -> other
         end)
 
-      {:ok, %{statement | text: Map.put(dsl, :where, new_where)}}
+      {:ok, %{statement | body: Map.put(dsl, :where, new_where)}}
     end
   end
 
@@ -301,8 +301,8 @@ defmodule Lotus.Test.InMemoryAdapter do
   def transform_statement(_state, statement), do: statement
 
   @impl true
-  def extract_accessed_resources(_state, %Statement{text: text}) do
-    case ensure_dsl(text) do
+  def extract_accessed_resources(_state, %Statement{body: body}) do
+    case ensure_dsl(body) do
       {:ok, %{from: table}} when is_binary(table) -> {:ok, MapSet.new([{nil, table}])}
       {:ok, _} -> {:unrestricted, "in-memory statement missing :from"}
       {:error, _} -> {:unrestricted, "in-memory adapter: non-DSL statement text"}
@@ -314,8 +314,8 @@ defmodule Lotus.Test.InMemoryAdapter do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def validate_statement(state, %Statement{text: text}, _opts) do
-    with {:ok, dsl} <- ensure_dsl(text),
+  def validate_statement(state, %Statement{body: body}, _opts) do
+    with {:ok, dsl} <- ensure_dsl(body),
          {:ok, _} <- fetch_table(state, dsl[:from]) do
       :ok
     end

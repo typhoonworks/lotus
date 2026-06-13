@@ -31,12 +31,12 @@ defmodule Lotus.TelemetryTest do
       {:ok, _result} = Runner.run_statement(@pg_adapter, Statement.new("SELECT 1 AS num"))
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
-                       %{repo: "postgres", statement: %Statement{text: "SELECT 1 AS num"}}}
+                       %{repo: "postgres", statement: %Statement{body: "SELECT 1 AS num"}}}
 
       assert_received {:telemetry, [:lotus, :query, :stop], measurements,
                        %{
                          repo: "postgres",
-                         statement: %Statement{text: "SELECT 1 AS num"},
+                         statement: %Statement{body: "SELECT 1 AS num"},
                          result: %Lotus.Result{}
                        }}
 
@@ -134,13 +134,13 @@ defmodule Lotus.TelemetryTest do
       {:error, _} = Runner.run_statement(@pg_adapter, Statement.new("DROP TABLE test_users"))
 
       assert_received {:telemetry, [:lotus, :query, :start], %{system_time: _},
-                       %{repo: "postgres", statement: %Statement{text: "DROP TABLE test_users"}}}
+                       %{repo: "postgres", statement: %Statement{body: "DROP TABLE test_users"}}}
 
       assert_received {:telemetry, [:lotus, :query, :exception], measurements,
                        %{
                          kind: :error,
                          repo: "postgres",
-                         statement: %Statement{text: "DROP TABLE test_users"}
+                         statement: %Statement{body: "DROP TABLE test_users"}
                        }}
 
       assert is_integer(measurements.duration)

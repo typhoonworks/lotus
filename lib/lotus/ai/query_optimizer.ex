@@ -63,7 +63,7 @@ defmodule Lotus.AI.QueryOptimizer do
         execution_plan = get_execution_plan(adapter, statement, search_path: search_path)
 
         system_prompt = Optimization.system_prompt(ai_context)
-        user_prompt = Optimization.user_prompt(statement.text, execution_plan)
+        user_prompt = Optimization.user_prompt(statement.body, execution_plan)
 
         tools = build_tools(data_source)
         messages = build_messages(system_prompt, user_prompt)
@@ -87,7 +87,7 @@ defmodule Lotus.AI.QueryOptimizer do
   # suggestions.
   defp get_execution_plan(adapter, %Statement{} = statement, opts) do
     with {:ok, prepared} <- Adapter.prepare_for_analysis(adapter, statement),
-         {:ok, plan} <- Adapter.query_plan(adapter, prepared.text, prepared.params, opts) do
+         {:ok, plan} <- Adapter.query_plan(adapter, prepared.body, prepared.params, opts) do
       plan
     else
       _ -> nil

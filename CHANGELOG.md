@@ -41,10 +41,10 @@
 - **`%Lotus.Query.Statement{}` is the pipeline carrier.** Pipeline
   callbacks (`apply_filters/3`, `apply_sorts/3`, `apply_pagination/3`,
   `transform_bound_query/3`, `transform_statement/2`) take and return
-  a `%Statement{}` with `:adapter` (module), `:text` (adapter-opaque
+  a `%Statement{}` with `:adapter` (module), `:body` (adapter-opaque
   `term()`), `:params`, and `:meta`. Non-SQL adapters carry native
-  payloads (JSON maps, DSL ASTs) in `:text` without serializing to
-  strings. Constructor: `Lotus.Query.Statement.new(text, params \\ [])`.
+  payloads (JSON maps, DSL ASTs) in `:body` without serializing to
+  strings. Constructor: `Lotus.Query.Statement.new(body, params \\ [])`.
   `Lotus.Runner.run_statement/3` takes
   `(%Adapter{}, %Statement{}, opts)`. `Lotus.Preflight.authorize/3`
   takes `(%Adapter{}, %Statement{}, search_path)`. The `:sql`/`:params`
@@ -75,12 +75,12 @@
 - **Variable substitution is adapter-owned.** Two universal callbacks —
   `substitute_variable/5` and `substitute_list_variable/5` — let each
   adapter pick its substitution strategy. SQL-prepared adapters add a
-  placeholder (`$1`, `?`, ...) to `statement.text` and push the value
+  placeholder (`$1`, `?`, ...) to `statement.body` and push the value
   into `statement.params`. JSON / DSL adapters (Elasticsearch, Mongo)
   inline the value as a properly-escaped literal — they are the
   injection boundary and must escape through the language's native
   encoder. Adapters with no `{{var}}` mental model return
-  `{:error, :unsupported}`. `Lotus.Storage.Query.to_sql_params/2` is now
+  `{:error, :unsupported}`. `Lotus.Storage.Query.compile/2` is now
   adapter-agnostic — it threads a `%Statement{}` through a reduce loop
   and delegates to `Adapter.substitute_variable/5`, never touching
   placeholders or param arrays directly. Removed: `FilterInjector.quote_value/1`
@@ -202,11 +202,10 @@
   - Removed: `Lotus.Storage.TypeMapper` — type mapping now happens via
     dialect `db_type_to_lotus_type/1` callbacks.
 
-- **`Lotus.Storage.Query.to_sql_params/2`** returns
-  `{:ok, sql, params} | {:error, reason}` instead of
-  `{sql, params}`-raising-on-failure. New
-  `Lotus.Storage.Query.to_sql_params!/2` preserves the raising variant
-  for callers that prefer exceptions (#163).
+- **`Lotus.Storage.Query.to_sql_params/2` renamed to `compile/2`** and now
+  returns `{:ok, %Lotus.Query.Statement{}} | {:error, reason}` instead of a
+  bare `{sql, params}` tuple. `compile!/2` is the raising variant and returns
+  the `%Statement{}` directly (#163).
 
 - **`@type repo` in `Lotus.Source`** renamed to `@type source_module`.
 
@@ -263,7 +262,7 @@
 
 - **`:before_query` / `:after_query` carry `:statement`** (a
   `%Lotus.Query.Statement{}`) instead of separate `:sql` / `:params`
-  keys. Extract via `statement.text` / `statement.params`.
+  keys. Extract via `statement.body` / `statement.params`.
 
 - **Telemetry `[:lotus, :query, :start | :stop | :exception]` metadata
   carries `:statement`.** Handlers that indexed on `:sql` / `:params`
@@ -507,7 +506,7 @@
 - `describe_table/3` and `get_table_stats/3` now propagate adapter
   errors (permission denied, connection errors) instead of masking
   them as "Table not found" (#189).
-- `Lotus.Storage.Query.to_sql_params/2` uses falsy supplied values
+- `Lotus.Storage.Query.compile/2` uses falsy supplied values
   (`false`, `0`) correctly instead of short-circuiting through `||`
   and falling back to the variable's default. `nil` supplied values
   still fall back to the default (#163).

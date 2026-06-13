@@ -424,10 +424,15 @@ defmodule Lotus.Config do
 
   Resolution order:
 
-    1. If the source's `data_sources` entry is a config map and has
-       `allow_unrestricted_resources: true`, returns `true` for that
-       source regardless of the global flag.
-    2. Falls back to the top-level `:allow_unrestricted_resources` flag.
+    1. If the source's `data_sources` entry is a config map with an explicit
+       boolean `allow_unrestricted_resources`, that value wins for the source —
+       `true` opts it in, `false` tightens it even when the global flag is on.
+    2. Otherwise falls back to the top-level `:allow_unrestricted_resources`
+       flag.
+
+  The per-source override is symmetric on purpose: an operator who sets
+  `false` on a single source while running a permissive global default
+  should be able to trust that the source stays locked down.
 
   Used by `Lotus.Preflight.authorize/3` to gate non-SQL adapters whose
   engines enforce visibility at a layer Lotus can't introspect.
@@ -435,7 +440,7 @@ defmodule Lotus.Config do
   @spec allow_unrestricted_resources?(String.t()) :: boolean()
   def allow_unrestricted_resources?(name) when is_binary(name) do
     case Map.get(data_sources(), name) do
-      %{allow_unrestricted_resources: true} -> true
+      %{allow_unrestricted_resources: val} when is_boolean(val) -> val
       _ -> load!()[:allow_unrestricted_resources]
     end
   end

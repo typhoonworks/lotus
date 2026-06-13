@@ -45,6 +45,13 @@ defmodule Lotus do
       changes, adapter-contract updates).
   """
 
+  alias Lotus.Cache.{Key, KeyBuilder}
+  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
+  alias Lotus.Query.{Filter, Sort, Statement}
+  alias Lotus.Source.Adapter
+  alias Lotus.Storage.Query
+  alias Lotus.UnsupportedOperatorError
+
   @default_page_size 1000
 
   @type cache_opt ::
@@ -74,13 +81,6 @@ defmodule Lotus do
           filters: [Filter.t()],
           context: term()
         ]
-
-  alias Lotus.Cache.{Key, KeyBuilder}
-  alias Lotus.{Config, Dashboards, Result, Runner, Schema, Source, Storage, Viz}
-  alias Lotus.Query.{Filter, Sort, Statement}
-  alias Lotus.Source.Adapter
-  alias Lotus.Storage.Query
-  alias Lotus.UnsupportedOperatorError
 
   def child_spec(opts), do: Lotus.Supervisor.child_spec(opts)
   def start_link(opts \\ []), do: Lotus.Supervisor.start_link(opts)
@@ -425,9 +425,9 @@ defmodule Lotus do
   def run_query(%Query{} = q, opts) do
     vars = prepare_variables(q, opts)
 
-    case Query.to_sql_params(q, vars) do
-      {:ok, sql, params} ->
-        execute_query(q, sql, params, vars, opts)
+    case Query.compile(q, vars) do
+      {:ok, %Statement{body: body, params: params}} ->
+        execute_query(q, body, params, vars, opts)
 
       {:error, _} = err ->
         err
@@ -450,18 +450,18 @@ defmodule Lotus do
     Map.merge(defaults, supplied_vars)
   end
 
-  defp execute_query(q, sql, params, vars, opts) do
+  defp execute_query(q, body, params, vars, opts) do
     adapter = Source.resolve!(Keyword.get(opts, :repo), q.data_source)
     search_path = Keyword.get(opts, :search_path) || q.search_path
     runner_opts = prepare_final_opts(opts, search_path)
 
-    execute_with_options(adapter, sql, params, opts, runner_opts, vars, q.id)
+    execute_with_options(adapter, body, params, opts, runner_opts, vars, q.id)
   end
 
-  defp execute_with_options(adapter, sql, params, opts, runner_opts, cache_identity, query_id) do
+  defp execute_with_options(adapter, body, params, opts, runner_opts, cache_identity, query_id) do
     search_path = Keyword.get(runner_opts, :search_path)
 
-    statement = %Statement{adapter: adapter.module, text: sql, params: params}
+    statement = %Statement{adapter: adapter.module, body: body, params: params}
     statement = Adapter.transform_bound_query(adapter, statement, runner_opts)
 
     filters = Keyword.get(opts, :filters, [])
@@ -479,7 +479,7 @@ defmodule Lotus do
     scope = Keyword.get(opts, :scope)
 
     key =
-      result_key(statement.text, cache_bound || cache_identity, adapter.name, search_path, scope)
+      result_key(statement.body, cache_bound || cache_identity, adapter.name, search_path, scope)
 
     tags = build_cache_tags(query_id, adapter.name, opts)
     profile = determine_cache_profile(opts)
@@ -559,7 +559,7 @@ defmodule Lotus do
 
   def can_run?(%Query{} = q, opts) do
     vars = prepare_variables(q, opts)
-    match?({:ok, _, _}, Query.to_sql_params(q, vars))
+    match?({:ok, %Statement{}}, Query.compile(q, vars))
   end
 
   @doc """
@@ -855,9 +855,9 @@ defmodule Lotus do
     end
   end
 
-  defp result_key(sql, bound_vars_map, repo_name, search_path, scope) do
+  defp result_key(body, bound_vars_map, repo_name, search_path, scope) do
     Key.result(
-      sql,
+      body,
       bound_vars_map,
       [data_source: repo_name, search_path: search_path, lotus_version: Lotus.version()],
       scope
@@ -1011,7 +1011,7 @@ defmodule Lotus do
 
   defp do_count(%{count_spec: %{query: q, params: ps}, adapter: adapter} = meta) do
     runner_opts = build_runner_opts(meta)
-    statement = %Statement{adapter: adapter.module, text: q, params: ps}
+    statement = %Statement{adapter: adapter.module, body: q, params: ps}
 
     adapter
     |> Runner.run_statement(statement, runner_opts)

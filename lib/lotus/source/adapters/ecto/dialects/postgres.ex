@@ -326,22 +326,22 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   end
 
   @impl true
-  def apply_filters(%Statement{text: sql, params: params} = statement, filters) do
+  def apply_filters(%Statement{body: sql, params: params} = statement, filters) do
     {new_sql, new_params} =
       FilterInjector.apply(sql, params, filters, &quote_identifier/1, &placeholder/1)
 
-    %{statement | text: new_sql, params: new_params}
+    %{statement | body: new_sql, params: new_params}
   end
 
   defp placeholder(idx), do: "$#{idx}"
 
   @impl true
-  def apply_sorts(%Statement{text: sql} = statement, sorts) do
-    %{statement | text: SortInjector.apply(sql, sorts, &quote_identifier/1)}
+  def apply_sorts(%Statement{body: sql} = statement, sorts) do
+    %{statement | body: SortInjector.apply(sql, sorts, &quote_identifier/1)}
   end
 
   @impl true
-  def extract_accessed_resources(repo, %Statement{text: sql, params: params, meta: meta}) do
+  def extract_accessed_resources(repo, %Statement{body: sql, params: params, meta: meta}) do
     search_path = Map.get(meta, :search_path)
     explain = "EXPLAIN (VERBOSE, FORMAT JSON) " <> sql
 
@@ -427,7 +427,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
   defp format_postgres_type(type, _, _, _), do: type
 
   @impl true
-  def transform_statement(%Statement{text: sql} = statement) do
+  def transform_statement(%Statement{body: sql} = statement) do
     alias Lotus.Source.Adapters.Ecto.SQL.Transformer
 
     new_sql =
@@ -436,7 +436,7 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.Postgres do
       |> Transformer.transform_wildcards(:pipe)
       |> Transformer.strip_quoted_variables()
 
-    %{statement | text: new_sql}
+    %{statement | body: new_sql}
   end
 
   @impl true

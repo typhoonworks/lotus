@@ -147,7 +147,7 @@ When you call `Lotus.run_query(query, opts)` the request flows through roughly t
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Lotus.run_query / Lotus.run_statement                                │
 │  • Merge variable defaults + opts[:vars]                             │
-│  • Storage.Query.to_sql_params/2 → {sql, params}                     │
+│  • Storage.Query.compile/2 → {:ok, %Statement{}}                     │
 └─────────────────────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -192,7 +192,7 @@ When you call `Lotus.run_query(query, opts)` the request flows through roughly t
 
 A few notes on the pipeline:
 
-- **Variable binding** happens inside `Lotus.Storage.Query.to_sql_params/2`, which also consults `Lotus.Storage.SchemaCache` for type-aware casting of user-supplied values.
+- **Variable binding** happens inside `Lotus.Storage.Query.compile/2`, which also consults `Lotus.Storage.SchemaCache` for type-aware casting of user-supplied values.
 - **Filters and sorts** are injected through the source adapter, not concatenated naively — see `Lotus.SQL.FilterInjector` and `Lotus.SQL.SortInjector`.
 - **Windowed pagination** rewrites the SQL to fetch a page and (optionally) issue a separate `COUNT(*)` for the exact total.
 - **Caching** is optional. When no cache adapter is configured, `Lotus.Cache` is a pass-through and the fetcher always runs.

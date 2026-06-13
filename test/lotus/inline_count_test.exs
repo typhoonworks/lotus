@@ -26,7 +26,7 @@ defmodule Lotus.InlineCountTest do
     }
   }
 
-  defp stmt(dsl), do: %Statement{adapter: InMemoryAdapter, text: dsl}
+  defp stmt(dsl), do: %Statement{adapter: InMemoryAdapter, body: dsl}
 
   describe "inline count (Strategy A)" do
     test "execute_query/4 surfaces total_count on the result map" do
@@ -38,9 +38,9 @@ defmodule Lotus.InlineCountTest do
 
       # Strategy A: no :count_spec plumbed through meta
       refute Map.has_key?(paged.meta, :count_spec)
-      assert paged.text.count_mode == :exact
+      assert paged.body.count_mode == :exact
 
-      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.text, [], [])
+      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.body, [], [])
       assert raw.num_rows == 3
       assert raw.total_count == 10
     end
@@ -95,7 +95,7 @@ defmodule Lotus.InlineCountTest do
       statement = stmt(%{from: "users"})
       paged = InMemoryAdapter.apply_pagination(adapter.state, statement, limit: 3, count: :none)
 
-      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.text, [], [])
+      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.body, [], [])
       refute Map.has_key?(raw, :total_count)
     end
   end
@@ -119,7 +119,7 @@ defmodule Lotus.InlineCountTest do
       statement = stmt(%{from: "users"})
       paged = InMemoryAdapter.apply_pagination(adapter.state, statement, limit: 3, count: :exact)
 
-      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.text, [], [])
+      {:ok, raw} = InMemoryAdapter.execute_query(adapter.state, paged.body, [], [])
       refute Map.has_key?(raw, :total_count)
     end
   end
