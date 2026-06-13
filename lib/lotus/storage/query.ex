@@ -14,9 +14,10 @@ defmodule Lotus.Storage.Query do
   require Logger
 
   alias Lotus.Config
+  alias Lotus.Query.OptionalClause
+  alias Lotus.Query.Statement
   alias Lotus.Source
   alias Lotus.Source.Adapter
-  alias Lotus.SQL.OptionalClause
   alias Lotus.Storage.{QueryVariable, SchemaCache, TypeCaster, VariableResolver}
 
   @type t :: %__MODULE__{
@@ -53,7 +54,7 @@ defmodule Lotus.Storage.Query do
     field(:name, :string)
     field(:description, :string)
     field(:statement, :string)
-    field(:data_source, :string, source: :data_repo)
+    field(:data_source, :string)
     field(:search_path, :string)
 
     embeds_many(:variables, QueryVariable, on_replace: :delete)
@@ -80,17 +81,21 @@ defmodule Lotus.Storage.Query do
   end
 
   @doc """
-  Builds the final SQL statement and parameter list for a query.
+  Compiles a stored query into an executable `Lotus.Query.Statement`.
 
-  Returns `{:ok, sql, params}` on success, or `{:error, reason}` when a
-  required variable is missing, a list variable is empty, or a supplied
+  Resolves `{{variable}}` placeholders, casts the supplied values, and folds
+  them through the source adapter's substitution callbacks. The returned
+  statement carries the adapter-native `:body` (SQL for Ecto adapters, a
+  DSL / AST / JSON payload for others) and the bound `:params`.
+
+  Returns `{:ok, %Lotus.Query.Statement{}}` on success, or `{:error, reason}`
+  when a required variable is missing, a list variable is empty, or a supplied
   value fails type casting.
 
-  Use `to_sql_params!/2` if you prefer a raising variant.
+  Use `compile!/2` if you prefer a raising variant.
   """
-  @spec to_sql_params(t(), map()) ::
-          {:ok, String.t(), [term()]} | {:error, String.t()}
-  def to_sql_params(%__MODULE__{statement: sql, variables: vars} = q, supplied_vars \\ %{}) do
+  @spec compile(t(), map()) :: {:ok, Statement.t()} | {:error, String.t()}
+  def compile(%__MODULE__{statement: raw_body, variables: vars} = q, supplied_vars \\ %{}) do
     # A stored query's `data_source` can become stale when the source is
     # renamed or removed. Fall back to the default source so compilation
     # still succeeds — the caller (Runner/Preflight) will surface a clear
@@ -104,67 +109,55 @@ defmodule Lotus.Storage.Query do
       end
 
     # Process optional clauses before transformation
-    processed_sql = OptionalClause.process(sql, supplied_vars)
+    processed_body = OptionalClause.process(raw_body, supplied_vars)
 
-    # Rewrite the raw statement text before variables are bound (dialect or
+    # Rewrite the raw statement before variables are bound (dialect or
     # adapter-specific preprocessing — e.g., wildcard rewriting).
-    transformed_sql = Adapter.transform_statement(adapter, processed_sql)
+    transform_input = %Statement{adapter: adapter.module, body: processed_body}
+    %Statement{body: transformed_body} = Adapter.transform_statement(adapter, transform_input)
 
-    # Extract variables from SQL
-    vars_in_order = Lotus.Variables.extract_names(transformed_sql)
+    # Extract the variables in the order they appear in the statement body
+    vars_in_order = Lotus.Variables.extract_names(transformed_body)
 
-    variable_bindings = VariableResolver.resolve_variables(transformed_sql)
+    variable_bindings = VariableResolver.resolve_variables(transformed_body)
 
     enriched_bindings =
       enrich_bindings_with_types(variable_bindings, adapter, q.search_path)
 
-    # Build SQL with parameters, using automatic type casting
-    init = {:ok, {transformed_sql, [], 1}}
+    # Build the statement by folding each variable through the adapter's
+    # substitution callback. The adapter owns placeholder syntax and param
+    # accumulation — this loop is adapter-agnostic.
+    init_statement = %Statement{adapter: adapter.module, body: transformed_body}
 
-    result =
-      Enum.reduce_while(vars_in_order, init, fn var, {:ok, {acc_sql, acc_params, idx}} ->
-        case substitute_variable(
-               var,
-               vars,
-               supplied_vars,
-               enriched_bindings,
-               adapter,
-               acc_sql,
-               acc_params,
-               idx
-             ) do
-          {:ok, _} = ok -> {:cont, ok}
-          {:error, _} = err -> {:halt, err}
-        end
-      end)
-
-    case result do
-      {:ok, {final_sql, final_params, _idx}} -> {:ok, final_sql, final_params}
-      {:error, reason} -> {:error, reason}
-    end
+    # The reduce already accumulates a %Statement{}, so the success branch is
+    # exactly the value callers want — no re-wrapping needed.
+    Enum.reduce_while(vars_in_order, {:ok, init_statement}, fn var, {:ok, statement} ->
+      case substitute_variable(
+             var,
+             vars,
+             supplied_vars,
+             enriched_bindings,
+             adapter,
+             statement
+           ) do
+        {:ok, _} = ok -> {:cont, ok}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
   end
 
   @doc """
-  Same as `to_sql_params/2` but raises `ArgumentError` on error.
+  Same as `compile/2` but raises `ArgumentError` on error.
   """
-  @spec to_sql_params!(t(), map()) :: {String.t(), [term()]}
-  def to_sql_params!(%__MODULE__{} = q, supplied_vars \\ %{}) do
-    case to_sql_params(q, supplied_vars) do
-      {:ok, sql, params} -> {sql, params}
+  @spec compile!(t(), map()) :: Statement.t()
+  def compile!(%__MODULE__{} = q, supplied_vars \\ %{}) do
+    case compile(q, supplied_vars) do
+      {:ok, %Statement{} = statement} -> statement
       {:error, reason} -> raise ArgumentError, reason
     end
   end
 
-  defp substitute_variable(
-         var,
-         vars,
-         supplied_vars,
-         enriched_bindings,
-         adapter,
-         acc_sql,
-         acc_params,
-         idx
-       ) do
+  defp substitute_variable(var, vars, supplied_vars, enriched_bindings, adapter, statement) do
     meta = Enum.find(vars, %{}, &(&1.name == var))
 
     with {:ok, value} <- fetch_var_value(var, meta, supplied_vars) do
@@ -173,27 +166,9 @@ defmodule Lotus.Storage.Query do
       is_list = Map.get(meta, :list, false)
 
       if is_list do
-        substitute_list_variable(
-          var,
-          value,
-          manual_type,
-          binding,
-          adapter,
-          acc_sql,
-          acc_params,
-          idx
-        )
+        substitute_list_variable(var, value, manual_type, binding, adapter, statement)
       else
-        substitute_scalar_variable(
-          var,
-          value,
-          manual_type,
-          binding,
-          adapter,
-          acc_sql,
-          acc_params,
-          idx
-        )
+        substitute_scalar_variable(var, value, manual_type, binding, adapter, statement)
       end
     end
   end
@@ -213,59 +188,44 @@ defmodule Lotus.Storage.Query do
     end
   end
 
-  defp substitute_list_variable(
-         var,
-         value,
-         manual_type,
-         binding,
-         adapter,
-         acc_sql,
-         acc_params,
-         idx
-       ) do
+  defp substitute_list_variable(var, value, manual_type, binding, adapter, statement) do
     case normalize_list_value(value) do
       [] ->
         {:error, "List variable '#{var}' must have at least one value"}
 
       values ->
-        init = {:ok, {[], [], idx}}
-
-        reduced =
-          Enum.reduce_while(values, init, fn v, {:ok, {phs, cvs, i}} ->
-            case determine_type_and_cast(v, manual_type, binding) do
-              {:ok, {final_type, casted}} ->
-                ph = Adapter.param_placeholder(adapter, i, var, final_type)
-                {:cont, {:ok, {[ph | phs], [casted | cvs], i + 1}}}
-
-              {:error, _} = err ->
-                {:halt, err}
-            end
-          end)
-
-        with {:ok, {rev_placeholders, rev_casted_values, next_idx}} <- reduced do
-          placeholder_str = rev_placeholders |> Enum.reverse() |> Enum.join(", ")
-          casted_values = Enum.reverse(rev_casted_values)
-          new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder_str, global: false)
-
-          {:ok, {new_sql, acc_params ++ casted_values, next_idx}}
+        with {:ok, {final_type, casted_values}} <-
+               cast_list_values(values, manual_type, binding) do
+          Adapter.substitute_list_variable(adapter, statement, var, casted_values, final_type)
         end
     end
   end
 
-  defp substitute_scalar_variable(
-         var,
-         value,
-         manual_type,
-         binding,
-         adapter,
-         acc_sql,
-         acc_params,
-         idx
-       ) do
+  defp substitute_scalar_variable(var, value, manual_type, binding, adapter, statement) do
     with {:ok, {final_type, casted_value}} <- determine_type_and_cast(value, manual_type, binding) do
-      placeholder = Adapter.param_placeholder(adapter, idx, var, final_type)
-      new_sql = String.replace(acc_sql, "{{#{var}}}", placeholder, global: false)
-      {:ok, {new_sql, acc_params ++ [casted_value], idx + 1}}
+      Adapter.substitute_variable(adapter, statement, var, casted_value, final_type)
+    end
+  end
+
+  defp cast_list_values(values, manual_type, binding) do
+    init = {:ok, {nil, []}}
+
+    reduced =
+      Enum.reduce_while(values, init, fn v, {:ok, {acc_type, acc_values}} ->
+        case determine_type_and_cast(v, manual_type, binding) do
+          {:ok, {final_type, casted}} ->
+            # All values in a list share the same type — the variable's
+            # binding is per-variable, not per-value — so it's safe to carry
+            # the last `final_type` out as the group's type.
+            {:cont, {:ok, {final_type || acc_type, [casted | acc_values]}}}
+
+          {:error, _} = err ->
+            {:halt, err}
+        end
+      end)
+
+    with {:ok, {final_type, rev_values}} <- reduced do
+      {:ok, {final_type, Enum.reverse(rev_values)}}
     end
   end
 

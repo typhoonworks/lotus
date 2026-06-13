@@ -7,13 +7,15 @@ defmodule Lotus.Migrations.SQLite do
 
   @impl Lotus.Migration
   def up(_opts \\ []) do
+    ensure_data_source_column!()
+
     create_if_not_exists table(:lotus_queries, primary_key: false) do
       add(:id, :serial, primary_key: true)
       add(:name, :string, null: false)
       add(:description, :text)
       add(:statement, :text, null: false)
       add(:variables, :map, null: false, default: "[]")
-      add(:data_repo, :string)
+      add(:data_source, :string)
       add(:search_path, :string)
       timestamps(type: :utc_datetime_usec)
     end
@@ -185,4 +187,27 @@ defmodule Lotus.Migrations.SQLite do
 
   @impl Lotus.Migration
   def migrated_version(_opts), do: 0
+
+  # SQLite migrations are single-file and unversioned, so there is no V4-style
+  # compensating migration (as on Postgres) to rename `data_repo` →
+  # `data_source` on an upgrading install. Without this guard, `up/1` is a
+  # no-op on an existing table — `mix ecto.migrate` reports success while
+  # leaving the legacy column in place, and every read then crashes in
+  # production. Detect the legacy column and fail at migrate time instead.
+  defp ensure_data_source_column! do
+    %{rows: rows} =
+      repo().query!("SELECT 1 FROM pragma_table_info('lotus_queries') WHERE name = 'data_repo'")
+
+    if rows != [] do
+      raise """
+      Lotus v1.0 renamed the lotus_queries `data_repo` column to `data_source`.
+      SQLite migrations are unversioned and cannot perform this rename for you.
+      Run it once before re-running migrations:
+
+          ALTER TABLE lotus_queries RENAME COLUMN data_repo TO data_source;
+
+      See guides/upgrading-to-v1.md section 3.
+      """
+    end
+  end
 end

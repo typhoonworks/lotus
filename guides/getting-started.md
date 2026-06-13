@@ -615,9 +615,9 @@ attrs = %{
 
 q = Lotus.Storage.Query.new(attrs) |> Repo.insert!()
 
-# Use to_sql_params for parameterized queries
-Lotus.Storage.Query.to_sql_params(q, %{"since" => "2024-01-01"})
-# => {:ok, "SELECT * FROM users WHERE org_id = $1 AND created_at >= $2 AND status = $3", [1, ~D[2024-01-01], "active"]}
+# Use compile/2 for parameterized queries
+Lotus.Storage.Query.compile(q, %{"since" => "2024-01-01"})
+# => {:ok, %Lotus.Query.Statement{body: "SELECT * FROM users WHERE org_id = $1 AND created_at >= $2 AND status = $3", params: [1, ~D[2024-01-01], "active"]}}
 ```
 
 ### Dynamic Dropdown Options

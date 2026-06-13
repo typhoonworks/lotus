@@ -34,7 +34,7 @@ defmodule Lotus.Cache.KeyBuilder.Default do
   end
 
   @impl true
-  def result_key(sql, bound, opts, scope) do
+  def result_key(body, bound, opts, scope) do
     repo = Keyword.fetch!(opts, :data_source)
     path = Keyword.get(opts, :search_path, "") || ""
     version = Keyword.get(opts, :lotus_version, Lotus.version())
@@ -48,7 +48,17 @@ defmodule Lotus.Cache.KeyBuilder.Default do
     digest =
       :crypto.hash(
         :sha256,
-        [sql, ?|, :erlang.term_to_binary(digest_input), ?|, repo, ?|, path, ?|, version]
+        [
+          :erlang.term_to_binary(body),
+          ?|,
+          :erlang.term_to_binary(digest_input),
+          ?|,
+          repo,
+          ?|,
+          path,
+          ?|,
+          version
+        ]
       )
       |> Base.encode16(case: :lower)
 
