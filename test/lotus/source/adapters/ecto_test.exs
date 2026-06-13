@@ -101,7 +101,14 @@ defmodule Lotus.Source.Adapters.EctoTest do
       adapter = EctoAdapter.wrap("main", Repo)
       denies = Adapter.builtin_denies(adapter)
       assert is_list(denies)
-      assert {"pg_catalog", ~r/.*/} in denies
+
+      # Compare by regex source — `Regex` structs aren't
+      # reliably comparable (the compiled pattern differs under OTP 28's PCRE2),
+      # so `~r/.*/ in denies` fails even when the rule is present.
+      assert Enum.any?(denies, fn
+               {"pg_catalog", %Regex{} = re} -> Regex.source(re) == ".*"
+               _ -> false
+             end)
     end
 
     test "builtin_schema_denies/1 returns schema deny patterns" do
