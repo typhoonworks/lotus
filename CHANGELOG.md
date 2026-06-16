@@ -382,6 +382,14 @@
   return the existing supervisor's pid. Pass `supervisor_name:` to run
   multiple named instances.
 
+#### Requirements
+
+- **Minimum Elixir version raised from 1.17 to 1.18, and minimum
+  Erlang/OTP raised from 26 to 27.** CI now covers Elixir 1.18 / 1.19 /
+  1.20 across OTP 27–29. Elixir 1.17 and OTP 26 are no longer supported;
+  apps on those versions must upgrade their toolchain before moving to
+  v1.0.
+
 ### Added
 
 - **`editor_config/1` exposes two optional extension points** —

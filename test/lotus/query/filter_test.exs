@@ -16,7 +16,7 @@ defmodule Lotus.Query.FilterTest do
 
     test "raises for invalid operator" do
       assert_raise FunctionClauseError, fn ->
-        Filter.new("col", :invalid, "val")
+        Filter.new("col", runtime_term(:invalid), "val")
       end
     end
   end
@@ -49,4 +49,10 @@ defmodule Lotus.Query.FilterTest do
       assert Filter.operator_label(:is_not_null) == "IS NOT NULL"
     end
   end
+
+  # Hands the value over as an opaque term() so Elixir 1.20's type checker can't
+  # statically reject the deliberately-invalid argument above. The point is to
+  # exercise the *runtime* guard, which is what real (dynamic) callers hit.
+  @spec runtime_term(term()) :: term()
+  defp runtime_term(value), do: value
 end

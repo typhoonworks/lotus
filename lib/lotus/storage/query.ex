@@ -367,7 +367,6 @@ defmodule Lotus.Storage.Query do
 
   defp normalize_list_value(value), do: [value]
 
-  defp requires_casting?(:text, _value), do: false
   defp requires_casting?(:binary, value) when is_binary(value), do: false
   defp requires_casting?(:enum, _value), do: false
   defp requires_casting?(:uuid, _value), do: true

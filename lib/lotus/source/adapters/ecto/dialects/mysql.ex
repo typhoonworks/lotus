@@ -2,7 +2,6 @@ defmodule Lotus.Source.Adapters.Ecto.Dialects.MySQL do
   @moduledoc false
 
   @behaviour Lotus.Source.Adapters.Ecto.Dialect
-  require Logger
 
   alias __MODULE__.EditorConfig
   alias Lotus.Query.Statement
