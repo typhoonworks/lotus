@@ -361,8 +361,10 @@ defmodule Lotus.Visibility do
         # This makes "api_keys" match both {nil, "api_keys"} and {"public", "api_keys"}
         pattern_match?(tbl, t)
 
-      other ->
-        other == {s, t}
+      # All 2-tuple and bare-string rules are handled above, so anything
+      # reaching here is a malformed rule that can never match a relation.
+      _other ->
+        false
     end)
   end
 

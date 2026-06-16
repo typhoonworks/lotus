@@ -261,7 +261,7 @@ upgrade checklist.
 ## Development Setup
 
 ### Prerequisites
-- Elixir 1.17+ / OTP 25+
+- Elixir 1.18+ / OTP 27+
 - PostgreSQL 14+, MySQL 8.0+, SQLite 3
 
 ### Setup

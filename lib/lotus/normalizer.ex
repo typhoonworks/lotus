@@ -44,7 +44,7 @@ defimpl Lotus.Normalizer, for: BitString do
   # MySQL BIT fields (non-binary bitstrings)
   def normalize(value) when is_bitstring(value) do
     size = bit_size(value)
-    <<int::size(size)>> = value
+    <<int::size(^size)>> = value
     to_string(int)
   end
 end

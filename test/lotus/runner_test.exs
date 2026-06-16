@@ -582,7 +582,7 @@ defmodule Lotus.RunnerTest do
 
     test "validates params list type" do
       assert_raise FunctionClauseError, fn ->
-        Runner.run_statement(@pg_adapter, Statement.new("SELECT 1", "not_a_list"))
+        Runner.run_statement(@pg_adapter, Statement.new("SELECT 1", runtime_term("not_a_list")))
       end
     end
   end
@@ -1080,4 +1080,10 @@ defmodule Lotus.RunnerTest do
       assert id_b == uuid2
     end
   end
+
+  # Hands the value over as an opaque term() so Elixir 1.20's type checker can't
+  # statically reject the deliberately-invalid argument below. The point is to
+  # exercise the *runtime* guard, which is what real (dynamic) callers hit.
+  @spec runtime_term(term()) :: term()
+  defp runtime_term(value), do: value
 end
